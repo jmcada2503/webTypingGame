@@ -49,7 +49,7 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
-    this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
+    this.destroyFx = new WordDestroyFx(this.overlay, this.scene, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
