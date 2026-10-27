@@ -8,8 +8,8 @@ import type { GameViewState, WordBulletState } from '../GameViewState';
 export const WORD_FLIGHT = {
   /** Leaving the Enemy ship (Flight 0). */
   start: { y: 6, z: -25 },
-  /** Reaching the Cockpit (Flight 1). */
-  end: { y: -1.1, z: 2.5 },
+  /** Reaching the Cockpit (Flight 1): stops just above the yoke's Typed word screen. */
+  end: { y: -0.6, z: 2.5 },
   /** World x between lanes at Flight 1 (lanes fan out from the Enemy ship). */
   laneSpread: 1.3,
 };

@@ -7,16 +7,13 @@ import { WordBulletSprites } from './words/WordBulletSprites';
 import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { createCockpit, type Cockpit } from './cockpitPrototype/variants';
-import { RADAR_PROTO, RADAR_VARIANTS, type RadarKind } from './cockpitPrototype/radars';
+import { Cockpit } from './cockpit/Cockpit';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
- * - Cockpit: PROTOTYPE variants via ?variant= ("Cockpit design")
- * - ViewEvents shown as a label top center (juice tickets)
+ * - ViewEvents shown as a dim label top left (juice tickets)
  */
 export class AsciiGameView implements GameView {
   readonly canvas: HTMLCanvasElement;
@@ -27,6 +24,7 @@ export class AsciiGameView implements GameView {
   private readonly enemy = new EnemyShip();
   private readonly stars = new StarDrift();
   private lastEvent: { label: string; age: number } | null = null;
+  /** The player's Cockpit: yoke, Lives lamps, Radar ("Cockpit design"). */
   private readonly cockpit: Cockpit;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
@@ -46,12 +44,8 @@ export class AsciiGameView implements GameView {
 
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
-    // Cockpit D (yoke) chosen; the switcher now flips Radar designs. ?cockpit=A..D still works.
-    RADAR_PROTO.kind = mountPrototypeSwitcher(RADAR_VARIANTS) as RadarKind;
-    const cockpitKey = new URLSearchParams(location.search).get('cockpit') ?? 'D';
-    this.cockpit = createCockpit(cockpitKey, this.scene, this.camera);
-    this.overlay.add(this.words.scene);
-    if (this.cockpit.overlay) this.overlay.add(this.cockpit.overlay);
+    this.cockpit = new Cockpit(this.scene, this.camera);
+    this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
   render(state: GameViewState, dt: number) {
@@ -65,7 +59,7 @@ export class AsciiGameView implements GameView {
     const text = this.ascii.textGrid;
     text.clear();
     this.words.update(state);
-    this.cockpit.update({ state, dt, text });
+    this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
