@@ -44,5 +44,9 @@ _Avoid_: Focused, selected
 What the player has typed so far, before submitting it.
 _Avoid_: Input, buffer, writing
 
+**Pace**:
+How fast a player is typing right now, in characters per second, smoothed over a couple of seconds. Each player has one; the difference between the two drives how the space around the Cockpit moves.
+_Avoid_: Speed, WPM, typing rate
+
 **Lives**:
 How many word bullets the player can let through before losing; starts at 3.
