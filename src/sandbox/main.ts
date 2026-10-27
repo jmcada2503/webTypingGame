@@ -41,8 +41,7 @@ wb.add({ clear: () => session.clearBullets() }, 'clear').name('clear all');
 
 const look = gui.addFolder('Word bullet look + path');
 look.add(WORD_LOOK, 'height', 0.05, 1, 0.01).name('word size');
-look.add(WORD_LOOK, 'padX', 0, 4, 0.25).name('padding ↔ (letters)');
-look.add(WORD_LOOK, 'padY', 0, 1, 0.05).name('padding ↕ (em)');
+look.add(WORD_LOOK, 'border', 0, 0.4, 0.01).name('outline (em)');
 look.add(WORD_FLIGHT.end, 'y', -3, 3, 0.05).name('end y');
 look.add(WORD_FLIGHT.end, 'z', -5, 6, 0.1).name('end z');
 look.add(WORD_FLIGHT, 'laneSpread', 0, 3, 0.05).name('lane spread');

@@ -8,9 +8,8 @@ import { WordBulletTracks } from './flightPath';
 export const WORD_LOOK = {
   /** Em size of a word in world units; perspective makes it grow as it nears the Cockpit. */
   height: 0.3,
-  /** Black backdrop around the word: x in letter widths, y in em. */
-  padX: 1,
-  padY: 0,
+  /** Black outline around each letter, in em: cuts the word out of the shading behind it. */
+  border: 0.16,
 };
 
 /** Canvas px per em: high enough to stay crisp at the largest on-screen size. */
@@ -20,10 +19,11 @@ const FONT = `400 ${EM_PX}px "${ASCII_STYLE.font.family}"`;
 type Sprite = { sprite: THREE.Sprite; canvas: HTMLCanvasElement; paintedKey: string; aspect: number };
 
 /**
- * Word bullets as crisp, real-font text (chosen in "Words in the ASCII world", variant D):
- * a camera-facing sprite per bullet at its 3D flight position, drawn in the overlay scene on top
- * of the ASCII frame, so it grows smoothly instead of snapping to the grid. Black backdrop keeps it
- * readable over the shading; Target prefix in green.
+ * Word bullets drawn over the ASCII frame in real font ("Words in the ASCII world"): a camera-facing
+ * sprite per bullet at its 3D flight position (steady path, see flightPath.ts), so it grows as it
+ * nears the Cockpit. No backdrop box: each letter has a thick black outline instead
+ * ("Word bullets in flight"). Target prefix in green. Overlaps are allowed (the nearest word
+ * draws on top); arrival = the bullet vanishes.
  */
 export class WordBulletSprites {
   /** Pass to AsciiRenderer.render() as the overlay scene. */
@@ -31,7 +31,7 @@ export class WordBulletSprites {
   private readonly tracks = new WordBulletTracks();
   private readonly sprites = new Map<string, Sprite>();
 
-  update(state: GameViewState) {
+  update(state: GameViewState, camera: THREE.Camera) {
     this.tracks.update(state);
     const alive = new Set(state.wordBullets.map((b) => b.id));
     for (const [id, s] of this.sprites) if (!alive.has(id)) this.remove(id, s);
@@ -39,16 +39,16 @@ export class WordBulletSprites {
     for (const b of state.wordBullets) {
       const s = this.sprites.get(b.id) ?? this.add(b.id);
       const matched = matchPrefix(state.typedWord, b.word);
-      const key = `${matched}|${WORD_LOOK.padX}|${WORD_LOOK.padY}`;
+      const key = `${matched}|${WORD_LOOK.border}`;
       if (s.paintedKey !== key) {
         s.aspect = paint(s.canvas, [...b.word], matched);
-        // The canvas may have changed size (padding): drop the GPU copy so it re-uploads.
+        // The canvas may have changed size: drop the GPU copy so it re-uploads.
         s.sprite.material.map!.dispose();
         s.sprite.material.map!.needsUpdate = true;
         s.paintedKey = key;
       }
-      this.tracks.position(b, s.sprite.position);
-      const h = WORD_LOOK.height * (1 + 2 * WORD_LOOK.padY);
+      this.tracks.position(b, camera, s.sprite.position);
+      const h = WORD_LOOK.height * (s.canvas.height / EM_PX);
       s.sprite.scale.set(h * s.aspect, h, 1);
     }
   }
@@ -77,22 +77,26 @@ export class WordBulletSprites {
   }
 }
 
-/** Black backdrop + word, matched letters green. Returns width / height. */
+/** Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green). */
 function paint(canvas: HTMLCanvasElement, letters: string[], matched: number) {
   const g = canvas.getContext('2d')!;
   g.font = FONT;
   const advance = g.measureText('M').width;
-  const padX = WORD_LOOK.padX * advance;
-  const padY = WORD_LOOK.padY * EM_PX;
-  canvas.width = Math.ceil(advance * letters.length + 2 * padX);
-  canvas.height = Math.ceil(EM_PX + 2 * padY);
-  g.fillStyle = ASCII_STYLE.palette.bg;
-  g.fillRect(0, 0, canvas.width, canvas.height);
+  const border = WORD_LOOK.border * EM_PX;
+  const pad = border * 1.6;
+  canvas.width = Math.ceil(advance * letters.length + 2 * pad);
+  canvas.height = Math.ceil(EM_PX + 2 * pad);
   g.font = FONT; // resizing the canvas resets context state
   g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  const y = canvas.height / 2 + EM_PX * 0.05;
+  const x = (i: number) => pad + i * advance;
+  g.strokeStyle = ASCII_STYLE.palette.bg;
+  g.lineWidth = border * 2;
+  letters.forEach((ch, i) => g.strokeText(ch, x(i), y));
   letters.forEach((ch, i) => {
     g.fillStyle = i < matched ? ASCII_STYLE.palette.green : ASCII_STYLE.palette.fg;
-    g.fillText(ch, padX + i * advance, canvas.height / 2 + EM_PX * 0.05);
+    g.fillText(ch, x(i), y);
   });
   return canvas.width / canvas.height;
 }

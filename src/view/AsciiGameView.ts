@@ -29,6 +29,7 @@ export class AsciiGameView implements GameView {
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
+  /** Word bullets: real-font, outlined, over the ASCII frame. */
   private readonly words = new WordBulletSprites();
 
   static async create(): Promise<AsciiGameView> {
@@ -58,7 +59,7 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
-    this.words.update(state);
+    this.words.update(state, this.camera);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
