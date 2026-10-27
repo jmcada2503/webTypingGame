@@ -1,0 +1,23 @@
+import type { TypingInput } from '../input/TypingInput';
+import type { GameViewState, ViewEvent } from '../view/GameViewState';
+
+export type SessionStatus = 'idle' | 'running' | 'won' | 'lost';
+
+/**
+ * Anything the app shell can run: SandboxSession now (tweak-panel driven), DuelSession later
+ * (real mechanics + networking). No pause/resume: an online duel can't pause; the sandbox's
+ * pause/step live on SandboxSession only.
+ *
+ * Shell loop each frame:  events = session.update(dt); events.forEach(view.trigger); view.render(session.state(), dt)
+ */
+export interface GameSession {
+  readonly status: SessionStatus;
+  start(): void;
+  /** Stop timers, release input, free resources. */
+  dispose(): void;
+  /** The session reads typedWord / onSubmit from here. */
+  attachInput(input: TypingInput): void;
+  /** Advance by dt seconds; returns the one-off events that happened. */
+  update(dt: number): ViewEvent[];
+  state(): GameViewState;
+}
