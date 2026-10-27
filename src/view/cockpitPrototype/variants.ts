@@ -154,6 +154,8 @@ function fittedTextPlate(maxW: number, maxH: number) {
   };
 }
 
+/** Letters that share one vertical position in a slanted grid word. */
+const SLANT_GROUP = 3;
 const slantA = new THREE.Vector3();
 const slantB = new THREE.Vector3();
 /** Grid position (fractional col, row) of a world point. */
@@ -176,9 +178,12 @@ function slantedGridWord(text: TextGrid, panel: THREE.Object3D, camera: THREE.Ca
   const first = Math.round(a.col - letters.length / 2);
   letters.forEach((ch, i) => {
     const col = first + i;
-    // Exact row where the slant passes this column; the remainder becomes a sub-row nudge so
-    // letters overlap rows and the slant reads smooth instead of stepping a whole row at a time.
-    const exact = a.row + slope * (col + 0.5 - a.col) - 0.5;
+    // Letters move in groups of SLANT_GROUP: each group sits at the exact row where the slant
+    // passes its middle column. The remainder becomes a sub-row nudge, so groups overlap rows and
+    // the slant reads smooth instead of stepping a whole row at a time.
+    const groupStart = first + Math.floor(i / SLANT_GROUP) * SLANT_GROUP;
+    const groupMid = groupStart + SLANT_GROUP / 2;
+    const exact = a.row + slope * (groupMid - a.col) - 0.5;
     const row = Math.round(exact);
     text.write(col, row, ch, color, exact - row);
   });
