@@ -7,6 +7,8 @@ import type { GameViewState, ViewEvent } from './GameViewState';
 
 const MAX_LIVES = 3;
 const EVENT_LABEL_SECONDS = 1.2;
+/** Placeholder lane offsets (columns from center) for Word bullets; filled center-first. */
+const LANES = [0, -20, 20, -40, 40];
 
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
@@ -22,6 +24,8 @@ export class AsciiGameView implements GameView {
   private readonly camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 100);
   private readonly placeholder: THREE.Mesh;
   private lastEvent: { label: string; age: number } | null = null;
+  /** Word bullet id → lane index, kept for the bullet's whole flight. */
+  private readonly lanes = new Map<string, number>();
 
   static async create(): Promise<AsciiGameView> {
     return new AsciiGameView(await GpuAsciiRenderer.create());
@@ -61,17 +65,42 @@ export class AsciiGameView implements GameView {
     const text = this.ascii.textGrid;
     const top = 4;
     const bottom = text.rows - 8;
-    state.wordBullets.forEach((b, i) => {
+    this.assignLanes(state);
+    state.wordBullets.forEach((b) => {
       const row = Math.round(top + (bottom - top) * Math.min(Math.max(b.flight, 0), 1));
       const len = [...b.word].length;
-      // Spread bullets sideways so overlapping flights stay readable.
-      const lane = ((i % 5) - 2) * 20;
-      const col = Math.floor(text.cols / 2 + lane - len / 2);
+      const col = Math.floor(text.cols / 2 + LANES[this.lanes.get(b.id)!] - len / 2);
       const matched = matchPrefix(state.typedWord, b.word);
       const letters = [...b.word];
       text.write(col, row, letters.slice(0, matched).join(''), 'green');
       text.write(col + matched, row, letters.slice(matched).join(''), 'fg');
     });
+  }
+
+  /**
+   * Each new Word bullet takes the least-used lane (ties: the one whose latest bullet has flown
+   * furthest), and keeps it until it leaves the snapshot, so others never shift sideways.
+   */
+  private assignLanes(state: GameViewState) {
+    const alive = new Set(state.wordBullets.map((b) => b.id));
+    for (const id of this.lanes.keys()) if (!alive.has(id)) this.lanes.delete(id);
+
+    for (const b of state.wordBullets) {
+      if (this.lanes.has(b.id)) continue;
+      const load = LANES.map(() => ({ count: 0, minFlight: 1 }));
+      for (const other of state.wordBullets) {
+        const lane = this.lanes.get(other.id);
+        if (lane === undefined) continue;
+        load[lane].count++;
+        load[lane].minFlight = Math.min(load[lane].minFlight, other.flight);
+      }
+      let best = 0;
+      for (let i = 1; i < LANES.length; i++) {
+        const a = load[i], c = load[best];
+        if (a.count < c.count || (a.count === c.count && a.minFlight > c.minFlight)) best = i;
+      }
+      this.lanes.set(b.id, best);
+    }
   }
 
   private drawCockpit(state: GameViewState) {
