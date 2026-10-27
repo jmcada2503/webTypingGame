@@ -31,6 +31,8 @@ wb.add({ random: () => session.spawn() }, 'random').name('spawn random');
 wb.add(session, 'autoSpawn').name('auto spawn');
 wb.add(session, 'spawnEvery', 0.2, 5, 0.1).name('spawn every (s)');
 wb.add(session, 'flightSeconds', 1, 20, 0.5).name('flight time (s)');
+wb.add(view.wordPadding, 'x', 0, 4, 1).name('word padding ↔');
+wb.add(view.wordPadding, 'y', 0, 2, 1).name('word padding ↕');
 wb.add(live, 'bullets').name('in flight').disable().listen();
 wb.add({ clear: () => session.clearBullets() }, 'clear').name('clear all');
 

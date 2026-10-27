@@ -24,6 +24,8 @@ export class AsciiGameView implements GameView {
   private readonly camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 100);
   private readonly placeholder: THREE.Mesh;
   private lastEvent: { label: string; age: number } | null = null;
+  /** Blank cells around each Word bullet so it reads over the shading (sandbox-tunable). */
+  readonly wordPadding = { x: 1, y: 0 };
   /** Word bullet id → lane index, kept for the bullet's whole flight. */
   private readonly lanes = new Map<string, number>();
 
@@ -65,16 +67,20 @@ export class AsciiGameView implements GameView {
     const text = this.ascii.textGrid;
     const top = 4;
     const bottom = text.rows - 8;
+    const { x: padX, y: padY } = this.wordPadding;
     this.assignLanes(state);
-    state.wordBullets.forEach((b) => {
-      const row = Math.round(top + (bottom - top) * Math.min(Math.max(b.flight, 0), 1));
-      const len = [...b.word].length;
-      const col = Math.floor(text.cols / 2 + LANES[this.lanes.get(b.id)!] - len / 2);
-      const matched = matchPrefix(state.typedWord, b.word);
+    const placed = state.wordBullets.map((b) => {
       const letters = [...b.word];
-      text.write(col, row, letters.slice(0, matched).join(''), 'green');
-      text.write(col + matched, row, letters.slice(matched).join(''), 'fg');
+      const row = Math.round(top + (bottom - top) * Math.min(Math.max(b.flight, 0), 1));
+      const col = Math.floor(text.cols / 2 + LANES[this.lanes.get(b.id)!] - letters.length / 2);
+      return { letters, row, col, matched: matchPrefix(state.typedWord, b.word) };
     });
+    // Blank backdrops first, then all words, so one bullet's padding never erases another's letters.
+    for (const p of placed) text.fill(p.col - padX, p.row - padY, p.letters.length + 2 * padX, 1 + 2 * padY, ' ');
+    for (const p of placed) {
+      text.write(p.col, p.row, p.letters.slice(0, p.matched).join(''), 'green');
+      text.write(p.col + p.matched, p.row, p.letters.slice(p.matched).join(''), 'fg');
+    }
   }
 
   /**
