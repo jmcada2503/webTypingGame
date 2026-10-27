@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
-import { createWordLayer, WORD_VARIANTS, type WordLayer } from './wordsPrototype/variants';
+import { WordBulletSprites } from './words/WordBulletSprites';
 
 const MAX_LIVES = 3;
 const EVENT_LABEL_SECONDS = 1.2;
@@ -12,7 +11,6 @@ const EVENT_LABEL_SECONDS = 1.2;
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
  * - rotating cube where the Enemy ship goes ("Enemy ship and space backdrop")
- * - Word bullets: PROTOTYPE variants via ?variant= ("Words in the ASCII world")
  * - Cockpit readouts as one text row ("Cockpit design")
  * - ViewEvents shown as a label top center (juice tickets)
  */
@@ -23,12 +21,11 @@ export class AsciiGameView implements GameView {
   private readonly camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 100);
   private readonly placeholder: THREE.Mesh;
   private lastEvent: { label: string; age: number } | null = null;
-  private words!: WordLayer;
+  /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
+  private readonly words = new WordBulletSprites();
 
   static async create(): Promise<AsciiGameView> {
-    const view = new AsciiGameView(await GpuAsciiRenderer.create());
-    view.words = await createWordLayer(mountPrototypeSwitcher(WORD_VARIANTS), view.scene);
-    return view;
+    return new AsciiGameView(await GpuAsciiRenderer.create());
   }
 
   private constructor(private readonly ascii: GpuAsciiRenderer) {
@@ -55,11 +52,11 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
-    this.words.draw({ state, camera: this.camera, text });
+    this.words.update(state);
     this.drawCockpit(state);
     if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), 4, this.lastEvent.label, 'dim');
 
-    this.ascii.render(this.scene, this.camera, this.words.overlay && { scene: this.words.overlay, camera: this.camera });
+    this.ascii.render(this.scene, this.camera, { scene: this.words.scene, camera: this.camera });
   }
 
   private drawCockpit(state: GameViewState) {
