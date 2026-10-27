@@ -8,6 +8,8 @@ import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { DESTROY_PROTO, DESTROY_VARIANTS, DestroyFx, type DestroyKind } from './juice/destroyPrototype';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -26,6 +28,8 @@ export class AsciiGameView implements GameView {
   private lastEvent: { label: string; age: number } | null = null;
   /** The player's Cockpit: yoke, Lives lamps, Radar ("Cockpit design"). */
   private readonly cockpit: Cockpit;
+  /** PROTOTYPE: Word bullet destroyed effect ("Juice: Word bullet destroyed"). */
+  private readonly destroyFx: DestroyFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -46,6 +50,8 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
+    this.destroyFx = new DestroyFx(this.overlay, this.scene, this.camera);
+    DESTROY_PROTO.kind = mountPrototypeSwitcher(DESTROY_VARIANTS) as DestroyKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -60,6 +66,7 @@ export class AsciiGameView implements GameView {
     const text = this.ascii.textGrid;
     text.clear();
     this.words.update(state, this.camera);
+    this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -67,6 +74,10 @@ export class AsciiGameView implements GameView {
   }
 
   trigger(event: ViewEvent) {
+    if (event.type === 'wordBulletDestroyed') {
+      const snap = this.words.take(event.id);
+      if (snap) this.destroyFx.burst(snap);
+    }
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
@@ -84,6 +95,7 @@ export class AsciiGameView implements GameView {
   dispose() {
     this.words.dispose();
     this.cockpit.dispose();
+    this.destroyFx.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();

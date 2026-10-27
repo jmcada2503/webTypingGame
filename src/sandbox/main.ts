@@ -9,6 +9,7 @@ import { WORD_FLIGHT } from '../view/words/flightPath';
 import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
+import { DESTROY_PROTO } from '../view/juice/destroyPrototype';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -54,6 +55,14 @@ en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
 en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
 en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
 en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
+
+// PROTOTYPE knobs ("Juice: Word bullet destroyed")
+const dx = gui.addFolder('Destroy effect (prototype)');
+dx.add(DESTROY_PROTO, 'kind', ['A', 'B', 'C', 'D']).name('explosion').listen();
+dx.add(DESTROY_PROTO, 'shardSpeed', 2, 30, 0.5).name('shard speed');
+dx.add(DESTROY_PROTO, 'shardSpin', 0, 30, 0.5).name('shard spin');
+dx.add(DESTROY_PROTO, 'burstSeconds', 0.15, 1.5, 0.05).name('explosion time (s)');
+dx.add(DESTROY_PROTO, 'burstSize', 0.5, 6, 0.1).name('explosion size');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
