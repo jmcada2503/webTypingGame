@@ -67,7 +67,7 @@ const FULLSCREEN_VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0);
 /**
  * GPU ASCII pipeline (WebGL2, three.js):
  *  1. scene → sceneRT at the reference size (grid × reference cell, 1280×720)
- *  2. cell pass: average luminance per cell → ramp glyph (cellRT, 128×45)
+ *  2. cell pass: average brightness per cell → ramp glyph; clearly red/green cells keep that accent (cellRT, 128×45)
  *  3. composite: glyph atlas at the real device cell size; TextGrid cells win over shading
  *  4. optional overlay scene drawn on top with no ASCII treatment
  */
@@ -120,15 +120,21 @@ export class GpuAsciiRenderer implements AsciiRenderer {
       out vec4 outColor;
       void main() {
         ivec2 origin = ivec2(gl_FragCoord.xy) * cell;
-        float lum = 0.0;
+        vec3 sum = vec3(0.0);
         for (int y = 0; y < 64; y++) { if (y >= cell.y) break;
           for (int x = 0; x < 64; x++) { if (x >= cell.x) break;
-            lum += dot(texelFetch(tColor, origin + ivec2(x, y), 0).rgb, vec3(0.2126, 0.7152, 0.0722));
+            sum += texelFetch(tColor, origin + ivec2(x, y), 0).rgb;
           }
         }
-        float L = clamp(pow(clamp(lum / float(cell.x * cell.y) * exposure, 0.0, 1.0), gamma), 0.0, 1.0);
+        vec3 c = sum / float(cell.x * cell.y);
+        // Brightness = strongest channel, so pure red / green objects shade like white ones.
+        float L = clamp(pow(clamp(max(c.r, max(c.g, c.b)) * exposure, 0.0, 1.0), gamma), 0.0, 1.0);
         int idx = int(floor(L * (float(rampLen) - 0.001)));
-        outColor = vec4(ramp[idx] / 255.0, 0.0, L, 1.0);
+        // Clearly green / red cells keep that accent (palette slot 2 / 1); everything else is fg.
+        float pal = 0.0;
+        if (c.g > 0.01 && c.g > 1.6 * c.r && c.g > 1.6 * c.b) pal = 2.0;
+        else if (c.r > 0.01 && c.r > 1.6 * c.g && c.r > 1.6 * c.b) pal = 1.0;
+        outColor = vec4(ramp[idx] / 255.0, pal / 255.0, L, 1.0);
       }`,
       {
         tColor: { value: this.sceneRT.texture },
@@ -150,8 +156,9 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         ivec2 px = ivec2(gl_FragCoord.xy);
         ivec2 c = px / cellDev;
         if (c.x >= grid.x || c.y >= grid.y) { outColor = vec4(bg, 1.0); return; }
-        float glyph = texelFetch(tCells, c, 0).r * 255.0;
-        int pal = 0;
+        vec4 cell = texelFetch(tCells, c, 0);
+        float glyph = cell.r * 255.0;
+        int pal = int(cell.g * 255.0 + 0.5);
         vec4 t = texelFetch(tText, c, 0);
         if (t.r > 0.0) { glyph = t.r * 255.0 - 1.0; pal = int(t.g * 255.0 + 0.5); }
         ivec2 local = px - c * cellDev;

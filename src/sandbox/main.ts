@@ -5,6 +5,7 @@ import '../app/app.css';
 import { AppShell } from '../app/AppShell';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { AsciiGameView } from '../view/AsciiGameView';
+import { WORDS_PROTO } from '../view/wordsPrototype/tracks';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -12,6 +13,7 @@ const input = new KeyboardTypingInput();
 const view = await AsciiGameView.create();
 const shell = new AppShell(view, session, input);
 shell.start();
+if (import.meta.env.DEV) Object.assign(window, { sandbox: session });
 
 // ---- tweak panel ----
 const gui = new GUI({ title: 'Sandbox' });
@@ -31,10 +33,21 @@ wb.add({ random: () => session.spawn() }, 'random').name('spawn random');
 wb.add(session, 'autoSpawn').name('auto spawn');
 wb.add(session, 'spawnEvery', 0.2, 5, 0.1).name('spawn every (s)');
 wb.add(session, 'flightSeconds', 1, 20, 0.5).name('flight time (s)');
-wb.add(view.wordPadding, 'x', 0, 4, 1).name('word padding ↔');
-wb.add(view.wordPadding, 'y', 0, 2, 1).name('word padding ↕');
+wb.add(WORDS_PROTO, 'padX', 0, 4, 1).name('word padding ↔');
+wb.add(WORDS_PROTO, 'padY', 0, 2, 1).name('word padding ↕');
 wb.add(live, 'bullets').name('in flight').disable().listen();
 wb.add({ clear: () => session.clearBullets() }, 'clear').name('clear all');
+
+// PROTOTYPE knobs ("Words in the ASCII world")
+const wp = gui.addFolder('Words prototype');
+wp.add(WORDS_PROTO, 'wordHeight', 0.05, 1, 0.01).name('word size');
+wp.add(WORDS_PROTO.start, 'y', -2, 12, 0.1).name('start y');
+wp.add(WORDS_PROTO.start, 'z', -60, 0, 0.5).name('start z');
+wp.add(WORDS_PROTO.end, 'y', -3, 3, 0.05).name('end y');
+wp.add(WORDS_PROTO.end, 'z', -5, 6, 0.1).name('end z');
+wp.add(WORDS_PROTO, 'laneSpread', 0, 3, 0.05).name('lane spread');
+wp.add(WORDS_PROTO, 'tilt', -1, 1.2, 0.01).name('C: tilt');
+wp.add(WORDS_PROTO, 'depth', 0.02, 1, 0.01).name('C: depth (new words)');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

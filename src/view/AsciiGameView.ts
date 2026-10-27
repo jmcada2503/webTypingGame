@@ -1,19 +1,18 @@
 import * as THREE from 'three';
 import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
-import { matchPrefix } from '../utils/matchPrefix';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
+import { createWordLayer, WORD_VARIANTS, type WordLayer } from './wordsPrototype/variants';
 
 const MAX_LIVES = 3;
 const EVENT_LABEL_SECONDS = 1.2;
-/** Placeholder lane offsets (columns from center) for Word bullets; filled center-first. */
-const LANES = [0, -20, 20, -40, 40];
 
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
  * - rotating cube where the Enemy ship goes ("Enemy ship and space backdrop")
- * - Word bullets as plain text sliding down by Flight ("Words in the ASCII world", "Word bullets in flight")
+ * - Word bullets: PROTOTYPE variants via ?variant= ("Words in the ASCII world")
  * - Cockpit readouts as one text row ("Cockpit design")
  * - ViewEvents shown as a label top center (juice tickets)
  */
@@ -24,13 +23,12 @@ export class AsciiGameView implements GameView {
   private readonly camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 100);
   private readonly placeholder: THREE.Mesh;
   private lastEvent: { label: string; age: number } | null = null;
-  /** Blank cells around each Word bullet so it reads over the shading (sandbox-tunable). */
-  readonly wordPadding = { x: 1, y: 0 };
-  /** Word bullet id → lane index, kept for the bullet's whole flight. */
-  private readonly lanes = new Map<string, number>();
+  private words!: WordLayer;
 
   static async create(): Promise<AsciiGameView> {
-    return new AsciiGameView(await GpuAsciiRenderer.create());
+    const view = new AsciiGameView(await GpuAsciiRenderer.create());
+    view.words = await createWordLayer(mountPrototypeSwitcher(WORD_VARIANTS), view.scene);
+    return view;
   }
 
   private constructor(private readonly ascii: GpuAsciiRenderer) {
@@ -42,10 +40,11 @@ export class AsciiGameView implements GameView {
 
     this.camera.position.set(0, 0, 7);
     this.placeholder = new THREE.Mesh(
-      new THREE.BoxGeometry(1.2, 1.2, 1.2),
+      new THREE.BoxGeometry(3, 3, 3),
       new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: flatShadingDefault }),
     );
-    this.placeholder.position.set(0, 1.4, 0);
+    // Far away so Word bullets have room to fly toward the camera.
+    this.placeholder.position.set(0, 7.5, -27);
     this.scene.add(this.placeholder);
   }
 
@@ -56,57 +55,11 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
-    this.drawWordBullets(state);
+    this.words.draw({ state, camera: this.camera, text });
     this.drawCockpit(state);
-    if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), 1, this.lastEvent.label, 'dim');
+    if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), 4, this.lastEvent.label, 'dim');
 
-    this.ascii.render(this.scene, this.camera);
-  }
-
-  private drawWordBullets(state: GameViewState) {
-    const text = this.ascii.textGrid;
-    const top = 4;
-    const bottom = text.rows - 8;
-    const { x: padX, y: padY } = this.wordPadding;
-    this.assignLanes(state);
-    const placed = state.wordBullets.map((b) => {
-      const letters = [...b.word];
-      const row = Math.round(top + (bottom - top) * Math.min(Math.max(b.flight, 0), 1));
-      const col = Math.floor(text.cols / 2 + LANES[this.lanes.get(b.id)!] - letters.length / 2);
-      return { letters, row, col, matched: matchPrefix(state.typedWord, b.word) };
-    });
-    // Blank backdrops first, then all words, so one bullet's padding never erases another's letters.
-    for (const p of placed) text.fill(p.col - padX, p.row - padY, p.letters.length + 2 * padX, 1 + 2 * padY, ' ');
-    for (const p of placed) {
-      text.write(p.col, p.row, p.letters.slice(0, p.matched).join(''), 'green');
-      text.write(p.col + p.matched, p.row, p.letters.slice(p.matched).join(''), 'fg');
-    }
-  }
-
-  /**
-   * Each new Word bullet takes the least-used lane (ties: the one whose latest bullet has flown
-   * furthest), and keeps it until it leaves the snapshot, so others never shift sideways.
-   */
-  private assignLanes(state: GameViewState) {
-    const alive = new Set(state.wordBullets.map((b) => b.id));
-    for (const id of this.lanes.keys()) if (!alive.has(id)) this.lanes.delete(id);
-
-    for (const b of state.wordBullets) {
-      if (this.lanes.has(b.id)) continue;
-      const load = LANES.map(() => ({ count: 0, minFlight: 1 }));
-      for (const other of state.wordBullets) {
-        const lane = this.lanes.get(other.id);
-        if (lane === undefined) continue;
-        load[lane].count++;
-        load[lane].minFlight = Math.min(load[lane].minFlight, other.flight);
-      }
-      let best = 0;
-      for (let i = 1; i < LANES.length; i++) {
-        const a = load[i], c = load[best];
-        if (a.count < c.count || (a.count === c.count && a.minFlight > c.minFlight)) best = i;
-      }
-      this.lanes.set(b.id, best);
-    }
+    this.ascii.render(this.scene, this.camera, this.words.overlay && { scene: this.words.overlay, camera: this.camera });
   }
 
   private drawCockpit(state: GameViewState) {
@@ -138,6 +91,7 @@ export class AsciiGameView implements GameView {
   dispose() {
     this.placeholder.geometry.dispose();
     (this.placeholder.material as THREE.Material).dispose();
+    this.words.dispose();
     this.ascii.dispose();
   }
 }
