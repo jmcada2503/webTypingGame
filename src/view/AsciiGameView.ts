@@ -4,13 +4,15 @@ import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
 import { WordBulletSprites } from './words/WordBulletSprites';
+import { WORD_FLIGHT } from './words/flightPath';
+import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
+import { StarDrift } from './enemy/StarDrift';
 
 const MAX_LIVES = 3;
 const EVENT_LABEL_SECONDS = 1.2;
 
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
- * - rotating cube where the Enemy ship goes ("Enemy ship and space backdrop")
  * - Cockpit readouts as one text row ("Cockpit design")
  * - ViewEvents shown as a label top center (juice tickets)
  */
@@ -19,7 +21,9 @@ export class AsciiGameView implements GameView {
 
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 100);
-  private readonly placeholder: THREE.Mesh;
+  /** Enemy ship (the dart) + stars flying past ("Enemy ship and space backdrop"). */
+  private readonly enemy = new EnemyShip();
+  private readonly stars = new StarDrift();
   private lastEvent: { label: string; age: number } | null = null;
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
   private readonly words = new WordBulletSprites();
@@ -30,31 +34,28 @@ export class AsciiGameView implements GameView {
 
   private constructor(private readonly ascii: GpuAsciiRenderer) {
     this.canvas = ascii.canvas;
-    const { directional, ambient, flatShadingDefault } = ASCII_STYLE.lighting;
+    const { directional, ambient } = ASCII_STYLE.lighting;
     const sun = new THREE.DirectionalLight(0xffffff, directional.intensity);
     sun.position.set(...directional.position);
     this.scene.add(sun, new THREE.AmbientLight(0xffffff, ambient));
 
     this.camera.position.set(0, 0, 7);
-    this.placeholder = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 3, 3),
-      new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: flatShadingDefault }),
-    );
-    // Far away so Word bullets have room to fly toward the camera.
-    this.placeholder.position.set(0, 7.5, -27);
-    this.scene.add(this.placeholder);
+    this.scene.add(this.enemy.root, this.stars.points);
   }
 
   render(state: GameViewState, dt: number) {
-    this.placeholder.rotation.y += dt * 0.53;
-    this.placeholder.rotation.x += dt * 0.24;
+    this.enemy.update(dt);
+    this.stars.update(dt);
+    // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
+    WORD_FLIGHT.start.y = ENEMY_LOOK.position.y - 1;
+    WORD_FLIGHT.start.z = ENEMY_LOOK.position.z + 2;
     if (this.lastEvent && (this.lastEvent.age += dt) > EVENT_LABEL_SECONDS) this.lastEvent = null;
 
     const text = this.ascii.textGrid;
     text.clear();
     this.words.update(state);
     this.drawCockpit(state);
-    if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), 4, this.lastEvent.label, 'dim');
+    if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), text.rows - 6, this.lastEvent.label, 'dim');
 
     this.ascii.render(this.scene, this.camera, { scene: this.words.scene, camera: this.camera });
   }
@@ -86,9 +87,9 @@ export class AsciiGameView implements GameView {
   }
 
   dispose() {
-    this.placeholder.geometry.dispose();
-    (this.placeholder.material as THREE.Material).dispose();
     this.words.dispose();
+    this.enemy.dispose();
+    this.stars.dispose();
     this.ascii.dispose();
   }
 }

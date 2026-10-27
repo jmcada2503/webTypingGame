@@ -6,6 +6,8 @@ import { AppShell } from '../app/AppShell';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { AsciiGameView } from '../view/AsciiGameView';
 import { WORD_FLIGHT } from '../view/words/flightPath';
+import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
+import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
@@ -41,11 +43,18 @@ const look = gui.addFolder('Word bullet look + path');
 look.add(WORD_LOOK, 'height', 0.05, 1, 0.01).name('word size');
 look.add(WORD_LOOK, 'padX', 0, 4, 0.25).name('padding ↔ (letters)');
 look.add(WORD_LOOK, 'padY', 0, 1, 0.05).name('padding ↕ (em)');
-look.add(WORD_FLIGHT.start, 'y', -2, 12, 0.1).name('start y');
-look.add(WORD_FLIGHT.start, 'z', -60, 0, 0.5).name('start z');
 look.add(WORD_FLIGHT.end, 'y', -3, 3, 0.05).name('end y');
 look.add(WORD_FLIGHT.end, 'z', -5, 6, 0.1).name('end z');
 look.add(WORD_FLIGHT, 'laneSpread', 0, 3, 0.05).name('lane spread');
+
+const en = gui.addFolder('Enemy ship + stars');
+en.add(ENEMY_LOOK, 'scale', 0.3, 3, 0.05);
+en.add(ENEMY_LOOK.position, 'y', -2, 14, 0.1).name('position y');
+en.add(ENEMY_LOOK.position, 'z', -70, -5, 0.5).name('position z');
+en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
+en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
+en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
+en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
