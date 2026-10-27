@@ -63,6 +63,7 @@ dx.add(DESTROY_LOOK, 'burstSeconds', 0.15, 1.5, 0.05).name('ring time (s)');
 dx.add(DESTROY_LOOK, 'burstSize', 0.5, 6, 0.1).name('ring size');
 dx.add(DESTROY_LOOK, 'sparkSeconds', 0.1, 1, 0.05).name('cockpit sparks time (s)');
 dx.add(DESTROY_LOOK, 'sparkReach', 0.05, 1, 0.01).name('cockpit sparks reach');
+dx.add(DESTROY_LOOK, 'sparkSize', 0.005, 0.04, 0.001).name('cockpit sparks size');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

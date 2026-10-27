@@ -16,13 +16,13 @@ export const DESTROY_LOOK = {
   /** Cockpit sparks: life (s) and how far they fly (fraction of the way to the word). */
   sparkSeconds: 0.3,
   sparkReach: 0.35,
+  /** Cockpit spark radius per unit of distance from the camera (kept small: a subtle cue). */
+  sparkSize: 0.016,
 };
 
 /** Where the Cockpit "fires" from: bottom center, just behind the yoke (camera-local), so it hides the start. */
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.5, -1.9);
-/** Spark radius per unit of distance from the camera: stays ≈ one grid cell wherever it flies. */
-const SPARK_RADIUS = 0.026;
-const SPARK_COUNT = 12;
+const SPARK_COUNT = 8;
 /** Half-angle of the spark fan around the direction to the destroyed word, radians. */
 const SPARK_FAN = 0.9;
 
@@ -113,7 +113,7 @@ export class WordDestroyFx {
       const speed = ((DESTROY_LOOK.sparkReach * dist) / DESTROY_LOOK.sparkSeconds) * (0.5 + Math.random() * 0.8);
       const mesh = new THREE.Mesh(this.sparkGeo, this.sparkMat);
       mesh.position.copy(from);
-      mesh.scale.setScalar(SPARK_RADIUS * (this.camera.position.z - from.z));
+      mesh.scale.setScalar(DESTROY_LOOK.sparkSize * (this.camera.position.z - from.z));
       this.scene.add(mesh);
       this.sparks.push({ mesh, vel: dir.multiplyScalar(speed), age: 0 });
     }
@@ -143,7 +143,8 @@ export class WordDestroyFx {
         continue;
       }
       s.mesh.position.addScaledVector(s.vel, dt);
-      s.mesh.scale.setScalar(SPARK_RADIUS * (this.camera.position.z - s.mesh.position.z) * (1 - k * 0.6));
+      // Size scales with distance so a spark stays about the same on screen as it flies.
+      s.mesh.scale.setScalar(DESTROY_LOOK.sparkSize * (this.camera.position.z - s.mesh.position.z) * (1 - k * 0.6));
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
