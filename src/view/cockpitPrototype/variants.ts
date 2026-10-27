@@ -15,6 +15,12 @@ export const COCKPIT_VARIANTS = [
 ];
 
 export type CockpitCtx = { state: GameViewState; dt: number; text: TextGrid };
+
+/** Live-tunable from the sandbox panel. */
+export const COCKPIT_PROTO = {
+  /** 'grid': grid glyphs laid along the panel's on-screen slant; 'plate': real-font plate in perspective. */
+  attackWord: 'grid' as 'grid' | 'plate',
+};
 export interface Cockpit {
   update(ctx: CockpitCtx): void;
   /** Real-font, non-ASCII parts (panel labels), drawn in the overlay pass. */
@@ -146,6 +152,33 @@ function fittedTextPlate(maxW: number, maxH: number) {
       mesh.scale.set(h * aspect, h, 1);
     },
   };
+}
+
+const slantA = new THREE.Vector3();
+const slantB = new THREE.Vector3();
+/** Grid position (fractional col, row) of a world point. */
+function toGrid(v: THREE.Vector3, camera: THREE.Camera) {
+  const { cols, rows } = ASCII_STYLE.grid;
+  v.project(camera);
+  return { col: ((v.x + 1) / 2) * cols, row: ((1 - v.y) / 2) * rows };
+}
+
+/**
+ * Grid glyphs that imitate a rotated panel: letters one column apart, centered on the panel's
+ * center, each on the row the panel's horizontal axis passes through at that column (staircase).
+ */
+function slantedGridWord(text: TextGrid, panel: THREE.Object3D, camera: THREE.Camera, str: string, color: PaletteColor) {
+  panel.updateWorldMatrix(true, false);
+  const a = toGrid(panel.localToWorld(slantA.set(0, 0, 0)), camera);
+  const b = toGrid(panel.localToWorld(slantB.set(0.1, 0, 0)), camera);
+  const slope = (b.row - a.row) / (b.col - a.col); // rows per column along the panel's x axis
+  const letters = [...str];
+  const first = Math.round(a.col - letters.length / 2);
+  letters.forEach((ch, i) => {
+    const col = first + i;
+    const row = Math.round(a.row + slope * (col + 0.5 - a.col) - 0.5);
+    text.write(col, row, ch, color);
+  });
 }
 
 /** Write `str` centered in the rect, `line` rows from its vertical center. */
@@ -387,6 +420,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const labelAnchors: { panel: THREE.Object3D; label: THREE.Mesh }[] = [];
   // Attack word: real-font plate on the attack screen, in the panel's perspective, fitted to it.
   const attackPlate = fittedTextPlate(0.4, 0.075);
+  let attackScreen!: THREE.Mesh;
   for (const side of [-1, 1]) {
     const c = new THREE.Group();
     c.position.set(side * 0.8, -0.5, -1.6);
@@ -415,7 +449,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     } else {
       const bezel = box(0.5, 0.2, 0.03, gray(0.7));
       bezel.position.set(0, 0.05, 0.05);
-      const attackScreen = screen(0.44, 0.14);
+      attackScreen = screen(0.44, 0.14);
       attackScreen.position.set(0, 0.05, 0.07);
       c.add(bezel, attackScreen);
       attackPlate.mesh.position.set(0, 0.05, 0.075);
@@ -446,7 +480,9 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         label.matrix.copy(panel.matrixWorld);
       }
       centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
-      attackPlate.set(state.attackWord, ASCII_STYLE.palette.red);
+      attackPlate.mesh.visible = COCKPIT_PROTO.attackWord === 'plate';
+      if (attackPlate.mesh.visible) attackPlate.set(state.attackWord, ASCII_STYLE.palette.red);
+      else slantedGridWord(text, attackScreen, camera, state.attackWord, 'red');
     },
     overlay,
     dispose: () => {

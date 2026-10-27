@@ -8,6 +8,7 @@ import { AsciiGameView } from '../view/AsciiGameView';
 import { WORD_FLIGHT } from '../view/words/flightPath';
 import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
+import { COCKPIT_PROTO } from '../view/cockpitPrototype/variants';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
@@ -55,6 +56,9 @@ en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
 en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
 en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
 en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
+
+// PROTOTYPE knob ("Cockpit design")
+gui.addFolder('Cockpit (prototype)').add(COCKPIT_PROTO, 'attackWord', ['grid', 'plate']).name('attack word style');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
