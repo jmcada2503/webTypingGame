@@ -20,8 +20,11 @@ export const DESTROY_LOOK = {
   sparkSize: 0.016,
 };
 
-/** Where the Cockpit "fires" from: bottom center, just behind the yoke (camera-local), so it hides the start. */
-const MUZZLE_LOCAL = new THREE.Vector3(0, -0.5, -1.9);
+/**
+ * Where the Cockpit "fires" from, alternating left / right: behind the outer end of each side
+ * console (camera-local, see Cockpit.ts), so the console hides the start.
+ */
+const MUZZLES_LOCAL = [new THREE.Vector3(-1.0, -0.4, -1.9), new THREE.Vector3(1.0, -0.4, -1.9)];
 const SPARK_COUNT = 8;
 /** Half-angle of the spark fan around the direction to the destroyed word, radians. */
 const SPARK_FAN = 0.9;
@@ -53,13 +56,15 @@ function glyphTexture(ch: string) {
  * Word bullet destroyed ("Juice: Word bullet destroyed"): the word breaks. Each letter becomes an
  * outlined shard flung off screen fast in its own direction (spinning, accelerating, no fade),
  * and a green ring of grid glyphs bursts where the word was. The ring is grid text, so it always
- * sits behind every Word bullet: the next word stays readable. Green sparks also burst from
- * behind the Cockpit's bottom, fanned toward the word, as if the Cockpit fired at it.
+ * sits behind every Word bullet: the next word stays readable. Small green sparks also burst from
+ * behind the left / right console (alternating), toward the word, as if the ship fired at it.
  */
 export class WordDestroyFx {
   private readonly shards: Shard[] = [];
   private readonly bursts: Burst[] = [];
   private readonly sparks: Spark[] = [];
+  /** Next muzzle to fire from (0 = left, 1 = right). */
+  private nextMuzzle = 0;
   private readonly sparkGeo = new THREE.SphereGeometry(1, 8, 6);
   private readonly sparkMat = new THREE.MeshBasicMaterial({ color: ASCII_STYLE.palette.green });
 
@@ -97,12 +102,13 @@ export class WordDestroyFx {
   }
 
   /**
-   * Green sparks from behind the Cockpit's bottom center, fanned toward the destroyed word (as if
-   * the Cockpit fired at it). They are small bright 3D particles in the main scene: the Cockpit
+   * Green sparks from behind the left or right console (alternating), fanned toward the destroyed
+   * word, as if the player's ship fired at it from that side. They are small bright 3D particles in the main scene: the Cockpit
    * geometry hides them where it is in front, and the ASCII pass turns them into green glyphs.
    */
   private fireSparks(target: THREE.Vector3) {
-    const from = tmp.copy(MUZZLE_LOCAL).add(this.camera.position);
+    const from = tmp.copy(MUZZLES_LOCAL[this.nextMuzzle]).add(this.camera.position);
+    this.nextMuzzle = 1 - this.nextMuzzle;
     const toWord = target.clone().sub(from);
     const dist = toWord.length();
     toWord.normalize();
