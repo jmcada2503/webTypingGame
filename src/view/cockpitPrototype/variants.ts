@@ -114,6 +114,40 @@ function labelPlate(str: string, height: number) {
   return mesh;
 }
 
+/**
+ * Real-font text on a flat plate that can be repainted; fits inside maxW × maxH (world units),
+ * so long words (20 chars) shrink to fit instead of overflowing.
+ */
+function fittedTextPlate(maxW: number, maxH: number) {
+  const em = 96;
+  const canvas = document.createElement('canvas');
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false }));
+  let painted = '';
+  return {
+    mesh,
+    set(str: string, color: string) {
+      if (str === painted) return;
+      painted = str;
+      const g = canvas.getContext('2d')!;
+      const font = `400 ${em}px "${ASCII_STYLE.font.family}"`;
+      g.font = font;
+      canvas.width = Math.max(1, Math.ceil(g.measureText(str || ' ').width));
+      canvas.height = Math.ceil(em * 1.15);
+      g.font = font;
+      g.fillStyle = color;
+      g.textBaseline = 'middle';
+      g.fillText(str, 0, canvas.height / 2);
+      map.dispose(); // canvas size changed: drop the GPU copy so it re-uploads at the new size
+      map.needsUpdate = true;
+      const aspect = canvas.width / canvas.height;
+      const h = Math.min(maxH, maxW / aspect);
+      mesh.scale.set(h * aspect, h, 1);
+    },
+  };
+}
+
 /** Write `str` centered in the rect, `line` rows from its vertical center. */
 function center(text: TextGrid, rect: Rect, line: number, str: string, color: PaletteColor = 'fg') {
   const len = [...str].length;
@@ -329,18 +363,18 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const metal = gray(0.75, false);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.6, 12), metal);
   column.position.set(0, -0.78, -1.35);
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 12), metal);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.68, 12), metal);
   bar.rotation.z = Math.PI / 2;
   bar.position.set(0, -0.48, -1.35);
   root.add(column, bar);
-  for (const x of [-0.36, 0.36]) {
+  for (const x of [-0.3, 0.3]) {
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
     grip.position.set(x, -0.4, -1.35);
     root.add(grip);
   }
-  const yokeScreenBezel = box(0.56, 0.12, 0.03, gray(0.45));
+  const yokeScreenBezel = box(0.5, 0.12, 0.03, gray(0.45));
   yokeScreenBezel.position.set(0, -0.4, -1.37);
-  const yokeScreen = screen(0.5, 0.08);
+  const yokeScreen = screen(0.44, 0.08);
   yokeScreen.position.set(0, -0.4, -1.35);
   root.add(yokeScreenBezel, yokeScreen);
 
@@ -351,12 +385,14 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const lampOff = gray(0.5, false);
   const overlay = new THREE.Group();
   const labelAnchors: { panel: THREE.Object3D; label: THREE.Mesh }[] = [];
-  let attackScreen!: THREE.Mesh;
+  // Attack word: real-font plate on the attack screen, in the panel's perspective, fitted to it.
+  const attackPlate = fittedTextPlate(0.36, 0.075);
   for (const side of [-1, 1]) {
     const c = new THREE.Group();
-    c.position.set(side * 0.8, -0.5, -1.6);
-    c.rotation.set(-0.7, -side * 0.4, 0);
-    const slab = box(0.62, 0.42, 0.06, gray(0.28));
+    // Angled to wrap around the pilot: the inner edge recedes, so text on it visibly shrinks.
+    c.position.set(side * 0.68, -0.5, -1.65);
+    c.rotation.set(-0.6, -side * 0.7, 0, 'YXZ');
+    const slab = box(0.56, 0.42, 0.06, gray(0.28));
     c.add(slab);
     // Label on the panel's top edge, in the panel's plane (tilts with it).
     const label = labelPlate(side < 0 ? 'LIVES' : 'ATTACK', 0.05);
@@ -368,7 +404,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     labelAnchors.push({ panel: c, label: anchor as unknown as THREE.Mesh });
     if (side < 0) {
       for (let i = 0; i < MAX_LIVES; i++) {
-        const x = -0.1 + i * 0.13;
+        const x = -0.12 + i * 0.12;
         // Black socket so an unlit lamp still reads against the panel.
         const socket = new THREE.Mesh(new THREE.CircleGeometry(0.062, 24), black());
         socket.position.set(x, 0.05, 0.032);
@@ -378,16 +414,18 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         c.add(socket, lamp);
       }
     } else {
-      const bezel = box(0.5, 0.2, 0.03, gray(0.7));
+      const bezel = box(0.46, 0.2, 0.03, gray(0.7));
       bezel.position.set(0, 0.05, 0.05);
-      attackScreen = screen(0.44, 0.14);
+      const attackScreen = screen(0.4, 0.14);
       attackScreen.position.set(0, 0.05, 0.07);
       c.add(bezel, attackScreen);
+      attackPlate.mesh.position.set(0, 0.05, 0.075);
+      anchor.add(attackPlate.mesh);
     }
     // Switch row.
     for (let i = 0; i < 5; i++) {
       const sw = box(0.04, 0.07, 0.04, gray(0.85));
-      sw.position.set(-0.2 + i * 0.1, -0.13, 0.06);
+      sw.position.set(-0.18 + i * 0.09, -0.13, 0.06);
       c.add(sw);
     }
     consoles.add(c);
@@ -409,7 +447,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         label.matrix.copy(panel.matrixWorld);
       }
       centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
-      centerExact(text, rectOfF(attackScreen, camera), state.attackWord, 'red');
+      attackPlate.set(state.attackWord, ASCII_STYLE.palette.red);
     },
     overlay,
     dispose: () => {

@@ -42,6 +42,8 @@ export class WordBulletSprites {
       const key = `${matched}|${WORD_LOOK.padX}|${WORD_LOOK.padY}`;
       if (s.paintedKey !== key) {
         s.aspect = paint(s.canvas, [...b.word], matched);
+        // The canvas may have changed size (padding): drop the GPU copy so it re-uploads.
+        s.sprite.material.map!.dispose();
         s.sprite.material.map!.needsUpdate = true;
         s.paintedKey = key;
       }
