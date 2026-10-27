@@ -35,7 +35,9 @@ wb.add(live, 'bullets').name('in flight').disable().listen();
 wb.add({ clear: () => session.clearBullets() }, 'clear').name('clear all');
 
 const ev = gui.addFolder('Events');
+ev.add(session, 'submitDestroys').name('typing destroys match');
 ev.add({ destroy: () => session.destroyOldest() }, 'destroy').name('destroy oldest');
+ev.add({ destroyNew: () => session.destroyNewest() }, 'destroyNew').name('destroy newest');
 ev.add({ arrive: () => session.arriveOldest() }, 'arrive').name('arrive oldest');
 ev.add({ lifeLost: () => session.emit({ type: 'lifeLost' }) }, 'lifeLost').name('lifeLost');
 ev.add({ attack: () => session.emit({ type: 'attackFired', word: session.attackWord }) }, 'attack').name('attackFired');
@@ -55,6 +57,3 @@ document.body.append(stats.dom);
   stats.update();
   requestAnimationFrame(poll);
 })();
-
-// Clicking the canvas takes focus away from panel text fields so typing reaches the game.
-view.canvas.addEventListener('pointerdown', () => (document.activeElement as HTMLElement | null)?.blur());

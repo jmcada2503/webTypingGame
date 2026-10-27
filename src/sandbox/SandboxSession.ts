@@ -9,8 +9,9 @@ export const SAMPLE_WORDS = [
 ];
 
 /**
- * Tweak-panel driven GameSession for the visual sandbox. No mechanics: typing never
- * destroys a Word bullet and arrivals cost no Lives. Every change comes from the panel.
+ * Tweak-panel driven GameSession for the visual sandbox. No real mechanics: arrivals cost
+ * no Lives. Sandbox shortcut (toggle `submitDestroys`): submitting a word destroys the
+ * closest Word bullet with exactly that word, so any bullet can be destroyed, not just the oldest.
  */
 export class SandboxSession implements GameSession {
   status: SessionStatus = 'idle';
@@ -25,6 +26,8 @@ export class SandboxSession implements GameSession {
   /** Seconds between auto-spawned Word bullets. */
   spawnEvery = 1.5;
   lastSubmitted = '';
+  /** Submitting a word destroys the matching Word bullet. */
+  submitDestroys = true;
 
   private typed = '';
   private bullets: WordBulletState[] = [];
@@ -48,7 +51,7 @@ export class SandboxSession implements GameSession {
     this.typed = input.typedWord;
     this.unsubs.push(
       input.onChange((w) => (this.typed = w)),
-      input.onSubmit((w) => (this.lastSubmitted = w)),
+      input.onSubmit((w) => this.onSubmit(w)),
     );
   }
 
@@ -94,9 +97,19 @@ export class SandboxSession implements GameSession {
     this.pending.push({ type: 'enemyFired', id });
   }
 
+  /** Destroy one Word bullet by id. */
+  destroy(id: string) {
+    if (this.bullets.some((b) => b.id === id)) this.remove(id, 'wordBulletDestroyed');
+  }
+
   destroyOldest() {
     const b = this.bullets[0];
-    if (b) this.remove(b.id, 'wordBulletDestroyed');
+    if (b) this.destroy(b.id);
+  }
+
+  destroyNewest() {
+    const b = this.bullets.at(-1);
+    if (b) this.destroy(b.id);
   }
 
   arriveOldest() {
@@ -110,6 +123,17 @@ export class SandboxSession implements GameSession {
 
   emit(event: ViewEvent) {
     this.pending.push(event);
+  }
+
+  private onSubmit(word: string) {
+    this.lastSubmitted = word;
+    if (!this.submitDestroys) return;
+    const typed = word.normalize('NFC');
+    // Several bullets may carry the same word: take the one closest to the Cockpit.
+    const hit = this.bullets
+      .filter((b) => b.word.normalize('NFC') === typed)
+      .sort((a, b) => b.flight - a.flight)[0];
+    if (hit) this.destroy(hit.id);
   }
 
   private remove(id: string, type: 'wordBulletDestroyed' | 'wordBulletArrived') {
