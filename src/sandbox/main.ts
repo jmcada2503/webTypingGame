@@ -10,7 +10,7 @@ import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
-import { HIT_PROTO } from '../view/juice/hitPrototype';
+import { HIT_LOOK } from '../view/juice/HitFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -63,14 +63,12 @@ dx.add(DESTROY_LOOK, 'shardSpin', 0, 30, 0.5).name('shard spin');
 dx.add(DESTROY_LOOK, 'burstSeconds', 0.15, 1.5, 0.05).name('ring time (s)');
 dx.add(DESTROY_LOOK, 'burstSize', 0.5, 6, 0.1).name('ring size');
 
-// PROTOTYPE knobs ("Juice: Hit taken")
-const hx = gui.addFolder('Hit effect (prototype)');
-hx.add(HIT_PROTO, 'kind', ['A', 'B', 'C']).name('style').listen();
-hx.add(HIT_PROTO, 'boomSeconds', 0.15, 2, 0.05).name('explosion time (s)');
-hx.add(HIT_PROTO, 'boomSize', 0.2, 3, 0.05).name('explosion size');
-hx.add(HIT_PROTO, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
-hx.add(HIT_PROTO, 'shake', 0, 0.3, 0.005).name('shake strength');
-hx.add(HIT_PROTO, 'roll', 0, 0.2, 0.005).name('roll');
+const hx = gui.addFolder('Hit effect');
+hx.add(HIT_LOOK, 'boomSeconds', 0.15, 2, 0.05).name('debris time (s)');
+hx.add(HIT_LOOK, 'boomSize', 0.2, 3, 0.05).name('debris spread');
+hx.add(HIT_LOOK, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
+hx.add(HIT_LOOK, 'shake', 0, 0.3, 0.005).name('shake strength');
+hx.add(HIT_LOOK, 'roll', 0, 0.2, 0.005).name('roll');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

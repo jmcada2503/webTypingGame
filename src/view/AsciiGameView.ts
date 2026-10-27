@@ -9,8 +9,7 @@ import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { HIT_PROTO, HIT_VARIANTS, HitFx, type HitKind } from './juice/hitPrototype';
+import { HitFx } from './juice/HitFx';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -31,7 +30,7 @@ export class AsciiGameView implements GameView {
   private readonly cockpit: Cockpit;
   /** Destroyed Word bullets break into flying letters + a green grid ring. */
   private readonly destroyFx: WordDestroyFx;
-  /** PROTOTYPE ("Juice: Hit taken"): red explosion at impact + camera shake. */
+  /** Hit taken: red debris at the impact point + camera jitter on a life lost. */
   private readonly hitFx: HitFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
@@ -55,7 +54,6 @@ export class AsciiGameView implements GameView {
     this.cockpit = new Cockpit(this.scene, this.camera);
     this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
     this.hitFx = new HitFx(this.scene, this.camera);
-    HIT_PROTO.kind = mountPrototypeSwitcher(HIT_VARIANTS) as HitKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
