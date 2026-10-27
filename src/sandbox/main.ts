@@ -5,6 +5,8 @@ import '../app/app.css';
 import { AppShell } from '../app/AppShell';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { AsciiGameView } from '../view/AsciiGameView';
+import { WORD_FLIGHT } from '../view/words/flightPath';
+import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -12,6 +14,7 @@ const input = new KeyboardTypingInput();
 const view = await AsciiGameView.create();
 const shell = new AppShell(view, session, input);
 shell.start();
+if (import.meta.env.DEV) Object.assign(window, { sandbox: session });
 
 // ---- tweak panel ----
 const gui = new GUI({ title: 'Sandbox' });
@@ -31,10 +34,18 @@ wb.add({ random: () => session.spawn() }, 'random').name('spawn random');
 wb.add(session, 'autoSpawn').name('auto spawn');
 wb.add(session, 'spawnEvery', 0.2, 5, 0.1).name('spawn every (s)');
 wb.add(session, 'flightSeconds', 1, 20, 0.5).name('flight time (s)');
-wb.add(view.wordPadding, 'x', 0, 4, 1).name('word padding ↔');
-wb.add(view.wordPadding, 'y', 0, 2, 1).name('word padding ↕');
 wb.add(live, 'bullets').name('in flight').disable().listen();
 wb.add({ clear: () => session.clearBullets() }, 'clear').name('clear all');
+
+const look = gui.addFolder('Word bullet look + path');
+look.add(WORD_LOOK, 'height', 0.05, 1, 0.01).name('word size');
+look.add(WORD_LOOK, 'padX', 0, 4, 0.25).name('padding ↔ (letters)');
+look.add(WORD_LOOK, 'padY', 0, 1, 0.05).name('padding ↕ (em)');
+look.add(WORD_FLIGHT.start, 'y', -2, 12, 0.1).name('start y');
+look.add(WORD_FLIGHT.start, 'z', -60, 0, 0.5).name('start z');
+look.add(WORD_FLIGHT.end, 'y', -3, 3, 0.05).name('end y');
+look.add(WORD_FLIGHT.end, 'z', -5, 6, 0.1).name('end z');
+look.add(WORD_FLIGHT, 'laneSpread', 0, 3, 0.05).name('lane spread');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

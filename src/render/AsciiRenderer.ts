@@ -28,8 +28,8 @@ export interface AsciiRenderer {
   resize(fit: ViewportFit): void;
   /**
    * Render `scene` through the ASCII pipeline. `overlay`, if given, is drawn after the ASCII pass
-   * with no ASCII treatment (e.g. smoothly scaling Word bullet text; final shape decided in
-   * "Words in the ASCII world").
+   * with no ASCII treatment, same camera space (used for Word bullets: real-font sprites that grow
+   * smoothly, see "Words in the ASCII world").
    */
   render(scene: Scene, camera: Camera, overlay?: { scene: Scene; camera: Camera }): void;
   dispose(): void;

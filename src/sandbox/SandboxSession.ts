@@ -91,9 +91,9 @@ export class SandboxSession implements GameSession {
     this.stepOnce = true;
   }
 
-  spawn(word = SAMPLE_WORDS[Math.floor(Math.random() * SAMPLE_WORDS.length)]) {
+  spawn(word = SAMPLE_WORDS[Math.floor(Math.random() * SAMPLE_WORDS.length)], flight = 0) {
     const id = `b${this.nextId++}`;
-    this.bullets.push({ id, word, flight: 0 });
+    this.bullets.push({ id, word, flight });
     this.pending.push({ type: 'enemyFired', id });
   }
 
