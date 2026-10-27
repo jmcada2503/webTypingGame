@@ -49,7 +49,6 @@ look.add(WORD_FLIGHT, 'laneSpread', 0, 3, 0.05).name('lane spread');
 
 const en = gui.addFolder('Enemy ship + stars');
 en.add(ENEMY_LOOK, 'scale', 0.3, 3, 0.05);
-en.add(ENEMY_LOOK, 'gunGap', 0, 5, 0.05).name('gun gap (from center)');
 en.add(ENEMY_LOOK.position, 'y', -2, 14, 0.1).name('position y');
 en.add(ENEMY_LOOK.position, 'z', -70, -5, 0.5).name('position z');
 en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);

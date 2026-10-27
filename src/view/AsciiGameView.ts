@@ -46,10 +46,9 @@ export class AsciiGameView implements GameView {
   render(state: GameViewState, dt: number) {
     this.enemy.update(dt);
     this.stars.update(dt);
-    // Word bullets leave from the Enemy ship's wing guns (its resting spot, so bobbing doesn't jerk words in flight).
+    // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
     WORD_FLIGHT.start.y = ENEMY_LOOK.position.y - 1;
     WORD_FLIGHT.start.z = ENEMY_LOOK.position.z + 2;
-    WORD_FLIGHT.muzzleX = this.enemy.gunOffset;
     if (this.lastEvent && (this.lastEvent.age += dt) > EVENT_LABEL_SECONDS) this.lastEvent = null;
 
     const text = this.ascii.textGrid;

@@ -9,8 +9,6 @@ export const ENEMY_LOOK = {
   bob: 0.35,
   sway: 0.5,
   bank: 0.25,
-  /** Distance from the ship's center to each wing gun, in ship units (× scale for world). */
-  gunGap: 2.6,
 };
 
 const BOB_HZ = 0.5;
@@ -68,11 +66,6 @@ export class EnemyShip {
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
     this.root.scale.setScalar(scale);
     this.model.rotation.z = wave(BANK_HZ) * bank;
-  }
-
-  /** Wing-gun offset from the ship's center, world units. */
-  get gunOffset() {
-    return ENEMY_LOOK.gunGap * ENEMY_LOOK.scale;
   }
 
   dispose() {
