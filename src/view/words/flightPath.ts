@@ -3,7 +3,7 @@ import type { GameViewState, WordBulletState } from '../GameViewState';
 
 /**
  * Where Word bullets fly, in world units (camera at z = 7 looking at -z). Live-tunable from the
- * sandbox panel; "Word bullets in flight" decides the final path, curve and speeds.
+ * sandbox panel. Speed is the game's (Flight per second); arrival = the bullet simply vanishes.
  */
 export const WORD_FLIGHT = {
   /** Leaving the Enemy ship (Flight 0). */
@@ -39,11 +39,20 @@ export class WordBulletTracks {
     return LANES[this.lanes.get(id) ?? 0];
   }
 
-  /** World position of the word's center at its current Flight. */
-  position(b: WordBulletState, out = new THREE.Vector3()) {
+  /**
+   * World position of the word's center at its current Flight ("Word bullets in flight": steady).
+   * Screen position and on-screen size change linearly with Flight, so words move down and grow
+   * at a constant rate (a straight 3D line would stay small, then balloon at the end).
+   */
+  position(b: WordBulletState, camera: THREE.Camera, out = new THREE.Vector3()) {
     const f = Math.min(Math.max(b.flight, 0), 1);
     const { start, end, laneSpread } = WORD_FLIGHT;
-    const lane = LANES[this.lanes.get(b.id) ?? 0];
-    return out.set(lane * laneSpread * f, start.y + (end.y - start.y) * f, start.z + (end.z - start.z) * f);
+    const cam = camera.position;
+    const d0 = cam.z - start.z;
+    const d1 = cam.z - end.z;
+    const d = 1 / (1 / d0 + (1 / d1 - 1 / d0) * f); // 1/depth linear → projected size linear
+    const sy = (start.y - cam.y) / d0 + ((end.y - cam.y) / d1 - (start.y - cam.y) / d0) * f;
+    const sx = ((this.lane(b.id) * laneSpread) / d1) * f;
+    return out.set(cam.x + sx * d, cam.y + sy * d, cam.z - d);
   }
 }

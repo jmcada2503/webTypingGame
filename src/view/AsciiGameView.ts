@@ -3,13 +3,12 @@ import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
-import { WordBulletSprites } from './words/WordBulletSprites';
+import { WORD_LOOK, WORD_STYLES, WordBulletSprites, type WordStyle } from './words/WordBulletSprites';
 import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
 import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { FLIGHT_PROTO, FLIGHT_VARIANTS, type FlightKind } from './words/flightVariants';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -31,13 +30,18 @@ export class AsciiGameView implements GameView {
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
-  private readonly words = new WordBulletSprites();
+  private readonly words: WordBulletSprites;
 
   static async create(): Promise<AsciiGameView> {
-    return new AsciiGameView(await GpuAsciiRenderer.create());
+    const [ascii, words] = await Promise.all([GpuAsciiRenderer.create(), WordBulletSprites.create()]);
+    return new AsciiGameView(ascii, words);
   }
 
-  private constructor(private readonly ascii: GpuAsciiRenderer) {
+  private constructor(
+    private readonly ascii: GpuAsciiRenderer,
+    words: WordBulletSprites,
+  ) {
+    this.words = words;
     this.canvas = ascii.canvas;
     const { directional, ambient } = ASCII_STYLE.lighting;
     const sun = new THREE.DirectionalLight(0xffffff, directional.intensity);
@@ -47,7 +51,7 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
-    FLIGHT_PROTO.kind = mountPrototypeSwitcher(FLIGHT_VARIANTS) as FlightKind; // PROTOTYPE
+    WORD_LOOK.style = mountPrototypeSwitcher(WORD_STYLES) as WordStyle; // PROTOTYPE: word background
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -61,7 +65,7 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
-    this.words.update(state, this.camera, dt);
+    this.words.update(state, this.camera);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -69,7 +73,6 @@ export class AsciiGameView implements GameView {
   }
 
   trigger(event: ViewEvent) {
-    this.words.onEvent(event);
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
