@@ -7,13 +7,14 @@ import { WordBulletSprites } from './words/WordBulletSprites';
 import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { COCKPIT_VARIANTS, createCockpit, type Cockpit } from './cockpitPrototype/variants';
 
-const MAX_LIVES = 3;
 const EVENT_LABEL_SECONDS = 1.2;
 
 /**
  * Skeleton GameView. Placeholders until the visual tickets replace them:
- * - Cockpit readouts as one text row ("Cockpit design")
+ * - Cockpit: PROTOTYPE variants via ?variant= ("Cockpit design")
  * - ViewEvents shown as a label top center (juice tickets)
  */
 export class AsciiGameView implements GameView {
@@ -25,6 +26,7 @@ export class AsciiGameView implements GameView {
   private readonly enemy = new EnemyShip();
   private readonly stars = new StarDrift();
   private lastEvent: { label: string; age: number } | null = null;
+  private readonly cockpit: Cockpit;
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
   private readonly words = new WordBulletSprites();
 
@@ -41,6 +43,7 @@ export class AsciiGameView implements GameView {
 
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
+    this.cockpit = createCockpit(mountPrototypeSwitcher(COCKPIT_VARIANTS), this.scene, this.camera);
   }
 
   render(state: GameViewState, dt: number) {
@@ -54,21 +57,10 @@ export class AsciiGameView implements GameView {
     const text = this.ascii.textGrid;
     text.clear();
     this.words.update(state);
-    this.drawCockpit(state);
-    if (this.lastEvent) text.write(Math.floor((text.cols - this.lastEvent.label.length) / 2), text.rows - 6, this.lastEvent.label, 'dim');
+    this.cockpit.update({ state, dt, text });
+    if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
     this.ascii.render(this.scene, this.camera, { scene: this.words.scene, camera: this.camera });
-  }
-
-  private drawCockpit(state: GameViewState) {
-    const text = this.ascii.textGrid;
-    const row = text.rows - 3;
-    text.fill(0, row - 1, text.cols, 3, ' ');
-    text.write(2, row, 'LIVES ', 'dim');
-    for (let i = 0; i < MAX_LIVES; i++) text.write(8 + i, row, '♥', i < state.lives ? 'red' : 'dim');
-    const typed = `> ${state.typedWord}_`;
-    text.write(Math.floor(text.cols / 2 - [...typed].length / 2), row, typed, 'fg');
-    text.write(text.cols - [...state.attackWord].length - 2, row, state.attackWord, 'red');
   }
 
   trigger(event: ViewEvent) {
@@ -88,6 +80,7 @@ export class AsciiGameView implements GameView {
 
   dispose() {
     this.words.dispose();
+    this.cockpit.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();
