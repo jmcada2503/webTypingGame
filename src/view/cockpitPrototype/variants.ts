@@ -124,7 +124,7 @@ function fittedTextPlate(maxW: number, maxH: number) {
   const map = new THREE.CanvasTexture(canvas);
   map.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false }));
-  let painted = '';
+  let painted: string | null = null;
   return {
     mesh,
     set(str: string, color: string) {
@@ -363,18 +363,18 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const metal = gray(0.75, false);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.6, 12), metal);
   column.position.set(0, -0.78, -1.35);
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.68, 12), metal);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 12), metal);
   bar.rotation.z = Math.PI / 2;
   bar.position.set(0, -0.48, -1.35);
   root.add(column, bar);
-  for (const x of [-0.3, 0.3]) {
+  for (const x of [-0.36, 0.36]) {
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
     grip.position.set(x, -0.4, -1.35);
     root.add(grip);
   }
-  const yokeScreenBezel = box(0.5, 0.12, 0.03, gray(0.45));
+  const yokeScreenBezel = box(0.56, 0.12, 0.03, gray(0.45));
   yokeScreenBezel.position.set(0, -0.4, -1.37);
-  const yokeScreen = screen(0.44, 0.08);
+  const yokeScreen = screen(0.5, 0.08);
   yokeScreen.position.set(0, -0.4, -1.35);
   root.add(yokeScreenBezel, yokeScreen);
 
@@ -386,13 +386,12 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const overlay = new THREE.Group();
   const labelAnchors: { panel: THREE.Object3D; label: THREE.Mesh }[] = [];
   // Attack word: real-font plate on the attack screen, in the panel's perspective, fitted to it.
-  const attackPlate = fittedTextPlate(0.36, 0.075);
+  const attackPlate = fittedTextPlate(0.4, 0.075);
   for (const side of [-1, 1]) {
     const c = new THREE.Group();
-    // Angled to wrap around the pilot: the inner edge recedes, so text on it visibly shrinks.
-    c.position.set(side * 0.68, -0.5, -1.65);
-    c.rotation.set(-0.6, -side * 0.7, 0, 'YXZ');
-    const slab = box(0.56, 0.42, 0.06, gray(0.28));
+    c.position.set(side * 0.8, -0.5, -1.6);
+    c.rotation.set(-0.7, -side * 0.4, 0);
+    const slab = box(0.62, 0.42, 0.06, gray(0.28));
     c.add(slab);
     // Label on the panel's top edge, in the panel's plane (tilts with it).
     const label = labelPlate(side < 0 ? 'LIVES' : 'ATTACK', 0.05);
@@ -404,7 +403,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     labelAnchors.push({ panel: c, label: anchor as unknown as THREE.Mesh });
     if (side < 0) {
       for (let i = 0; i < MAX_LIVES; i++) {
-        const x = -0.12 + i * 0.12;
+        const x = -0.1 + i * 0.13;
         // Black socket so an unlit lamp still reads against the panel.
         const socket = new THREE.Mesh(new THREE.CircleGeometry(0.062, 24), black());
         socket.position.set(x, 0.05, 0.032);
@@ -414,9 +413,9 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         c.add(socket, lamp);
       }
     } else {
-      const bezel = box(0.46, 0.2, 0.03, gray(0.7));
+      const bezel = box(0.5, 0.2, 0.03, gray(0.7));
       bezel.position.set(0, 0.05, 0.05);
-      const attackScreen = screen(0.4, 0.14);
+      const attackScreen = screen(0.44, 0.14);
       attackScreen.position.set(0, 0.05, 0.07);
       c.add(bezel, attackScreen);
       attackPlate.mesh.position.set(0, 0.05, 0.075);
@@ -425,7 +424,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     // Switch row.
     for (let i = 0; i < 5; i++) {
       const sw = box(0.04, 0.07, 0.04, gray(0.85));
-      sw.position.set(-0.18 + i * 0.09, -0.13, 0.06);
+      sw.position.set(-0.2 + i * 0.1, -0.13, 0.06);
       c.add(sw);
     }
     consoles.add(c);
