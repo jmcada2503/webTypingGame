@@ -7,7 +7,7 @@ const FORM_FIELD = 'input, textarea, select, [contenteditable]';
 /**
  * TypingInput backed by a hidden, always-focused text field. The browser composes accents
  * there (dead keys: ´ + a → á, ¨ + u → ü, Option+n → ñ), which raw keydown events can't do
- * on a page with no focused field. Space submits; non-letters are dropped; text is lowercased.
+ * on a page with no focused field. Space or Enter submits; non-letters are dropped; text is lowercased.
  * Leaves focus alone while another form field (e.g. the sandbox panel) is being edited.
  */
 export class KeyboardTypingInput implements TypingInput {
@@ -105,7 +105,7 @@ export class KeyboardTypingInput implements TypingInput {
   }
 
   private readonly onFieldKey = (e: KeyboardEvent) => {
-    if (e.key === ' ' && !e.isComposing && !this.composing) {
+    if ((e.key === ' ' || e.key === 'Enter') && !e.isComposing && !this.composing) {
       e.preventDefault();
       this.submit();
     }
