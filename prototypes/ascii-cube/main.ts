@@ -354,6 +354,19 @@ scn.add(S, 'rotSpeed', 0, 3, 0.01);
 scn.add(S, 'hud').onChange(syncUniforms);
 scn.add(S, 'view', ['ascii', 'raw color', 'normals', 'edges']);
 (window as any).S = S; (window as any).syncUniforms = syncUniforms;
+const toggleFullscreen = () => {
+  const d = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
+  const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  if (document.fullscreenElement || d.webkitFullscreenElement) (document.exitFullscreen?.() ?? d.webkitExitFullscreen?.());
+  else (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
+};
+gui.add({ fullscreen: toggleFullscreen }, 'fullscreen').name('⛶ fullscreen (F)');
+addEventListener('keydown', (e) => {
+  if ((e.target as HTMLElement).closest('input,textarea,select')) return;
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+});
+document.addEventListener('fullscreenchange', onRebuild);
+document.addEventListener('webkitfullscreenchange', onRebuild);
 gui.add({ copy: () => { const j = JSON.stringify(S, null, 2); console.log(j); void navigator.clipboard.writeText(j); } }, 'copy').name('📋 copy settings JSON');
 
 // ---------- loop ----------
