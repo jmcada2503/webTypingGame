@@ -10,6 +10,7 @@ import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
+import { HIT_PROTO } from '../view/juice/hitPrototype';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -24,7 +25,7 @@ const gui = new GUI({ title: 'Sandbox' });
 const live = { typed: '', bullets: 0, shots: 0, status: '' };
 
 const snap = gui.addFolder('Snapshot');
-snap.add(session, 'lives', 0, 3, 1).name('Lives');
+snap.add(session, 'lives', 0, 3, 1).name('Lives').listen();
 snap.add(session, 'attackWord').name('Attack word').listen();
 snap.add(live, 'typed').name('Typed word').disable().listen();
 snap.add(session, 'lastSubmitted').name('last submitted').disable().listen();
@@ -62,11 +63,22 @@ dx.add(DESTROY_LOOK, 'shardSpin', 0, 30, 0.5).name('shard spin');
 dx.add(DESTROY_LOOK, 'burstSeconds', 0.15, 1.5, 0.05).name('ring time (s)');
 dx.add(DESTROY_LOOK, 'burstSize', 0.5, 6, 0.1).name('ring size');
 
+// PROTOTYPE knobs ("Juice: Hit taken")
+const hx = gui.addFolder('Hit effect (prototype)');
+hx.add(HIT_PROTO, 'kind', ['A', 'B', 'C']).name('style').listen();
+hx.add(HIT_PROTO, 'boomSeconds', 0.15, 2, 0.05).name('explosion time (s)');
+hx.add(HIT_PROTO, 'boomSize', 0.2, 3, 0.05).name('explosion size');
+hx.add(HIT_PROTO, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
+hx.add(HIT_PROTO, 'shake', 0, 0.3, 0.005).name('shake strength');
+hx.add(HIT_PROTO, 'roll', 0, 0.2, 0.005).name('roll');
+
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
 ev.add({ destroy: () => session.destroyOldest() }, 'destroy').name('destroy oldest');
 ev.add({ destroyNew: () => session.destroyNewest() }, 'destroyNew').name('destroy newest');
 ev.add({ arrive: () => session.arriveOldest() }, 'arrive').name('arrive oldest');
+ev.add(session, 'arrivalCostsLife').name('arrival costs a life');
+ev.add({ refill: () => session.refillLives() }, 'refill').name('refill Lives');
 ev.add({ lifeLost: () => session.emit({ type: 'lifeLost' }) }, 'lifeLost').name('lifeLost');
 
 const sh = gui.addFolder('Shots (Radar)');

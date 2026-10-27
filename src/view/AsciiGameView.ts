@@ -9,6 +9,8 @@ import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { HIT_PROTO, HIT_VARIANTS, HitFx, type HitKind } from './juice/hitPrototype';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -29,6 +31,8 @@ export class AsciiGameView implements GameView {
   private readonly cockpit: Cockpit;
   /** Destroyed Word bullets break into flying letters + a green grid ring. */
   private readonly destroyFx: WordDestroyFx;
+  /** PROTOTYPE ("Juice: Hit taken"): red explosion at impact + camera shake. */
+  private readonly hitFx: HitFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -50,6 +54,8 @@ export class AsciiGameView implements GameView {
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
     this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
+    this.hitFx = new HitFx(this.scene, this.camera);
+    HIT_PROTO.kind = mountPrototypeSwitcher(HIT_VARIANTS) as HitKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -63,7 +69,10 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
+    // Place Word bullets with the camera at rest, then shake: words shake with the world.
+    this.hitFx.resetCamera();
     this.words.update(state, this.camera);
+    this.hitFx.update(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
@@ -76,6 +85,12 @@ export class AsciiGameView implements GameView {
       const snap = this.words.take(event.id);
       if (snap) this.destroyFx.burst(snap);
     }
+    if (event.type === 'wordBulletArrived') {
+      // The word vanishes; a red explosion goes off where it hit.
+      const snap = this.words.take(event.id);
+      if (snap) this.hitFx.explode(snap.center);
+    }
+    if (event.type === 'lifeLost') this.hitFx.shake();
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
@@ -94,6 +109,7 @@ export class AsciiGameView implements GameView {
     this.words.dispose();
     this.cockpit.dispose();
     this.destroyFx.dispose();
+    this.hitFx.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();
