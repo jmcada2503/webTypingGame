@@ -19,9 +19,9 @@ export const ENEMY_PROTO = {
   starSpeed: 6,
 };
 
-export type ShipKind = 'saucer' | 'dart' | 'station' | 'crystal' | 'delta' | 'arrow';
+export type ShipKind = 'saucer' | 'dart' | 'station' | 'crystal' | 'delta' | 'arrow' | 'gunship' | 'bomber' | 'dreadnought';
 export type BackdropKind = 'none' | 'stars' | 'drift' | 'planet';
-export const SHIPS: ShipKind[] = ['saucer', 'dart', 'station', 'crystal', 'delta', 'arrow'];
+export const SHIPS: ShipKind[] = ['dart', 'gunship', 'bomber', 'dreadnought', 'delta', 'arrow', 'saucer', 'station', 'crystal'];
 export const BACKDROPS: BackdropKind[] = ['none', 'stars', 'drift', 'planet'];
 
 export const ENEMY_VARIANTS = [
@@ -31,14 +31,20 @@ export const ENEMY_VARIANTS = [
   { key: 'D', name: 'Crystal eye + empty space', ship: 'crystal', backdrop: 'none' },
   { key: 'E', name: 'Flat delta arrowhead + stars flying past', ship: 'delta', backdrop: 'drift' },
   { key: 'F', name: '3D triangular arrow + stars flying past', ship: 'arrow', backdrop: 'drift' },
+  { key: 'G', name: 'Gunship: armored hull, wing cannons', ship: 'gunship', backdrop: 'drift' },
+  { key: 'H', name: 'Heavy bomber: wide wing, 4 engines', ship: 'bomber', backdrop: 'drift' },
+  { key: 'I', name: 'Dreadnought: stepped battleship, turrets', ship: 'dreadnought', backdrop: 'drift' },
 ] as const;
 
 const lit = (flat = false) => new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: flat });
 
 // ---------------------------------------------------------------- ships
 
-/** `size` evens out on-screen size between designs (multiplied by the panel's scale). */
-type Ship = { root: THREE.Object3D; size: number; animate(t: number, dt: number): void };
+/**
+ * `size` evens out on-screen size between designs (multiplied by the panel's scale).
+ * `muzzleX`: where the wing guns sit (local x, ±); Word bullets alternate between them.
+ */
+type Ship = { root: THREE.Object3D; size: number; muzzleX: number; animate(t: number, dt: number): void };
 
 function saucer(): Ship {
   const root = new THREE.Group();
@@ -60,6 +66,7 @@ function saucer(): Ship {
   return {
     root,
     size: 1.35,
+    muzzleX: 2.8,
     animate: (_t, dt) => {
       pods.rotation.y += dt * 0.8 * ENEMY_PROTO.spin;
       ring.rotation.z += dt * 0.3 * ENEMY_PROTO.spin;
@@ -94,6 +101,7 @@ function dart(): Ship {
   return {
     root,
     size: 1.5,
+    muzzleX: 2.6,
     animate: (t) => {
       root.rotation.z = Math.sin(t * 0.7) * 0.25 * ENEMY_PROTO.spin; // banking
     },
@@ -125,6 +133,7 @@ function station(): Ship {
   return {
     root,
     size: 0.9,
+    muzzleX: 2.8,
     animate: (_t, dt) => {
       wheel.rotation.z += dt * 0.35 * ENEMY_PROTO.spin;
     },
@@ -146,6 +155,7 @@ function crystal(): Ship {
   return {
     root,
     size: 1.3,
+    muzzleX: 0,
     animate: (_t, dt) => {
       eye.rotation.y += dt * 0.4 * ENEMY_PROTO.spin;
       eye.rotation.x += dt * 0.15 * ENEMY_PROTO.spin;
@@ -188,6 +198,7 @@ function delta(): Ship {
   return {
     root,
     size: 1.15,
+    muzzleX: 2.6,
     animate: (t) => {
       root.rotation.y = Math.sin(t * 0.6) * 0.3 * ENEMY_PROTO.spin; // banking
     },
@@ -221,13 +232,158 @@ function arrow(): Ship {
   return {
     root,
     size: 1.2,
+    muzzleX: 1.5,
     animate: (_t, dt) => {
       root.rotation.z += dt * 0.5 * ENEMY_PROTO.spin; // slow barrel roll
     },
   };
 }
 
-const SHIP_BUILDERS: Record<ShipKind, () => Ship> = { saucer, dart, station, crystal, delta, arrow };
+const box = (w: number, h: number, d: number) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lit(true));
+/** Gun barrel along z (pointing at the player). */
+const barrel = (r: number, len: number) => {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), lit(true));
+  m.rotation.x = Math.PI / 2;
+  return m;
+};
+
+/** Heavy fighter: armored box hull + wedge prow, thick stub wings with long cannons at the tips. */
+function gunship(): Ship {
+  const root = new THREE.Group();
+  const hull = box(1.7, 1, 4.6);
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2, 4), lit(true));
+  prow.rotation.set(Math.PI / 2, Math.PI / 4, 0);
+  prow.position.z = 3.3;
+  prow.scale.set(1, 1, 0.6);
+  const bridge = box(1, 0.6, 1.4);
+  bridge.position.set(0, 0.75, -0.9);
+  const wings = box(6.4, 0.3, 1.8);
+  wings.position.set(0, -0.15, -0.4);
+  const guns = new THREE.Group();
+  for (const x of [-3, 3]) {
+    const pod = box(0.6, 0.6, 2.2);
+    pod.position.set(x, -0.15, 0);
+    const b = barrel(0.14, 2.6);
+    b.position.set(x, -0.15, 2.2);
+    guns.add(pod, b);
+  }
+  const engines = new THREE.Group();
+  for (const x of [-0.6, 0.6]) {
+    const e = barrel(0.45, 1.2);
+    e.position.set(x, 0, -2.8);
+    engines.add(e);
+  }
+  root.add(hull, prow, bridge, wings, guns, engines);
+  root.rotation.x = 0.5;
+  return {
+    root,
+    size: 1.2,
+    muzzleX: 3,
+    animate: (t) => {
+      root.rotation.z = Math.sin(t * 0.6) * 0.18 * ENEMY_PROTO.spin;
+    },
+  };
+}
+
+/** Wide swept flying wing, four engine nacelles, twin tail fins, gun turrets under the wing. */
+function bomber(): Ship {
+  const root = new THREE.Group();
+  const wingShape = new THREE.Shape([
+    new THREE.Vector2(0, 2.4),
+    new THREE.Vector2(5, -1),
+    new THREE.Vector2(4.6, -1.8),
+    new THREE.Vector2(1.4, -0.6),
+    new THREE.Vector2(0, -1.4),
+    new THREE.Vector2(-1.4, -0.6),
+    new THREE.Vector2(-4.6, -1.8),
+    new THREE.Vector2(-5, -1),
+  ]);
+  const wing = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(wingShape, { depth: 0.4, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 1 }),
+    lit(true),
+  );
+  wing.rotation.x = -Math.PI / 2; // lie flat, nose (+y of the shape) toward the player
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 8), lit(true));
+  canopy.scale.set(1, 0.6, 1.8);
+  canopy.position.set(0, 0.4, 0.4);
+  const nacelles = new THREE.Group();
+  for (const x of [-3, -1.6, 1.6, 3]) {
+    const n = barrel(0.38, 2);
+    n.position.set(x, -0.35, Math.abs(x) > 2 ? -0.6 : 0.1);
+    nacelles.add(n);
+  }
+  const fins = new THREE.Group();
+  for (const x of [-1.2, 1.2]) {
+    const f = box(0.15, 1.3, 1.1);
+    f.position.set(x, 0.75, -1);
+    f.rotation.z = x > 0 ? -0.25 : 0.25;
+    fins.add(f);
+  }
+  const turrets = new THREE.Group();
+  for (const x of [-2.3, 2.3]) {
+    const b = barrel(0.1, 1.6);
+    b.position.set(x, -0.4, 1.1);
+    turrets.add(b);
+  }
+  root.add(wing, canopy, nacelles, fins, turrets);
+  root.rotation.x = 0.55;
+  return {
+    root,
+    size: 1.05,
+    muzzleX: 2.3,
+    animate: (t) => {
+      root.rotation.z = Math.sin(t * 0.45) * 0.12 * ENEMY_PROTO.spin;
+    },
+  };
+}
+
+/** Battleship: stepped armored decks, pointed prow, side sponsons with twin-barrel turrets. */
+function dreadnought(): Ship {
+  const root = new THREE.Group();
+  const deck1 = box(3, 0.9, 6);
+  const deck2 = box(2, 0.8, 4);
+  deck2.position.set(0, 0.8, -0.6);
+  const tower = box(1, 1.1, 1.4);
+  tower.position.set(0, 1.7, -1.2);
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.6, 4), lit(true));
+  prow.rotation.set(Math.PI / 2, Math.PI / 4, 0);
+  prow.scale.set(1, 1, 0.45);
+  prow.position.z = 4.2;
+  const sponsons = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const sp = box(1.4, 0.6, 3.2);
+    sp.position.set(side * 2.2, -0.1, 0.4);
+    sponsons.add(sp);
+    for (const z of [1.2, -0.4]) {
+      const turret = box(0.8, 0.45, 0.8);
+      turret.position.set(side * 2.2, 0.4, z);
+      const b1 = barrel(0.08, 1.4);
+      b1.position.set(side * 2.2 - 0.15, 0.45, z + 0.9);
+      const b2 = barrel(0.08, 1.4);
+      b2.position.set(side * 2.2 + 0.15, 0.45, z + 0.9);
+      sponsons.add(turret, b1, b2);
+    }
+  }
+  const engines = new THREE.Group();
+  for (const x of [-0.9, 0, 0.9]) {
+    const e = barrel(0.4, 1);
+    e.position.set(x, 0, -3.4);
+    engines.add(e);
+  }
+  root.add(deck1, deck2, tower, prow, sponsons, engines);
+  root.rotation.x = 0.5;
+  return {
+    root,
+    size: 1.05,
+    muzzleX: 2.2,
+    animate: (t) => {
+      root.rotation.z = Math.sin(t * 0.35) * 0.08 * ENEMY_PROTO.spin;
+      root.rotation.y = Math.sin(t * 0.25) * 0.12 * ENEMY_PROTO.spin;
+    },
+  };
+}
+
+const SHIP_BUILDERS: Record<ShipKind, () => Ship> = { saucer, dart, station, crystal, delta, arrow, gunship, bomber, dreadnought };
 
 // ---------------------------------------------------------------- backdrops
 
@@ -365,8 +521,8 @@ export class EnemyAndBackdrop {
     }
   }
 
-  /** Where Word bullets leave from: the ship's center right now. */
-  get muzzle() {
-    return this.holder.position;
+  /** Wing-gun offset in world units (±x from the ship's center). */
+  get muzzleX() {
+    return this.ship ? this.ship.muzzleX * this.ship.size * ENEMY_PROTO.scale : 0;
   }
 }
