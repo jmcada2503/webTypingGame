@@ -34,6 +34,11 @@ export class WordBulletTracks {
     }
   }
 
+  /** Lane value (-2..2, center 0) of a tracked bullet. */
+  lane(id: string) {
+    return LANES[this.lanes.get(id) ?? 0];
+  }
+
   /** World position of the word's center at its current Flight. */
   position(b: WordBulletState, out = new THREE.Vector3()) {
     const f = Math.min(Math.max(b.flight, 0), 1);

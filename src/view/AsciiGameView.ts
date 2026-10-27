@@ -8,6 +8,8 @@ import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { FLIGHT_PROTO, FLIGHT_VARIANTS, type FlightKind } from './words/flightVariants';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -45,6 +47,7 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
+    FLIGHT_PROTO.kind = mountPrototypeSwitcher(FLIGHT_VARIANTS) as FlightKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -58,7 +61,7 @@ export class AsciiGameView implements GameView {
 
     const text = this.ascii.textGrid;
     text.clear();
-    this.words.update(state);
+    this.words.update(state, this.camera, dt);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -66,6 +69,7 @@ export class AsciiGameView implements GameView {
   }
 
   trigger(event: ViewEvent) {
+    this.words.onEvent(event);
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
