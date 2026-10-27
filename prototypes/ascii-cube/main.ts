@@ -354,16 +354,47 @@ scn.add(S, 'rotSpeed', 0, 3, 0.01);
 scn.add(S, 'hud').onChange(syncUniforms);
 scn.add(S, 'view', ['ascii', 'raw color', 'normals', 'edges']);
 (window as any).S = S; (window as any).syncUniforms = syncUniforms;
-const toggleFullscreen = () => {
-  const d = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
-  const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
-  if (document.fullscreenElement || d.webkitFullscreenElement) (document.exitFullscreen?.() ?? d.webkitExitFullscreen?.());
-  else (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
+// Fullscreen = Fullscreen API on the page: hides the browser's URL bar, tabs and toolbars (Esc exits).
+// Reports why on screen if the browser refuses.
+const toast = document.createElement('div');
+toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:8px 14px;border-radius:8px;' +
+  'background:#ffd400;color:#000;font:600 13px system-ui;z-index:10000;display:none;max-width:80vw';
+document.body.append(toast);
+const say = (msg: string) => { toast.textContent = msg; toast.style.display = 'block'; clearTimeout((say as any).t); (say as any).t = setTimeout(() => (toast.style.display = 'none'), 4000); };
+type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> | void; webkitFullscreenEnabled?: boolean };
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+const toggleFullscreen = async () => {
+  const d = document as FsDoc;
+  const el = document.documentElement as FsEl;
+  try {
+    if (document.fullscreenElement || d.webkitFullscreenElement) {
+      await (document.exitFullscreen ? document.exitFullscreen() : d.webkitExitFullscreen?.());
+      return;
+    }
+    if (!(document.fullscreenEnabled || d.webkitFullscreenEnabled)) {
+      say('Fullscreen blocked: this view does not allow it (embedded browser / iframe?). Open the URL directly in Chrome or Safari.');
+      return;
+    }
+    if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    else say('Fullscreen API not available in this browser.');
+  } catch (err) {
+    say(`Fullscreen refused: ${(err as Error)?.message ?? err}`);
+    console.error(err);
+  }
 };
-gui.add({ fullscreen: toggleFullscreen }, 'fullscreen').name('⛶ fullscreen (F)');
+const bigBtn = document.createElement('button');
+bigBtn.textContent = '⛶';
+bigBtn.title = 'Fullscreen (F)';
+bigBtn.style.cssText = 'position:fixed;left:16px;bottom:16px;width:44px;height:44px;border-radius:50%;border:0;background:#ffd400;' +
+  'color:#000;font-size:22px;cursor:pointer;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.5)';
+bigBtn.onclick = () => void toggleFullscreen();
+document.body.append(bigBtn);
+document.addEventListener('fullscreenchange', () => { bigBtn.style.display = document.fullscreenElement ? 'none' : 'block'; });
+gui.add({ fullscreen: () => void toggleFullscreen() }, 'fullscreen').name('⛶ fullscreen (F)');
 addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).closest('input,textarea,select')) return;
-  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  if (e.key === 'f' || e.key === 'F') void toggleFullscreen();
 });
 document.addEventListener('fullscreenchange', onRebuild);
 document.addEventListener('webkitfullscreenchange', onRebuild);
