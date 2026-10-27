@@ -8,8 +8,7 @@ import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { DESTROY_PROTO, DESTROY_VARIANTS, DestroyFx, type DestroyKind } from './juice/destroyPrototype';
+import { WordDestroyFx } from './juice/WordDestroyFx';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -28,8 +27,8 @@ export class AsciiGameView implements GameView {
   private lastEvent: { label: string; age: number } | null = null;
   /** The player's Cockpit: yoke, Lives lamps, Radar ("Cockpit design"). */
   private readonly cockpit: Cockpit;
-  /** PROTOTYPE: Word bullet destroyed effect ("Juice: Word bullet destroyed"). */
-  private readonly destroyFx: DestroyFx;
+  /** Destroyed Word bullets break into flying letters + a green grid ring. */
+  private readonly destroyFx: WordDestroyFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -50,8 +49,7 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
-    this.destroyFx = new DestroyFx(this.overlay, this.scene, this.camera);
-    DESTROY_PROTO.kind = mountPrototypeSwitcher(DESTROY_VARIANTS) as DestroyKind; // PROTOTYPE
+    this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
