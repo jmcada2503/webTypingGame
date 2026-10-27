@@ -19,9 +19,9 @@ export const ENEMY_PROTO = {
   starSpeed: 6,
 };
 
-export type ShipKind = 'saucer' | 'dart' | 'station' | 'crystal';
+export type ShipKind = 'saucer' | 'dart' | 'station' | 'crystal' | 'delta' | 'arrow';
 export type BackdropKind = 'none' | 'stars' | 'drift' | 'planet';
-export const SHIPS: ShipKind[] = ['saucer', 'dart', 'station', 'crystal'];
+export const SHIPS: ShipKind[] = ['saucer', 'dart', 'station', 'crystal', 'delta', 'arrow'];
 export const BACKDROPS: BackdropKind[] = ['none', 'stars', 'drift', 'planet'];
 
 export const ENEMY_VARIANTS = [
@@ -29,6 +29,8 @@ export const ENEMY_VARIANTS = [
   { key: 'B', name: 'Delta fighter + stars flying past', ship: 'dart', backdrop: 'drift' },
   { key: 'C', name: 'Ring station + planet', ship: 'station', backdrop: 'planet' },
   { key: 'D', name: 'Crystal eye + empty space', ship: 'crystal', backdrop: 'none' },
+  { key: 'E', name: 'Flat delta arrowhead + stars flying past', ship: 'delta', backdrop: 'drift' },
+  { key: 'F', name: '3D triangular arrow + stars flying past', ship: 'arrow', backdrop: 'drift' },
 ] as const;
 
 const lit = (flat = false) => new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: flat });
@@ -153,7 +155,79 @@ function crystal(): Ship {
   };
 }
 
-const SHIP_BUILDERS: Record<ShipKind, () => Ship> = { saucer, dart, station, crystal };
+/** Flat arrowhead seen from above, point aimed down at the player; faceted ridge + rear engines. */
+function delta(): Ship {
+  const root = new THREE.Group();
+  // Triangle in the XY plane, apex down (toward the Cockpit), notched tail.
+  const outline = new THREE.Shape([
+    new THREE.Vector2(0, -3.2),
+    new THREE.Vector2(3.4, 1.9),
+    new THREE.Vector2(1.2, 1.2),
+    new THREE.Vector2(0, 1.9),
+    new THREE.Vector2(-1.2, 1.2),
+    new THREE.Vector2(-3.4, 1.9),
+  ]);
+  const hull = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(outline, { depth: 0.35, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 1 }),
+    lit(true),
+  );
+  // Raised ridge along the centre line (a stretched pyramid).
+  const ridge = new THREE.Mesh(new THREE.ConeGeometry(0.75, 4.4, 3), lit(true));
+  ridge.rotation.z = Math.PI; // apex down, matching the hull
+  ridge.rotation.y = Math.PI / 6;
+  ridge.position.set(0, -0.4, 0.55);
+  ridge.scale.z = 0.6;
+  const engines = new THREE.Group();
+  for (const x of [-1.9, 1.9]) {
+    const e = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.9, 8), lit(true));
+    e.position.set(x, 1.7, 0.3);
+    engines.add(e);
+  }
+  root.add(hull, ridge, engines);
+  root.rotation.x = -0.55; // tail away from the player, so we see its back in perspective
+  return {
+    root,
+    size: 1.15,
+    animate: (t) => {
+      root.rotation.y = Math.sin(t * 0.6) * 0.3 * ENEMY_PROTO.spin; // banking
+    },
+  };
+}
+
+/** Triangular pyramid whose apex points straight at the player, three fins on the edges. */
+function arrow(): Ship {
+  const root = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(2.2, 5, 3), lit(true));
+  body.rotation.x = Math.PI / 2; // apex toward +z (the player)
+  const fins = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const fin = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2, -1.4), new THREE.Vector2(2, -2.4), new THREE.Vector2(0, -1.6)]), {
+        depth: 0.12,
+        bevelEnabled: false,
+      }),
+      lit(true),
+    );
+    fin.rotation.y = -Math.PI / 2; // fin plane along the body axis
+    fin.position.z = 0.6;
+    const arm = new THREE.Group();
+    arm.rotation.z = (i / 3) * Math.PI * 2 + Math.PI / 2; // on the pyramid's edges
+    arm.add(fin);
+    fin.position.x = 1.3;
+    fins.add(arm);
+  }
+  root.add(body, fins);
+  root.rotation.x = 0.35;
+  return {
+    root,
+    size: 1.2,
+    animate: (_t, dt) => {
+      root.rotation.z += dt * 0.5 * ENEMY_PROTO.spin; // slow barrel roll
+    },
+  };
+}
+
+const SHIP_BUILDERS: Record<ShipKind, () => Ship> = { saucer, dart, station, crystal, delta, arrow };
 
 // ---------------------------------------------------------------- backdrops
 
