@@ -6,7 +6,8 @@ import { AppShell } from '../app/AppShell';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { AsciiGameView } from '../view/AsciiGameView';
 import { WORD_FLIGHT } from '../view/words/flightPath';
-import { BACKDROPS, ENEMY_PROTO, SHIPS } from '../view/enemyPrototype/variants';
+import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
+import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
@@ -46,18 +47,15 @@ look.add(WORD_FLIGHT.end, 'y', -3, 3, 0.05).name('end y');
 look.add(WORD_FLIGHT.end, 'z', -5, 6, 0.1).name('end z');
 look.add(WORD_FLIGHT, 'laneSpread', 0, 3, 0.05).name('lane spread');
 
-// PROTOTYPE knobs ("Enemy ship and space backdrop")
-const en = gui.addFolder('Enemy ship + backdrop (prototype)');
-en.add(ENEMY_PROTO, 'ship', SHIPS);
-en.add(ENEMY_PROTO, 'backdrop', BACKDROPS);
-en.add(ENEMY_PROTO, 'scale', 0.3, 3, 0.05);
-en.add(ENEMY_PROTO.position, 'y', -2, 14, 0.1).name('position y');
-en.add(ENEMY_PROTO.position, 'z', -70, -5, 0.5).name('position z');
-en.add(ENEMY_PROTO, 'bob', 0, 2, 0.05);
-en.add(ENEMY_PROTO, 'sway', 0, 3, 0.05);
-en.add(ENEMY_PROTO, 'spin', 0, 4, 0.05);
-en.add(ENEMY_PROTO, 'starSpeed', 0, 40, 0.5).name('star speed (drift)');
-en.add(ENEMY_PROTO, 'fov', 20, 90, 1).name('camera fov');
+const en = gui.addFolder('Enemy ship + stars');
+en.add(ENEMY_LOOK, 'scale', 0.3, 3, 0.05);
+en.add(ENEMY_LOOK, 'gunGap', 0, 5, 0.05).name('gun gap (from center)');
+en.add(ENEMY_LOOK.position, 'y', -2, 14, 0.1).name('position y');
+en.add(ENEMY_LOOK.position, 'z', -70, -5, 0.5).name('position z');
+en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
+en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
+en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
+en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
