@@ -176,8 +176,11 @@ function slantedGridWord(text: TextGrid, panel: THREE.Object3D, camera: THREE.Ca
   const first = Math.round(a.col - letters.length / 2);
   letters.forEach((ch, i) => {
     const col = first + i;
-    const row = Math.round(a.row + slope * (col + 0.5 - a.col) - 0.5);
-    text.write(col, row, ch, color);
+    // Exact row where the slant passes this column; the remainder becomes a sub-row nudge so
+    // letters overlap rows and the slant reads smooth instead of stepping a whole row at a time.
+    const exact = a.row + slope * (col + 0.5 - a.col) - 0.5;
+    const row = Math.round(exact);
+    text.write(col, row, ch, color, exact - row);
   });
 }
 

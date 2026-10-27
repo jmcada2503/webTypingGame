@@ -23,7 +23,10 @@ const hexToVec3 = (hex: string) => {
   return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
-/** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot. */
+/**
+ * Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot,
+ * b = vertical nudge, 128 + offset × 256 (offset in rows, + = down).
+ */
 class DataTextGrid implements TextGrid {
   readonly cols = ASCII_STYLE.grid.cols;
   readonly rows = ASCII_STYLE.grid.rows;
@@ -35,17 +38,18 @@ class DataTextGrid implements TextGrid {
     this.texture.needsUpdate = true;
   }
 
-  private put(col: number, row: number, ch: string, color: PaletteColor) {
+  private put(col: number, row: number, ch: string, color: PaletteColor, yOffset = 0) {
     if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
     // Texture row 0 is the bottom of the screen; TextGrid row 0 is the top.
     const o = ((this.rows - 1 - row) * this.cols + col) * 4;
     this.data[o] = glyphIndex(ch) + 1;
     this.data[o + 1] = PALETTE[color];
+    this.data[o + 2] = Math.max(0, Math.min(255, 128 + Math.round(yOffset * 256)));
     this.texture.needsUpdate = true;
   }
 
-  write(col: number, row: number, text: string, color: PaletteColor = 'fg') {
-    [...text].forEach((ch, i) => this.put(col + i, row, ch, color));
+  write(col: number, row: number, text: string, color: PaletteColor = 'fg', yOffset = 0) {
+    [...text].forEach((ch, i) => this.put(col + i, row, ch, color, yOffset));
   }
 
   fill(col: number, row: number, width: number, height: number, char = ' ', color: PaletteColor = 'fg') {
@@ -159,9 +163,21 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         vec4 cell = texelFetch(tCells, c, 0);
         float glyph = cell.r * 255.0;
         int pal = int(cell.g * 255.0 + 0.5);
-        vec4 t = texelFetch(tText, c, 0);
-        if (t.r > 0.0) { glyph = t.r * 255.0 - 1.0; pal = int(t.g * 255.0 + 0.5); }
         ivec2 local = px - c * cellDev;
+        // Text wins over shading. A text cell may be nudged up/down (b channel), so it can cover
+        // this pixel from the cell above or below too: check all three.
+        for (int d = -1; d <= 1; d++) {
+          ivec2 k = c + ivec2(0, d);
+          if (k.y < 0 || k.y >= grid.y) continue;
+          vec4 t = texelFetch(tText, k, 0);
+          if (t.r == 0.0) continue;
+          int shift = int(floor((t.b * 255.0 - 128.0) / 256.0 * float(cellDev.y) + 0.5));
+          int ly = px.y - (k.y * cellDev.y - shift); // texture y grows upward, + offset = down
+          if (ly < 0 || ly >= cellDev.y) continue;
+          glyph = t.r * 255.0 - 1.0;
+          pal = int(t.g * 255.0 + 0.5);
+          local.y = ly;
+        }
         float a = texelFetch(tAtlas, ivec2(int(glyph + 0.5) * cellDev.x + local.x, local.y), 0).a;
         outColor = vec4(mix(bg, palette[pal], a), 1.0);
       }`,

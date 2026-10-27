@@ -10,7 +10,11 @@ export type PaletteColor = 'fg' | 'red' | 'green' | 'dim';
 export interface TextGrid {
   readonly cols: number;
   readonly rows: number;
-  write(col: number, row: number, text: string, color?: PaletteColor): void;
+  /**
+   * `yOffset` nudges the glyphs vertically by a fraction of a row (-0.5..0.5, + = down), so text can
+   * sit between rows (e.g. imitating a slanted panel). The nudged glyph still blanks what it covers.
+   */
+  write(col: number, row: number, text: string, color?: PaletteColor, yOffset?: number): void;
   /** Fill a rectangle with one character (' ' blanks the shading underneath). */
   fill(col: number, row: number, width: number, height: number, char?: string, color?: PaletteColor): void;
   clear(): void;
