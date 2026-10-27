@@ -9,9 +9,11 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import { mountPrototypeSwitcher } from '../shared/PrototypeSwitcher';
 
+// W×H = scene render resolution (reference). The grid = W/cellW × H/cellH; on screen, cells scale to fit the window.
 const W = 1280;
 const H = 720;
-const DPR = Math.min(2, Math.round(window.devicePixelRatio || 1));
+let DPR = window.devicePixelRatio || 1;
+let fit = { cellW: 10, cellH: 16, canvasW: W, canvasH: H };
 
 type Shape = 'cube' | 'sphere' | 'cube + sphere' | 'torus knot';
 type Settings = {
@@ -63,8 +65,7 @@ const qv = new URLSearchParams(location.search).get('view'); if (qv) S.view = qv
 
 // ---------- renderer + scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(DPR);
-renderer.setSize(W, H);
+renderer.setPixelRatio(1);
 document.body.prepend(renderer.domElement);
 const stats = new Stats();
 document.body.append(stats.dom);
@@ -214,9 +215,25 @@ const compositePass = pass(/* glsl */ `
 });
 
 const rawPass = pass(/* glsl */ `
-  precision highp float; uniform sampler2D tColor; uniform bool srgb; out vec4 outColor;
-  void main(){ vec3 c = texelFetch(tColor, ivec2(gl_FragCoord.xy) / ${DPR}, 0).rgb; outColor = vec4(srgb ? pow(c, vec3(1.0/2.2)) : c, 1.0); }`,
-  { tColor: { value: sceneRT.texture }, srgb: { value: true } });
+  precision highp float; uniform sampler2D tColor; uniform bool srgb; uniform vec2 sceneScale; out vec4 outColor;
+  void main(){ vec3 c = texelFetch(tColor, ivec2(gl_FragCoord.xy * sceneScale), 0).rgb; outColor = vec4(srgb ? pow(c, vec3(1.0/2.2)) : c, 1.0); }`,
+  { tColor: { value: sceneRT.texture }, srgb: { value: true }, sceneScale: { value: new THREE.Vector2(1, 1) } });
+
+// Largest integer device-px cell (keeping cellW:cellH) whose grid fits the window; letterboxed by CSS centering.
+function computeFit() {
+  DPR = window.devicePixelRatio || 1;
+  const cols = Math.floor(W / S.cellW), rows = Math.floor(H / S.cellH);
+  const k = Math.min((innerWidth * DPR) / (cols * S.cellW), (innerHeight * DPR) / (rows * S.cellH));
+  const cellW = Math.max(1, Math.floor(S.cellW * k)), cellH = Math.max(1, Math.floor(S.cellH * k));
+  fit = { cellW, cellH, canvasW: cellW * cols, canvasH: cellH * rows };
+  renderer.setSize(fit.canvasW, fit.canvasH, false);
+  renderer.domElement.style.width = `${fit.canvasW / DPR}px`;
+  renderer.domElement.style.height = `${fit.canvasH / DPR}px`;
+  rawPass.mat.uniforms.sceneScale.value.set(W / fit.canvasW, H / fit.canvasH);
+  // Integer cells can't keep 10:16 exactly; match the camera to the real canvas shape so geometry isn't squashed.
+  camera.aspect = fit.canvasW / fit.canvasH;
+  camera.updateProjectionMatrix();
+}
 
 // ---------- glyph atlas + overlay ----------
 const hex = (h: string) => {
@@ -227,14 +244,15 @@ const hex = (h: string) => {
 async function buildAtlas() {
   const base = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('') + 'ñÑáéíóúü♥';
   charset = Array.from(new Set([...base, ...S.ramp, '|', '-', '_', '/', '\\'])).join('');
-  const font = `${S.fontPx * DPR}px "${S.font}"`;
+  const fontDevPx = (S.fontPx * fit.cellH) / S.cellH;
+  const font = `${fontDevPx}px "${S.font}"`;
   await document.fonts.load(font, charset);
-  const sw = S.cellW * DPR, sh = S.cellH * DPR;
+  const sw = fit.cellW, sh = fit.cellH;
   const cv = document.createElement('canvas');
   cv.width = sw * charset.length; cv.height = sh;
   const ctx = cv.getContext('2d')!;
   ctx.font = font; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  [...charset].forEach((ch, i) => ctx.fillText(ch, i * sw + sw / 2, sh / 2 + DPR));
+  [...charset].forEach((ch, i) => ctx.fillText(ch, i * sw + sw / 2, sh / 2 + sh / 16));
   atlasTex?.dispose();
   atlasTex = new THREE.CanvasTexture(cv);
   atlasTex.minFilter = atlasTex.magFilter = THREE.NearestFilter;
@@ -266,11 +284,13 @@ function buildGrid() {
   put(mid, bottom, typed, 2); put(mid + typed.length, bottom, target.slice(typed.length), 3);
   const atk = 'ñandú';
   put(cols - atk.length - 2, bottom, atk, 1);
-  put(2, 1, `PROTOTYPE · ${cols}×${rows} cells · ${S.cellW}×${S.cellH}px · ${S.font} ${S.fontPx}px`, 3);
+  const fontDev = (S.fontPx * fit.cellH) / S.cellH;
+  put(2, 1, `PROTOTYPE · grid ${cols}×${rows} · window ${innerWidth}×${innerHeight} @${DPR}x · cell ${fit.cellW}×${fit.cellH} device px · ${S.font} ${fontDev.toFixed(1)}px`, 3);
   overlayTex.needsUpdate = true;
 }
 
 async function rebuild() {
+  computeFit();
   await buildAtlas();
   buildGrid();
   syncUniforms();
@@ -288,7 +308,7 @@ function syncUniforms() {
   cu.edgesOn.value = S.edges; cu.edgeThreshold.value = S.edgeThreshold;
   const pu = compositePass.mat.uniforms;
   pu.tCells.value = cellRT.texture; pu.tOverlay.value = overlayTex; pu.tAtlas.value = atlasTex;
-  pu.cellDev.value.set(S.cellW * DPR, S.cellH * DPR);
+  pu.cellDev.value.set(fit.cellW, fit.cellH);
   pu.grid.value.set(Math.floor(W / S.cellW), Math.floor(H / S.cellH));
   // 0 fg, 1 red, 2 green, 3 dim, 4..7 edge debug (| - \ /)
   const pal = [S.fg, S.red, S.green, S.dim, '#00e5ff', '#ffd400', '#ff00ff', '#7cff00'];
@@ -339,6 +359,8 @@ gui.add({ copy: () => { const j = JSON.stringify(S, null, 2); console.log(j); vo
 // ---------- loop ----------
 buildShape();
 await rebuild();
+let resizeTimer = 0;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = window.setTimeout(onRebuild, 100); });
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
