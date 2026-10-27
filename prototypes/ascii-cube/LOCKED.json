@@ -1,0 +1,9 @@
+{
+  "_note": "PROTOTYPE verdict for 'ASCII aesthetic: rotating cube'. Chosen by the user; edges rejected. flatShading: smooth by default, flat allowed per model.",
+  "canvas": [1280, 720], "cellW": 10, "cellH": 16, "grid": [128, 45],
+  "font": "IBM Plex Mono", "fontPx": 13, "ramp": " .,-~:;=!*#$@",
+  "exposure": 1, "gamma": 1, "edges": false,
+  "fg": "#ffffff", "bg": "#000000", "red": "#ff3b30", "green": "#34c759", "dim": "#5a5a5a",
+  "light": { "type": "directional", "position": [-1, 1.2, 1], "intensity": 4.23 }, "ambient": 0.25,
+  "material": "MeshLambertMaterial white", "flatShading": false
+}
