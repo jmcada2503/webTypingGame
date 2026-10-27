@@ -16,11 +16,6 @@ export const COCKPIT_VARIANTS = [
 
 export type CockpitCtx = { state: GameViewState; dt: number; text: TextGrid };
 
-/** Live-tunable from the sandbox panel. */
-export const COCKPIT_PROTO = {
-  /** 'grid': grid glyphs laid along the panel's on-screen slant; 'plate': real-font plate in perspective. */
-  attackWord: 'grid' as 'grid' | 'plate',
-};
 export interface Cockpit {
   update(ctx: CockpitCtx): void;
   /** Real-font, non-ASCII parts (panel labels), drawn in the overlay pass. */
@@ -120,42 +115,6 @@ function labelPlate(str: string, height: number) {
   return mesh;
 }
 
-/**
- * Real-font text on a flat plate that can be repainted; fits inside maxW × maxH (world units),
- * so long words (20 chars) shrink to fit instead of overflowing.
- */
-function fittedTextPlate(maxW: number, maxH: number) {
-  const em = 96;
-  const canvas = document.createElement('canvas');
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false }));
-  let painted: string | null = null;
-  return {
-    mesh,
-    set(str: string, color: string) {
-      if (str === painted) return;
-      painted = str;
-      const g = canvas.getContext('2d')!;
-      const font = `400 ${em}px "${ASCII_STYLE.font.family}"`;
-      g.font = font;
-      canvas.width = Math.max(1, Math.ceil(g.measureText(str || ' ').width));
-      canvas.height = Math.ceil(em * 1.15);
-      g.font = font;
-      g.fillStyle = color;
-      g.textBaseline = 'middle';
-      g.fillText(str, 0, canvas.height / 2);
-      map.dispose(); // canvas size changed: drop the GPU copy so it re-uploads at the new size
-      map.needsUpdate = true;
-      const aspect = canvas.width / canvas.height;
-      const h = Math.min(maxH, maxW / aspect);
-      mesh.scale.set(h * aspect, h, 1);
-    },
-  };
-}
-
-/** Letters that share one vertical position in a slanted grid word. */
-const SLANT_GROUP = 3;
 const slantA = new THREE.Vector3();
 const slantB = new THREE.Vector3();
 /** Grid position (fractional col, row) of a world point. */
@@ -166,26 +125,32 @@ function toGrid(v: THREE.Vector3, camera: THREE.Camera) {
 }
 
 /**
- * Grid glyphs that imitate a rotated panel: letters one column apart, centered on the panel's
- * center, each on the row the panel's horizontal axis passes through at that column (staircase).
+ * A row of grid cells that follows a rotated panel's horizontal axis on screen: from local x0 to x1
+ * at local y. `at(col)` gives the row the axis passes through at that column plus the sub-row nudge,
+ * so glyphs written there trace the panel's slant smoothly.
  */
-function slantedGridWord(text: TextGrid, panel: THREE.Object3D, camera: THREE.Camera, str: string, color: PaletteColor) {
+function panelTrack(panel: THREE.Object3D, camera: THREE.Camera, y: number, x0: number, x1: number) {
   panel.updateWorldMatrix(true, false);
-  const a = toGrid(panel.localToWorld(slantA.set(0, 0, 0)), camera);
-  const b = toGrid(panel.localToWorld(slantB.set(0.1, 0, 0)), camera);
-  const slope = (b.row - a.row) / (b.col - a.col); // rows per column along the panel's x axis
-  const letters = [...str];
-  const first = Math.round(a.col - letters.length / 2);
-  letters.forEach((ch, i) => {
-    const col = first + i;
-    // Letters move in groups of SLANT_GROUP: each group sits at the exact row where the slant
-    // passes its middle column. The remainder becomes a sub-row nudge, so groups overlap rows and
-    // the slant reads smooth instead of stepping a whole row at a time.
-    const groupStart = first + Math.floor(i / SLANT_GROUP) * SLANT_GROUP;
-    const groupMid = groupStart + SLANT_GROUP / 2;
-    const exact = a.row + slope * (groupMid - a.col) - 0.5;
-    const row = Math.round(exact);
-    text.write(col, row, ch, color, exact - row);
+  const a = toGrid(panel.localToWorld(slantA.set(x0, y, 0)), camera);
+  const b = toGrid(panel.localToWorld(slantB.set(x1, y, 0)), camera);
+  const slope = (b.row - a.row) / (b.col - a.col);
+  return {
+    c0: Math.round(a.col),
+    c1: Math.round(b.col) - 1,
+    at(col: number) {
+      const exact = a.row + slope * (col + 0.5 - a.col) - 0.5;
+      const row = Math.round(exact);
+      return { row, nudge: exact - row };
+    },
+  };
+}
+
+/** Lines of text centered (both axes) in a float rect, top to bottom. */
+function centerLines(text: TextGrid, rect: Rect, lines: { str: string; color: PaletteColor }[]) {
+  const top = Math.round((rect.r0 + rect.r1) / 2 - lines.length / 2);
+  lines.forEach((l, i) => {
+    const col = Math.round((rect.c0 + rect.c1) / 2 - [...l.str].length / 2);
+    text.write(col, top + i, l.str, l.color);
   });
 }
 
@@ -413,11 +378,14 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     grip.position.set(x, -0.4, -1.35);
     root.add(grip);
   }
-  const yokeScreenBezel = box(0.56, 0.12, 0.03, gray(0.45));
-  yokeScreenBezel.position.set(0, -0.4, -1.37);
+  // Two stacked screens on the yoke: Attack word (with its label) above, Typed word below.
+  const yokeScreenBezel = box(0.56, 0.24, 0.03, gray(0.45));
+  yokeScreenBezel.position.set(0, -0.35, -1.37);
+  const attackScreen = screen(0.5, 0.1);
+  attackScreen.position.set(0, -0.29, -1.35);
   const yokeScreen = screen(0.5, 0.08);
-  yokeScreen.position.set(0, -0.4, -1.35);
-  root.add(yokeScreenBezel, yokeScreen);
+  yokeScreen.position.set(0, -0.415, -1.35);
+  root.add(yokeScreenBezel, attackScreen, yokeScreen);
 
   const consoles = new THREE.Group();
   const lamps: THREE.Mesh[] = [];
@@ -426,9 +394,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const lampOff = gray(0.5, false);
   const overlay = new THREE.Group();
   const labelAnchors: { panel: THREE.Object3D; label: THREE.Mesh }[] = [];
-  // Attack word: real-font plate on the attack screen, in the panel's perspective, fitted to it.
-  const attackPlate = fittedTextPlate(0.4, 0.075);
-  let attackScreen!: THREE.Mesh;
+  let radarScreen!: THREE.Mesh;
   for (const side of [-1, 1]) {
     const c = new THREE.Group();
     c.position.set(side * 0.8, -0.5, -1.6);
@@ -436,7 +402,7 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     const slab = box(0.62, 0.42, 0.06, gray(0.28));
     c.add(slab);
     // Label on the panel's top edge, in the panel's plane (tilts with it).
-    const label = labelPlate(side < 0 ? 'LIVES' : 'ATTACK', 0.05);
+    const label = labelPlate(side < 0 ? 'LIVES' : 'RADAR', 0.05);
     label.position.set(0, 0.21 + 0.035, 0.035);
     const anchor = new THREE.Group();
     anchor.matrixAutoUpdate = false;
@@ -457,11 +423,9 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     } else {
       const bezel = box(0.5, 0.2, 0.03, gray(0.7));
       bezel.position.set(0, 0.05, 0.05);
-      attackScreen = screen(0.44, 0.14);
-      attackScreen.position.set(0, 0.05, 0.07);
-      c.add(bezel, attackScreen);
-      attackPlate.mesh.position.set(0, 0.05, 0.075);
-      anchor.add(attackPlate.mesh);
+      radarScreen = screen(0.44, 0.14);
+      radarScreen.position.set(0, 0.05, 0.07);
+      c.add(bezel, radarScreen);
     }
     // Switch row.
     for (let i = 0; i < 5; i++) {
@@ -488,9 +452,11 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         label.matrix.copy(panel.matrixWorld);
       }
       centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
-      attackPlate.mesh.visible = COCKPIT_PROTO.attackWord === 'plate';
-      if (attackPlate.mesh.visible) attackPlate.set(state.attackWord, ASCII_STYLE.palette.red);
-      else slantedGridWord(text, attackScreen, camera, state.attackWord, 'red');
+      centerLines(text, rectOfF(attackScreen, camera), [
+        { str: 'ATTACK', color: 'dim' },
+        { str: state.attackWord, color: 'red' },
+      ]);
+      drawRadar(text, radarScreen, camera, state);
     },
     overlay,
     dispose: () => {
@@ -506,4 +472,26 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
       lampOff.dispose();
     },
   };
+}
+
+/**
+ * Radar on a rotated panel: one track along the panel's slant. Left = just fired, right end =
+ * the Enemy ship `<@>`. Each Shot is its word's first letter (red) at its Flight; it vanishes
+ * when it hits or the opponent destroys it (it leaves the snapshot).
+ */
+function drawRadar(text: TextGrid, radarScreen: THREE.Object3D, camera: THREE.Camera, state: GameViewState) {
+  const track = panelTrack(radarScreen, camera, 0, -0.2, 0.2);
+  const enemy = '<@>';
+  const enemyStart = track.c1 - enemy.length + 1;
+  for (let col = track.c0; col <= track.c1; col++) {
+    const { row, nudge } = track.at(col);
+    if (col >= enemyStart) text.write(col, row, enemy[col - enemyStart], 'fg', nudge);
+    else text.write(col, row, col === track.c0 ? '|' : '.', 'dim', nudge);
+  }
+  const last = enemyStart - 1; // furthest column a Shot reaches
+  for (const shot of state.shots) {
+    const col = Math.round(track.c0 + Math.min(Math.max(shot.flight, 0), 1) * (last - track.c0));
+    const { row, nudge } = track.at(col);
+    text.write(col, row, [...shot.word][0] ?? '*', 'red', nudge);
+  }
 }

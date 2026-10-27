@@ -25,8 +25,16 @@ How far a Word bullet has travelled, from leaving the Enemy ship (0) to reaching
 _Avoid_: Approach, progress, distance
 
 **Attack word**:
-The word the player types to fire at the opponent, shown in red on the right side of the cockpit. Firing it is not shown as a projectile.
+The word the player types to fire at the opponent, shown in red in the Cockpit. Firing it creates a Shot.
 _Avoid_: Attacking word, ammo
+
+**Shot**:
+An Attack word the player has fired. In the opponent's game it flies as a Word bullet; in the player's game it shows on the Radar until it hits the Enemy ship or the opponent destroys it.
+_Avoid_: Blip, outgoing bullet
+
+**Radar**:
+The Cockpit screen showing the player's Shots flying toward the Enemy ship.
+_Avoid_: Scanner, minimap
 
 **Target**:
 A Word bullet whose word starts with the Typed word; its matched letters are highlighted.

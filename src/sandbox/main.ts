@@ -8,7 +8,6 @@ import { AsciiGameView } from '../view/AsciiGameView';
 import { WORD_FLIGHT } from '../view/words/flightPath';
 import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
-import { COCKPIT_PROTO } from '../view/cockpitPrototype/variants';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
@@ -21,11 +20,11 @@ if (import.meta.env.DEV) Object.assign(window, { sandbox: session });
 
 // ---- tweak panel ----
 const gui = new GUI({ title: 'Sandbox' });
-const live = { typed: '', bullets: 0, status: '' };
+const live = { typed: '', bullets: 0, shots: 0, status: '' };
 
 const snap = gui.addFolder('Snapshot');
 snap.add(session, 'lives', 0, 3, 1).name('Lives');
-snap.add(session, 'attackWord').name('Attack word');
+snap.add(session, 'attackWord').name('Attack word').listen();
 snap.add(live, 'typed').name('Typed word').disable().listen();
 snap.add(session, 'lastSubmitted').name('last submitted').disable().listen();
 
@@ -57,16 +56,19 @@ en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
 en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
 en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
 
-// PROTOTYPE knob ("Cockpit design")
-gui.addFolder('Cockpit (prototype)').add(COCKPIT_PROTO, 'attackWord', ['grid', 'plate']).name('attack word style');
-
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
 ev.add({ destroy: () => session.destroyOldest() }, 'destroy').name('destroy oldest');
 ev.add({ destroyNew: () => session.destroyNewest() }, 'destroyNew').name('destroy newest');
 ev.add({ arrive: () => session.arriveOldest() }, 'arrive').name('arrive oldest');
 ev.add({ lifeLost: () => session.emit({ type: 'lifeLost' }) }, 'lifeLost').name('lifeLost');
-ev.add({ attack: () => session.emit({ type: 'attackFired', word: session.attackWord }) }, 'attack').name('attackFired');
+
+const sh = gui.addFolder('Shots (Radar)');
+sh.add({ fire: () => session.fireAttack() }, 'fire').name('fire Attack word');
+sh.add({ defend: () => session.defendOldestShot() }, 'defend').name('enemy defends oldest');
+sh.add(session, 'shotFlightSeconds', 1, 20, 0.5).name('shot flight time (s)');
+sh.add(session, 'newAttackWordOnFire').name('new Attack word on fire');
+sh.add(live, 'shots').name('in flight').disable().listen();
 
 const time = gui.addFolder('Time');
 time.add(session, 'paused').name('pause');
@@ -80,6 +82,7 @@ document.body.append(stats.dom);
 (function poll() {
   live.typed = input.typedWord;
   live.bullets = session.bulletCount;
+  live.shots = session.shotCount;
   stats.update();
   requestAnimationFrame(poll);
 })();
