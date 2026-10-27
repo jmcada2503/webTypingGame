@@ -9,6 +9,7 @@ import { WORD_FLIGHT } from '../view/words/flightPath';
 import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
+import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -54,6 +55,12 @@ en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
 en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
 en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
 en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
+
+const dx = gui.addFolder('Destroy effect');
+dx.add(DESTROY_LOOK, 'shardSpeed', 2, 30, 0.5).name('shard speed');
+dx.add(DESTROY_LOOK, 'shardSpin', 0, 30, 0.5).name('shard spin');
+dx.add(DESTROY_LOOK, 'burstSeconds', 0.15, 1.5, 0.05).name('ring time (s)');
+dx.add(DESTROY_LOOK, 'burstSize', 0.5, 6, 0.1).name('ring size');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

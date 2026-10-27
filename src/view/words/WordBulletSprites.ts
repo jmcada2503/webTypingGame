@@ -16,7 +16,16 @@ export const WORD_LOOK = {
 const EM_PX = 96;
 const FONT = `400 ${EM_PX}px "${ASCII_STYLE.font.family}"`;
 
-type Sprite = { sprite: THREE.Sprite; canvas: HTMLCanvasElement; paintedKey: string; aspect: number };
+type Sprite = { sprite: THREE.Sprite; canvas: HTMLCanvasElement; paintedKey: string; aspect: number; word: string };
+
+/** A Word bullet's last look, handed to destroy effects. */
+export type WordSnapshot = {
+  letters: string[];
+  /** World position of the word's center. */
+  center: THREE.Vector3;
+  /** World size of one em (letter height) at that moment. */
+  em: number;
+};
 
 /**
  * Word bullets drawn over the ASCII frame in real font ("Words in the ASCII world"): a camera-facing
@@ -37,7 +46,7 @@ export class WordBulletSprites {
     for (const [id, s] of this.sprites) if (!alive.has(id)) this.remove(id, s);
 
     for (const b of state.wordBullets) {
-      const s = this.sprites.get(b.id) ?? this.add(b.id);
+      const s = this.sprites.get(b.id) ?? this.add(b.id, b.word);
       const matched = matchPrefix(state.typedWord, b.word);
       const key = `${matched}|${WORD_LOOK.border}`;
       if (s.paintedKey !== key) {
@@ -53,14 +62,23 @@ export class WordBulletSprites {
     }
   }
 
-  private add(id: string): Sprite {
+  /** Removes a bullet's sprite now and returns how it looked (for its destroy effect). */
+  take(id: string): WordSnapshot | null {
+    const s = this.sprites.get(id);
+    if (!s) return null;
+    const snap = { letters: [...s.word], center: s.sprite.position.clone(), em: WORD_LOOK.height };
+    this.remove(id, s);
+    return snap;
+  }
+
+  private add(id: string, word: string): Sprite {
     const canvas = document.createElement('canvas');
     const map = new THREE.CanvasTexture(canvas);
     map.colorSpace = THREE.SRGBColorSpace;
     // Transparent → three sorts sprites back to front, so nearer words draw on top.
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthTest: false }));
     this.scene.add(sprite);
-    const s = { sprite, canvas, paintedKey: '', aspect: 1 };
+    const s = { sprite, canvas, paintedKey: '', aspect: 1, word };
     this.sprites.set(id, s);
     return s;
   }
@@ -77,8 +95,13 @@ export class WordBulletSprites {
   }
 }
 
+/** One outlined glyph on a transparent canvas (used by destroy shards). Returns width / height. */
+export function paintGlyph(canvas: HTMLCanvasElement, ch: string, color: string) {
+  return paint(canvas, [ch], 0, color);
+}
+
 /** Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green). */
-function paint(canvas: HTMLCanvasElement, letters: string[], matched: number) {
+function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg) {
   const g = canvas.getContext('2d')!;
   g.font = FONT;
   const advance = g.measureText('M').width;
@@ -95,7 +118,7 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number) {
   g.lineWidth = border * 2;
   letters.forEach((ch, i) => g.strokeText(ch, x(i), y));
   letters.forEach((ch, i) => {
-    g.fillStyle = i < matched ? ASCII_STYLE.palette.green : ASCII_STYLE.palette.fg;
+    g.fillStyle = i < matched ? ASCII_STYLE.palette.green : color;
     g.fillText(ch, x(i), y);
   });
   return canvas.width / canvas.height;
