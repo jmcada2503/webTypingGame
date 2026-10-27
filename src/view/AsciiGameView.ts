@@ -27,6 +27,8 @@ export class AsciiGameView implements GameView {
   private readonly stars = new StarDrift();
   private lastEvent: { label: string; age: number } | null = null;
   private readonly cockpit: Cockpit;
+  /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
+  private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
   private readonly words = new WordBulletSprites();
 
@@ -44,6 +46,8 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = createCockpit(mountPrototypeSwitcher(COCKPIT_VARIANTS), this.scene, this.camera);
+    this.overlay.add(this.words.scene);
+    if (this.cockpit.overlay) this.overlay.add(this.cockpit.overlay);
   }
 
   render(state: GameViewState, dt: number) {
@@ -60,7 +64,7 @@ export class AsciiGameView implements GameView {
     this.cockpit.update({ state, dt, text });
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
-    this.ascii.render(this.scene, this.camera, { scene: this.words.scene, camera: this.camera });
+    this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
   }
 
   trigger(event: ViewEvent) {

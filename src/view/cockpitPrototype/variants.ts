@@ -17,6 +17,8 @@ export const COCKPIT_VARIANTS = [
 export type CockpitCtx = { state: GameViewState; dt: number; text: TextGrid };
 export interface Cockpit {
   update(ctx: CockpitCtx): void;
+  /** Real-font, non-ASCII parts (panel labels), drawn in the overlay pass. */
+  readonly overlay?: THREE.Object3D;
   dispose(): void;
 }
 
@@ -59,6 +61,57 @@ function rectOf(obj: THREE.Object3D, camera: THREE.Camera): Rect {
     c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
   }
   return { c0: Math.round(c0), r0: Math.round(r0), c1: Math.round(c1), r1: Math.round(r1) };
+}
+
+/** Grid area covered by an object, unrounded (for exact centering). */
+function rectOfF(obj: THREE.Object3D, camera: THREE.Camera): Rect {
+  const { cols, rows } = ASCII_STYLE.grid;
+  obj.updateWorldMatrix(true, true);
+  tmpBox.setFromObject(obj);
+  let c0 = Infinity, r0 = Infinity, c1 = -Infinity, r1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    corner.set(i & 1 ? tmpBox.max.x : tmpBox.min.x, i & 2 ? tmpBox.max.y : tmpBox.min.y, i & 4 ? tmpBox.max.z : tmpBox.min.z).project(camera);
+    const c = ((corner.x + 1) / 2) * cols;
+    const r = ((1 - corner.y) / 2) * rows;
+    c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
+  }
+  return { c0, r0, c1, r1 };
+}
+
+/** Write `str` exactly centered (both axes) in a float rect; `suffix` follows it without shifting it. */
+function centerExact(text: TextGrid, rect: Rect, str: string, color: PaletteColor, suffix = '') {
+  const len = [...str].length;
+  const col = Math.round((rect.c0 + rect.c1) / 2 - len / 2);
+  const row = Math.round((rect.r0 + rect.r1) / 2 - 0.5);
+  text.write(col, row, str + suffix, color);
+}
+
+/** A flat real-font label plate (canvas texture), for the overlay pass. Height in world units. */
+function labelPlate(str: string, height: number) {
+  const em = 96;
+  const canvas = document.createElement('canvas');
+  const g = canvas.getContext('2d')!;
+  const font = `500 ${em}px "${ASCII_STYLE.font.family}"`;
+  g.font = font;
+  const spacing = em * 0.25;
+  const w = [...str].reduce((a, ch) => a + g.measureText(ch).width + spacing, -spacing);
+  canvas.width = Math.ceil(w + em * 0.4);
+  canvas.height = Math.ceil(em * 1.2);
+  g.font = font;
+  g.fillStyle = '#9a9a9a';
+  g.textBaseline = 'middle';
+  let x = em * 0.2;
+  for (const ch of str) {
+    g.fillText(ch, x, canvas.height / 2);
+    x += g.measureText(ch).width + spacing;
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry((height * canvas.width) / canvas.height, height),
+    new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false }),
+  );
+  return mesh;
 }
 
 /** Write `str` centered in the rect, `line` rows from its vertical center. */
@@ -276,38 +329,53 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   const metal = gray(0.75, false);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.6, 12), metal);
   column.position.set(0, -0.78, -1.35);
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 12), metal);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 12), metal);
   bar.rotation.z = Math.PI / 2;
   bar.position.set(0, -0.48, -1.35);
   root.add(column, bar);
-  for (const x of [-0.45, 0.45]) {
+  for (const x of [-0.36, 0.36]) {
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
     grip.position.set(x, -0.4, -1.35);
     root.add(grip);
   }
-  const yokeScreenBezel = box(0.62, 0.12, 0.03, gray(0.45));
+  const yokeScreenBezel = box(0.56, 0.12, 0.03, gray(0.45));
   yokeScreenBezel.position.set(0, -0.4, -1.37);
-  const yokeScreen = screen(0.56, 0.08);
+  const yokeScreen = screen(0.5, 0.08);
   yokeScreen.position.set(0, -0.4, -1.35);
   root.add(yokeScreenBezel, yokeScreen);
 
   const consoles = new THREE.Group();
   const lamps: THREE.Mesh[] = [];
   const lampOn = new THREE.MeshBasicMaterial({ color: ASCII_STYLE.palette.red });
-  const lampOff = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+  // A lost life is a dim, unlit lamp: still visible so the player sees 3 slots.
+  const lampOff = gray(0.5, false);
+  const overlay = new THREE.Group();
+  const labelAnchors: { panel: THREE.Object3D; label: THREE.Mesh }[] = [];
   let attackScreen!: THREE.Mesh;
   for (const side of [-1, 1]) {
     const c = new THREE.Group();
-    c.position.set(side * 0.72, -0.5, -1.6);
+    c.position.set(side * 0.8, -0.5, -1.6);
     c.rotation.set(-0.7, -side * 0.4, 0);
     const slab = box(0.62, 0.42, 0.06, gray(0.28));
     c.add(slab);
+    // Label on the panel's top edge, in the panel's plane (tilts with it).
+    const label = labelPlate(side < 0 ? 'LIVES' : 'ATTACK', 0.05);
+    label.position.set(0, 0.21 + 0.035, 0.035);
+    const anchor = new THREE.Group();
+    anchor.matrixAutoUpdate = false;
+    anchor.add(label);
+    overlay.add(anchor);
+    labelAnchors.push({ panel: c, label: anchor as unknown as THREE.Mesh });
     if (side < 0) {
       for (let i = 0; i < MAX_LIVES; i++) {
-        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 10), lampOn);
-        lamp.position.set(-0.15 + i * 0.15, 0.05, 0.06);
+        const x = -0.1 + i * 0.13;
+        // Black socket so an unlit lamp still reads against the panel.
+        const socket = new THREE.Mesh(new THREE.CircleGeometry(0.062, 24), black());
+        socket.position.set(x, 0.05, 0.032);
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 10), lampOn);
+        lamp.position.set(x, 0.05, 0.06);
         lamps.push(lamp);
-        c.add(lamp);
+        c.add(socket, lamp);
       }
     } else {
       const bezel = box(0.5, 0.2, 0.03, gray(0.7));
@@ -335,15 +403,24 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
       t += dt;
       WORD_FLIGHT.end.y = -0.6;
       lamps.forEach((l, i) => (l.material = i < state.lives ? lampOn : lampOff));
-      const Y = rectOf(yokeScreen, camera), R = rectOf(attackScreen, camera);
-      center(text, Y, 0, `> ${state.typedWord}${cursor(t)}`);
-      center(text, R, -1, 'ATTACK', 'dim');
-      center(text, R, 1, state.attackWord, 'red');
-      const L = rectOf(lamps[1], camera);
-      center(text, L, -2, 'LIVES', 'dim');
+      // Labels follow their panel: copy the panel's world transform onto the overlay anchor.
+      for (const { panel, label } of labelAnchors) {
+        panel.updateWorldMatrix(true, false);
+        label.matrix.copy(panel.matrixWorld);
+      }
+      centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
+      centerExact(text, rectOfF(attackScreen, camera), state.attackWord, 'red');
     },
+    overlay,
     dispose: () => {
       disposeTree(root);
+      overlay.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.MeshBasicMaterial).map?.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
       lampOn.dispose();
       lampOff.dispose();
     },
