@@ -8,7 +8,8 @@ import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { COCKPIT_VARIANTS, createCockpit, type Cockpit } from './cockpitPrototype/variants';
+import { createCockpit, type Cockpit } from './cockpitPrototype/variants';
+import { RADAR_PROTO, RADAR_VARIANTS, type RadarKind } from './cockpitPrototype/radars';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -45,7 +46,10 @@ export class AsciiGameView implements GameView {
 
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
-    this.cockpit = createCockpit(mountPrototypeSwitcher(COCKPIT_VARIANTS), this.scene, this.camera);
+    // Cockpit D (yoke) chosen; the switcher now flips Radar designs. ?cockpit=A..D still works.
+    RADAR_PROTO.kind = mountPrototypeSwitcher(RADAR_VARIANTS) as RadarKind;
+    const cockpitKey = new URLSearchParams(location.search).get('cockpit') ?? 'D';
+    this.cockpit = createCockpit(cockpitKey, this.scene, this.camera);
     this.overlay.add(this.words.scene);
     if (this.cockpit.overlay) this.overlay.add(this.cockpit.overlay);
   }

@@ -8,6 +8,7 @@ import { AsciiGameView } from '../view/AsciiGameView';
 import { WORD_FLIGHT } from '../view/words/flightPath';
 import { ENEMY_LOOK } from '../view/enemy/EnemyShip';
 import { STAR_DRIFT } from '../view/enemy/StarDrift';
+import { RADAR_PROTO } from '../view/cockpitPrototype/radars';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
@@ -69,6 +70,7 @@ sh.add({ defend: () => session.defendOldestShot() }, 'defend').name('enemy defen
 sh.add(session, 'shotFlightSeconds', 1, 20, 0.5).name('shot flight time (s)');
 sh.add(session, 'newAttackWordOnFire').name('new Attack word on fire');
 sh.add(live, 'shots').name('in flight').disable().listen();
+sh.add(RADAR_PROTO, 'kind', ['A', 'B', 'C', 'D']).name('radar design (prototype)').listen();
 
 const time = gui.addFolder('Time');
 time.add(session, 'paused').name('pause');

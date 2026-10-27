@@ -6,6 +6,7 @@ import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
 import { WORD_FLIGHT } from '../words/flightPath';
+import { drawRadar, RADAR_SIZE } from './radars';
 
 export const COCKPIT_VARIANTS = [
   { key: 'A', name: 'Dashboard console: 3 screens, keyboard, pillars' },
@@ -122,36 +123,6 @@ function toGrid(v: THREE.Vector3, camera: THREE.Camera) {
   const { cols, rows } = ASCII_STYLE.grid;
   v.project(camera);
   return { col: ((v.x + 1) / 2) * cols, row: ((1 - v.y) / 2) * rows };
-}
-
-/**
- * A row of grid cells that follows a rotated panel's horizontal axis on screen: from local x0 to x1
- * at local y. `at(col)` gives the row the axis passes through at that column plus the sub-row nudge,
- * so glyphs written there trace the panel's slant smoothly.
- */
-function panelTrack(panel: THREE.Object3D, camera: THREE.Camera, y: number, x0: number, x1: number) {
-  panel.updateWorldMatrix(true, false);
-  const a = toGrid(panel.localToWorld(slantA.set(x0, y, 0)), camera);
-  const b = toGrid(panel.localToWorld(slantB.set(x1, y, 0)), camera);
-  const slope = (b.row - a.row) / (b.col - a.col);
-  return {
-    c0: Math.round(a.col),
-    c1: Math.round(b.col) - 1,
-    at(col: number) {
-      const exact = a.row + slope * (col + 0.5 - a.col) - 0.5;
-      const row = Math.round(exact);
-      return { row, nudge: exact - row };
-    },
-  };
-}
-
-/** Lines of text centered (both axes) in a float rect, top to bottom. */
-function centerLines(text: TextGrid, rect: Rect, lines: { str: string; color: PaletteColor }[]) {
-  const top = Math.round((rect.r0 + rect.r1) / 2 - lines.length / 2);
-  lines.forEach((l, i) => {
-    const col = Math.round((rect.c0 + rect.c1) / 2 - [...l.str].length / 2);
-    text.write(col, top + i, l.str, l.color);
-  });
 }
 
 /** Write `str` centered in the rect, `line` rows from its vertical center. */
@@ -378,14 +349,11 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
     grip.position.set(x, -0.4, -1.35);
     root.add(grip);
   }
-  // Two stacked screens on the yoke: Attack word (with its label) above, Typed word below.
-  const yokeScreenBezel = box(0.56, 0.24, 0.03, gray(0.45));
-  yokeScreenBezel.position.set(0, -0.35, -1.37);
-  const attackScreen = screen(0.5, 0.1);
-  attackScreen.position.set(0, -0.29, -1.35);
+  const yokeScreenBezel = box(0.56, 0.12, 0.03, gray(0.45));
+  yokeScreenBezel.position.set(0, -0.4, -1.37);
   const yokeScreen = screen(0.5, 0.08);
-  yokeScreen.position.set(0, -0.415, -1.35);
-  root.add(yokeScreenBezel, attackScreen, yokeScreen);
+  yokeScreen.position.set(0, -0.4, -1.35);
+  root.add(yokeScreenBezel, yokeScreen);
 
   const consoles = new THREE.Group();
   const lamps: THREE.Mesh[] = [];
@@ -421,16 +389,17 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         c.add(socket, lamp);
       }
     } else {
-      const bezel = box(0.5, 0.2, 0.03, gray(0.7));
-      bezel.position.set(0, 0.05, 0.05);
-      radarScreen = screen(0.44, 0.14);
-      radarScreen.position.set(0, 0.05, 0.07);
+      const bezel = box(RADAR_SIZE.w + 0.04, RADAR_SIZE.h + 0.04, 0.03, gray(0.7));
+      // Nudged toward the center so the Radar's right end stays on screen.
+      bezel.position.set(-0.04, 0.03, 0.05);
+      radarScreen = screen(RADAR_SIZE.w, RADAR_SIZE.h);
+      radarScreen.position.set(-0.04, 0.03, 0.07);
       c.add(bezel, radarScreen);
     }
     // Switch row.
     for (let i = 0; i < 5; i++) {
       const sw = box(0.04, 0.07, 0.04, gray(0.85));
-      sw.position.set(-0.2 + i * 0.1, -0.13, 0.06);
+      sw.position.set(-0.2 + i * 0.1, -0.17, 0.06);
       c.add(sw);
     }
     consoles.add(c);
@@ -452,11 +421,15 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         label.matrix.copy(panel.matrixWorld);
       }
       centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
-      centerLines(text, rectOfF(attackScreen, camera), [
-        { str: 'ATTACK', color: 'dim' },
-        { str: state.attackWord, color: 'red' },
-      ]);
-      drawRadar(text, radarScreen, camera, state);
+      // Attack word on the Typed panel's top edge: label at the left end, word at the right end.
+      const edge = rectOf(yokeScreenBezel, camera);
+      const attack = state.attackWord;
+      text.fill(edge.c0 + 1, edge.r0, 8, 1, ' ');
+      text.write(edge.c0 + 2, edge.r0, 'ATTACK', 'dim');
+      const aLen = [...attack].length;
+      text.fill(edge.c1 - aLen - 3, edge.r0, aLen + 2, 1, ' ');
+      text.write(edge.c1 - aLen - 2, edge.r0, attack, 'red');
+      drawRadar(text, radarScreen, camera, state.shots, t);
     },
     overlay,
     dispose: () => {
@@ -474,24 +447,3 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
   };
 }
 
-/**
- * Radar on a rotated panel: one track along the panel's slant. Left = just fired, right end =
- * the Enemy ship `<@>`. Each Shot is its word's first letter (red) at its Flight; it vanishes
- * when it hits or the opponent destroys it (it leaves the snapshot).
- */
-function drawRadar(text: TextGrid, radarScreen: THREE.Object3D, camera: THREE.Camera, state: GameViewState) {
-  const track = panelTrack(radarScreen, camera, 0, -0.2, 0.2);
-  const enemy = '<@>';
-  const enemyStart = track.c1 - enemy.length + 1;
-  for (let col = track.c0; col <= track.c1; col++) {
-    const { row, nudge } = track.at(col);
-    if (col >= enemyStart) text.write(col, row, enemy[col - enemyStart], 'fg', nudge);
-    else text.write(col, row, col === track.c0 ? '|' : '.', 'dim', nudge);
-  }
-  const last = enemyStart - 1; // furthest column a Shot reaches
-  for (const shot of state.shots) {
-    const col = Math.round(track.c0 + Math.min(Math.max(shot.flight, 0), 1) * (last - track.c0));
-    const { row, nudge } = track.at(col);
-    text.write(col, row, [...shot.word][0] ?? '*', 'red', nudge);
-  }
-}
