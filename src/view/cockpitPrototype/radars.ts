@@ -1,174 +1,130 @@
-// PROTOTYPE ("Cockpit design" → Radar): four grid-only Radar designs, ?variant=A..D. Throwaway.
-// Everything is drawn in the radar screen's own local coordinates and projected to grid cells, so
-// it sits on the tilted panel; the sub-row nudge keeps slanted rows smooth.
+// PROTOTYPE ("Cockpit design" → Radar): grid-only Radar designs, ?variant=A|C. Throwaway.
+// The radar screen is tilted, but grid glyphs can't be: each design is drawn upright inside the
+// largest grid-aligned rectangle that fits in the screen's projected outline (the black screen
+// keeps its tilted shape around it), so every glyph sits exactly on the grid.
 import * as THREE from 'three';
-import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
+import type { TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { ShotState } from '../GameViewState';
 
 export const RADAR_VARIANTS = [
   { key: 'A', name: 'Radar: track line, first letters' },
-  { key: 'B', name: 'Radar: bars, one row per Shot' },
   { key: 'C', name: 'Radar: scope, enemy at center, sweep' },
-  { key: 'D', name: 'Radar: lanes converging to the enemy' },
 ];
-export type RadarKind = 'A' | 'B' | 'C' | 'D';
+export type RadarKind = 'A' | 'C';
 
 /** Live-tunable from the sandbox panel. */
 export const RADAR_PROTO = { kind: 'A' as RadarKind };
 
-/** Radar screen size in its local units (set by the cockpit to match the screen mesh). */
-export const RADAR_SIZE = { w: 0.42, h: 0.26 };
+/** Radar screen size in its local units (the cockpit builds the screen mesh from it). */
+export const RADAR_SIZE = { w: 0.42, h: 0.3 };
 
 const ENEMY = '<@>';
+/** Cell height / width: a circle needs this many more columns than rows across. */
+const CELL_ASPECT = ASCII_STYLE.referenceCell.height / ASCII_STYLE.referenceCell.width;
 const v3 = new THREE.Vector3();
 
-/** Projects radar-local (u, v) ∈ [-1, 1]² onto grid cells (v = +1 is the top of the screen). */
-class RadarCanvas {
-  constructor(
-    private readonly text: TextGrid,
-    private readonly screen: THREE.Object3D,
-    private readonly camera: THREE.Camera,
-  ) {
-    screen.updateWorldMatrix(true, false);
-  }
+/** Grid-aligned rectangle (inclusive cells) inside the screen's projected quad. */
+type Box = { c0: number; r0: number; c1: number; r1: number };
 
-  /** Fractional grid position of a radar-local point. */
-  grid(u: number, v: number) {
-    const { cols, rows } = ASCII_STYLE.grid;
-    this.screen.localToWorld(v3.set((u * RADAR_SIZE.w) / 2, (v * RADAR_SIZE.h) / 2, 0)).project(this.camera);
+function innerBox(screen: THREE.Object3D, camera: THREE.Camera): Box {
+  const { cols, rows } = ASCII_STYLE.grid;
+  screen.updateWorldMatrix(true, false);
+  const pts = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ].map(([u, v]) => {
+    screen.localToWorld(v3.set((u * RADAR_SIZE.w) / 2, (v * RADAR_SIZE.h) / 2, 0)).project(camera);
     return { col: ((v3.x + 1) / 2) * cols, row: ((1 - v3.y) / 2) * rows };
-  }
-
-  /** One glyph centered on a radar-local point. */
-  plot(u: number, v: number, ch: string, color: PaletteColor) {
-    const g = this.grid(u, v);
-    const exact = g.row - 0.5;
-    const row = Math.round(exact);
-    this.text.write(Math.floor(g.col), row, ch, color, exact - row);
-  }
-
-  /**
-   * A string starting at (u, v) going right along the panel's x axis, one column per char;
-   * each char follows the panel's slant. Returns the u reached after the last char.
-   */
-  write(u: number, v: number, str: string, color: PaletteColor) {
-    const a = this.grid(u, v);
-    const b = this.grid(u + 0.1, v);
-    const slope = (b.row - a.row) / (b.col - a.col);
-    const c0 = Math.floor(a.col);
-    [...str].forEach((ch, i) => {
-      const col = c0 + i;
-      const exact = a.row + slope * (col + 0.5 - a.col) - 0.5;
-      const row = Math.round(exact);
-      this.text.write(col, row, ch, color, exact - row);
-    });
-    return u + (str.length * 0.1) / (b.col - a.col);
-  }
-
-  /** Columns covered by the full radar width at height v. */
-  span(v: number) {
-    return { c0: Math.floor(this.grid(-1, v).col), c1: Math.floor(this.grid(1, v).col) };
-  }
-
-  /** Radar-local u of a column (inverse of grid() along v). */
-  uAt(col: number, v: number) {
-    const a = this.grid(-1, v);
-    const b = this.grid(1, v);
-    return -1 + (2 * (col + 0.5 - a.col)) / (b.col - a.col);
-  }
+  });
+  const xs = pts.map((p) => p.col).sort((a, b) => a - b);
+  const ys = pts.map((p) => p.row).sort((a, b) => a - b);
+  // Second-smallest / second-largest: the rectangle stays inside the tilted quad.
+  return { c0: Math.ceil(xs[1]), c1: Math.floor(xs[2]) - 1, r0: Math.ceil(ys[1]), r1: Math.floor(ys[2]) - 1 };
 }
 
-/** Stable number per Shot (from its id) for spreading Shots over angles / lanes. */
-const shotIndex = (s: ShotState) => Number(s.id.replace(/\D/g, '')) || 0;
 const clamp01 = (x: number) => Math.min(Math.max(x, 0), 1);
 const first = (s: ShotState) => [...s.word][0] ?? '*';
+/** Stable number per Shot (from its id) for spreading Shots around the scope. */
+const shotIndex = (s: ShotState) => Number(s.id.replace(/\D/g, '')) || 0;
 
 export function drawRadar(text: TextGrid, screen: THREE.Object3D, camera: THREE.Camera, shots: ShotState[], t: number) {
-  const r = new RadarCanvas(text, screen, camera);
-  ({ A: track, B: bars, C: scope, D: lanes })[RADAR_PROTO.kind](r, shots, t);
+  const box = innerBox(screen, camera);
+  if (box.c1 - box.c0 < 6 || box.r1 < box.r0) return;
+  (RADAR_PROTO.kind === 'C' ? scope : track)(text, box, shots, t);
 }
 
 // ---------------------------------------------------------------- A
-/** One line from the player ('|') to the Enemy ship; each Shot is its first letter at its Flight. */
-function track(r: RadarCanvas, shots: ShotState[]) {
-  const { c0, c1 } = r.span(0);
-  const enemyStart = c1 - ENEMY.length;
-  for (let col = c0 + 1; col < enemyStart; col++) r.plot(r.uAt(col, 0), 0, '.', 'dim');
-  r.plot(r.uAt(c0, 0), 0, '|', 'dim');
-  r.write(r.uAt(enemyStart, 0) - 0.02, 0, ENEMY, 'fg');
+/**
+ * Track: one straight row from the player ('|') to the Enemy ship ('<@>'), dots between; each
+ * Shot is its word's first letter in red at its Flight. A dim tick row under it marks quarters.
+ */
+function track(text: TextGrid, b: Box, shots: ShotState[]) {
+  const row = Math.round((b.r0 + b.r1) / 2);
+  const start = b.c0 + 1;
+  const enemyAt = b.c1 - ENEMY.length; // enemy occupies enemyAt .. enemyAt + 2
+  const last = enemyAt - 1; // furthest column a Shot reaches
+  text.write(start, row, '|', 'dim');
+  for (let c = start + 1; c <= last; c++) text.write(c, row, '.', 'dim');
+  text.write(enemyAt, row, ENEMY, 'fg');
+  if (row + 1 <= b.r1) {
+    for (let q = 1; q < 4; q++) text.write(Math.round(start + ((last - start) * q) / 4), row + 1, "'", 'dim');
+  }
   for (const s of shots) {
-    const col = Math.round(c0 + clamp01(s.flight) * (enemyStart - 1 - c0));
-    r.plot(r.uAt(col, 0), 0, first(s), 'red');
+    const c = Math.round(start + clamp01(s.flight) * (last - start));
+    text.write(c, row, first(s), 'red');
   }
-}
-
-// ---------------------------------------------------------------- B
-/** A row per Shot (closest to the enemy first): its word, then a bar filling toward the enemy. */
-function bars(r: RadarCanvas, shots: ShotState[]) {
-  const rows = [0.62, 0.22, -0.18, -0.58];
-  r.write(0.62, 0.95, `ENEMY ${ENEMY}`, 'dim');
-  const sorted = [...shots].sort((a, b) => b.flight - a.flight).slice(0, rows.length);
-  if (sorted.length === 0) {
-    r.write(-0.35, 0.02, 'no shots', 'dim');
-    return;
-  }
-  sorted.forEach((s, i) => {
-    const v = rows[i];
-    const word = [...s.word].slice(0, 8).join('').padEnd(8, ' ');
-    const u = r.write(-0.95, v, word, 'red');
-    const { c1 } = r.span(v);
-    const a = Math.ceil(r.grid(u, v).col) + 1;
-    const len = Math.max(1, c1 - 1 - a);
-    const filled = Math.round(clamp01(s.flight) * len);
-    const bar = '='.repeat(Math.max(0, filled - 1)) + '>' + '.'.repeat(Math.max(0, len - filled)) + '|';
-    r.write(r.uAt(a, v), v, bar, 'fg');
-  });
-  if (shots.length > rows.length) r.write(-0.95, -0.95, `+${shots.length - rows.length} more`, 'dim');
 }
 
 // ---------------------------------------------------------------- C
-/** Classic scope: the Enemy ship at the center, range rings, a rotating sweep; Shots close in from the rim. */
-function scope(r: RadarCanvas, shots: ShotState[], t: number) {
-  // Circles in screen-ish proportions: radar units are 2:1 (w ≈ 2h), so u spans half as far as v.
-  const ru = RADAR_SIZE.h / RADAR_SIZE.w;
-  for (const rad of [0.95, 0.5]) {
-    for (let a = 0; a < 360; a += rad > 0.6 ? 12 : 24) {
-      const th = (a * Math.PI) / 180;
-      r.plot(Math.cos(th) * rad * ru, Math.sin(th) * rad, '.', 'dim');
-    }
-  }
-  const sweep = t * 2.2;
-  for (let k = 1; k <= 6; k++) {
-    const rad = (k / 6) * 0.95;
-    r.plot(Math.cos(sweep) * rad * ru, Math.sin(sweep) * rad, k === 6 ? '+' : ':', 'fg');
-  }
-  for (const s of shots) {
-    const th = (shotIndex(s) * 137.5 * Math.PI) / 180; // golden angle spreads Shots around the rim
-    const rad = 0.95 * (1 - clamp01(s.flight)) + 0.12;
-    r.plot(Math.cos(th) * rad * ru, Math.sin(th) * rad, first(s), 'red');
-  }
-  // Enemy ship last so the sweep never hides it.
-  const c = Math.floor(r.grid(0, 0).col);
-  r.write(r.uAt(c - 1, 0), 0, ENEMY, 'fg');
+/** Line glyph for a direction (radians): -, /, |, \ . */
+function lineGlyph(a: number) {
+  const k = Math.round((((a % Math.PI) + Math.PI) % Math.PI) / (Math.PI / 4)) % 4;
+  return ['-', '/', '|', '\\'][k];
 }
 
-// ---------------------------------------------------------------- D
-/** Reverse of the main view: 5 lanes from the player's edge (bottom) converge on the Enemy ship (top). */
-function lanes(r: RadarCanvas, shots: ShotState[]) {
-  const top = { u: 0, v: 0.78 };
-  const bottoms = [-0.8, -0.4, 0, 0.4, 0.8];
-  for (const bu of bottoms) {
-    for (let k = 0; k <= 8; k++) {
-      const f = k / 9;
-      r.plot(bu + (top.u - bu) * f, -0.95 + (top.v + 0.95) * f, '.', 'dim');
+/**
+ * Scope: the Enemy ship at the center, two one-cell-thick range rings and a rotating sweep line
+ * (drawn with -/|\ by its angle, with a dim trail), columns stretched by the cell aspect so
+ * circles look round. Shots move in from the outer ring toward the enemy as their Flight grows.
+ */
+function scope(text: TextGrid, b: Box, shots: ShotState[], t: number) {
+  const cx = (b.c0 + b.c1 + 1) / 2;
+  const cy = (b.r0 + b.r1 + 1) / 2;
+  // Radius in rows, limited by both the height and the (aspect-corrected) width.
+  const R = Math.min((b.r1 - b.r0 + 1) / 2, (b.c1 - b.c0 + 1) / 2 / CELL_ASPECT) - 0.3;
+  const cell = (rad: number, a: number) => ({
+    c: Math.floor(cx + Math.cos(a) * rad * CELL_ASPECT),
+    r: Math.floor(cy - Math.sin(a) * rad),
+  });
+  const inBox = (p: { c: number; r: number }) => p.c >= b.c0 && p.c <= b.c1 && p.r >= b.r0 && p.r <= b.r1;
+
+  for (const [rad, step] of [
+    [R, 3],
+    [R / 2, 8],
+  ] as const) {
+    for (let deg = 0; deg < 360; deg += step) {
+      const p = cell(rad, (deg * Math.PI) / 180);
+      if (inBox(p)) text.write(p.c, p.r, '.', 'dim');
     }
   }
-  const e = r.grid(0, 0.92);
-  r.write(r.uAt(Math.round(e.col) - 1, 0.92), 0.92, ENEMY, 'fg');
-  for (const s of shots) {
-    const bu = bottoms[shotIndex(s) % bottoms.length];
-    const f = clamp01(s.flight) * 0.92;
-    r.plot(bu + (top.u - bu) * f, -0.95 + (top.v + 0.95) * f, first(s), 'red');
+  const sweep = (t * 1.6) % (Math.PI * 2);
+  for (const [a, color] of [
+    [sweep - 0.5, 'dim'],
+    [sweep - 0.25, 'dim'],
+    [sweep, 'fg'],
+  ] as const) {
+    for (let rad = 0.9; rad < R; rad += 0.35) {
+      const p = cell(rad, a);
+      if (inBox(p)) text.write(p.c, p.r, color === 'fg' ? lineGlyph(a) : '.', color);
+    }
   }
+  for (const s of shots) {
+    const th = (shotIndex(s) * 137.5 * Math.PI) / 180; // golden angle spreads Shots around
+    const p = cell(R * (1 - clamp01(s.flight)) + 0.8, th);
+    if (inBox(p)) text.write(p.c, p.r, first(s), 'red');
+  }
+  text.write(Math.floor(cx) - 1, Math.floor(cy), ENEMY, 'fg');
 }
