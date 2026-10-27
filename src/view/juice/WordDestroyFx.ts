@@ -13,7 +13,16 @@ export const DESTROY_LOOK = {
   burstSeconds: 0.5,
   /** Green ring size, in word-heights. */
   burstSize: 2.4,
+  /** Cockpit muzzle sparks: life (s) and how far they fly (grid rows). */
+  sparkSeconds: 0.3,
+  sparkReach: 5,
 };
+
+/** Where the Cockpit "fires" from: bottom center, just under the yoke's Typed word screen (camera-local). */
+const MUZZLE_LOCAL = new THREE.Vector3(0, -0.47, -1.35);
+const SPARK_COUNT = 12;
+/** Half-angle of the spark fan around the direction to the destroyed word, radians. */
+const SPARK_FAN = 0.9;
 
 const ADVANCE = 0.6; // IBM Plex Mono advance / em
 const CELL_ASPECT = ASCII_STYLE.referenceCell.height / ASCII_STYLE.referenceCell.width;
@@ -21,6 +30,8 @@ const tmp = new THREE.Vector3();
 
 type Shard = { sprite: THREE.Sprite; vel: THREE.Vector3; spin: number; age: number };
 type Burst = { center: THREE.Vector3; em: number; age: number; seed: number };
+/** A spark in grid space (cells), flying from the muzzle. */
+type Spark = { col: number; row: number; vc: number; vr: number; age: number };
 
 /** Glyph textures cached per char (shards are the word's own letters, outlined). */
 const glyphCache = new Map<string, { map: THREE.CanvasTexture; aspect: number; heightEm: number }>();
@@ -41,11 +52,13 @@ function glyphTexture(ch: string) {
  * Word bullet destroyed ("Juice: Word bullet destroyed"): the word breaks. Each letter becomes an
  * outlined shard flung off screen fast in its own direction (spinning, accelerating, no fade),
  * and a green ring of grid glyphs bursts where the word was. The ring is grid text, so it always
- * sits behind every Word bullet: the next word stays readable.
+ * sits behind every Word bullet: the next word stays readable. Green sparks also burst from the
+ * Cockpit's bottom, fanned toward the word, as if the Cockpit fired at it.
  */
 export class WordDestroyFx {
   private readonly shards: Shard[] = [];
   private readonly bursts: Burst[] = [];
+  private readonly sparks: Spark[] = [];
 
   constructor(
     /** Overlay scene (Word bullets live there; shards fly over the ASCII frame like them). */
@@ -75,6 +88,20 @@ export class WordDestroyFx {
       });
     });
     this.bursts.push({ center: w.center.clone(), em: w.em, age: 0, seed: Math.random() * 1000 });
+    this.fireSparks(w.center);
+  }
+
+  /** Green sparks from the Cockpit's bottom, fanned toward the destroyed word (as if it fired at it). */
+  private fireSparks(target: THREE.Vector3) {
+    const from = this.toGrid(tmp.copy(MUZZLE_LOCAL).add(this.camera.position));
+    const to = this.toGrid(target);
+    // Direction in "round" grid space (columns compressed by the cell aspect).
+    const aim = Math.atan2(-(to.row - from.row), (to.col - from.col) / CELL_ASPECT);
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      const a = aim + (Math.random() * 2 - 1) * SPARK_FAN;
+      const speed = (DESTROY_LOOK.sparkReach / DESTROY_LOOK.sparkSeconds) * (0.5 + Math.random() * 0.8);
+      this.sparks.push({ col: from.col, row: from.row, vc: Math.cos(a) * speed * CELL_ASPECT, vr: -Math.sin(a) * speed, age: 0 });
+    }
   }
 
   /** Call every frame before the Cockpit writes its text (Cockpit text wins over the ring). */
@@ -90,6 +117,18 @@ export class WordDestroyFx {
         s.sprite.material.dispose();
         this.shards.splice(i, 1);
       }
+    }
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      const s = this.sparks[i];
+      s.age += dt;
+      const k = s.age / DESTROY_LOOK.sparkSeconds;
+      if (k >= 1) {
+        this.sparks.splice(i, 1);
+        continue;
+      }
+      s.col += s.vc * dt;
+      s.row += s.vr * dt;
+      text.write(Math.floor(s.col), Math.floor(s.row), k < 0.35 ? '*' : k < 0.7 ? '+' : '.', 'green');
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
@@ -139,5 +178,6 @@ export class WordDestroyFx {
     }
     this.shards.length = 0;
     this.bursts.length = 0;
+    this.sparks.length = 0;
   }
 }

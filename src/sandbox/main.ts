@@ -61,6 +61,8 @@ dx.add(DESTROY_LOOK, 'shardSpeed', 2, 30, 0.5).name('shard speed');
 dx.add(DESTROY_LOOK, 'shardSpin', 0, 30, 0.5).name('shard spin');
 dx.add(DESTROY_LOOK, 'burstSeconds', 0.15, 1.5, 0.05).name('ring time (s)');
 dx.add(DESTROY_LOOK, 'burstSize', 0.5, 6, 0.1).name('ring size');
+dx.add(DESTROY_LOOK, 'sparkSeconds', 0.1, 1, 0.05).name('cockpit sparks time (s)');
+dx.add(DESTROY_LOOK, 'sparkReach', 1, 15, 0.5).name('cockpit sparks reach');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
