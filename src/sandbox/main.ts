@@ -63,6 +63,8 @@ dx.add(DESTROY_PROTO, 'shardSpeed', 2, 30, 0.5).name('shard speed');
 dx.add(DESTROY_PROTO, 'shardSpin', 0, 30, 0.5).name('shard spin');
 dx.add(DESTROY_PROTO, 'burstSeconds', 0.15, 1.5, 0.05).name('explosion time (s)');
 dx.add(DESTROY_PROTO, 'burstSize', 0.5, 6, 0.1).name('explosion size');
+dx.add(DESTROY_PROTO, 'projectile').name('tracer from Cockpit');
+dx.add(DESTROY_PROTO, 'projectileSeconds', 0.04, 0.6, 0.01).name('tracer time (s)');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

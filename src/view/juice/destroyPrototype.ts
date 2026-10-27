@@ -24,16 +24,32 @@ export const DESTROY_PROTO = {
   burstSeconds: 0.5,
   /** Explosion size, in word-heights. */
   burstSize: 2.4,
+  /** A green tracer shoots from the Cockpit to the word first; the word breaks when it lands. */
+  projectile: true,
+  /** Tracer travel time, seconds (quick). */
+  projectileSeconds: 0.12,
 };
+
+/** Where the tracer leaves from: just above the yoke's Typed word screen (camera-local, see Cockpit.ts). */
+const MUZZLE_LOCAL = new THREE.Vector3(0, -0.3, -1.35);
 
 const ADVANCE = 0.6; // IBM Plex Mono advance / em
 const GREEN = new THREE.Color(ASCII_STYLE.palette.green);
 const CELL_ASPECT = ASCII_STYLE.referenceCell.height / ASCII_STYLE.referenceCell.width;
 const tmp = new THREE.Vector3();
+const tmp2 = new THREE.Vector3();
 
-type Shard = { sprite: THREE.Sprite; vel: THREE.Vector3; spin: number; age: number };
+/** Line glyph for a screen direction (radians): - / | \ */
+function lineGlyph(a: number) {
+  const k = Math.round((((a % Math.PI) + Math.PI) % Math.PI) / (Math.PI / 4)) % 4;
+  return ['-', '/', '|', '\\'][k];
+}
+
+/** `wait`: seconds left before the shard starts flying (held in place while the tracer travels). */
+type Shard = { sprite: THREE.Sprite; vel: THREE.Vector3; spin: number; age: number; wait: number };
 type Particle = { pos: THREE.Vector3; vel: THREE.Vector3; age: number; obj?: THREE.Object3D };
-type Burst = { center: THREE.Vector3; em: number; age: number; particles: Particle[]; seed: number };
+/** `delay`: tracer travel time before the explosion starts. */
+type Burst = { center: THREE.Vector3; em: number; age: number; particles: Particle[]; seed: number; delay: number };
 
 /** Glyph textures cached per char + color. */
 const glyphCache = new Map<string, { map: THREE.CanvasTexture; aspect: number }>();
@@ -67,6 +83,7 @@ export class DestroyFx {
 
   /** A Word bullet was destroyed: break it into flying letters and start the explosion. */
   burst(w: WordSnapshot) {
+    const delay = DESTROY_PROTO.projectile ? DESTROY_PROTO.projectileSeconds : 0;
     const n = w.letters.length;
     const d = this.camera.position.z - w.center.z;
     w.letters.forEach((ch, i) => {
@@ -81,10 +98,10 @@ export class DestroyFx {
       const speed = DESTROY_PROTO.shardSpeed * w.em * (0.7 + Math.random() * 0.6) * (d / 5);
       const vel = new THREE.Vector3(Math.cos(a) * speed, Math.sin(a) * speed, speed * 0.4);
       this.overlay.add(sprite);
-      this.shards.push({ sprite, vel, spin: (Math.random() * 2 - 1) * DESTROY_PROTO.shardSpin, age: 0 });
+      this.shards.push({ sprite, vel, spin: (Math.random() * 2 - 1) * DESTROY_PROTO.shardSpin, age: 0, wait: delay });
     });
 
-    const b: Burst = { center: w.center.clone(), em: w.em, age: 0, particles: [], seed: Math.random() * 1000 };
+    const b: Burst = { center: w.center.clone(), em: w.em, age: 0, particles: [], seed: Math.random() * 1000, delay };
     const kind = DESTROY_PROTO.kind;
     if (kind === 'B' || kind === 'C' || kind === 'D') {
       const count = kind === 'D' ? 18 : 26;
@@ -116,6 +133,10 @@ export class DestroyFx {
     // Shards: fly out fast, spin, gone once well off screen.
     for (let i = this.shards.length - 1; i >= 0; i--) {
       const s = this.shards[i];
+      if (s.wait > 0) {
+        s.wait -= dt; // the word holds still until the tracer hits it
+        continue;
+      }
       s.age += dt;
       s.vel.multiplyScalar(1 + dt * 1.5); // accelerate: snappy exit
       s.sprite.position.addScaledVector(s.vel, dt);
@@ -131,7 +152,11 @@ export class DestroyFx {
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
       b.age += dt;
-      const k = b.age / life;
+      if (b.age < b.delay) {
+        this.drawTracer(text, b, b.age / b.delay);
+        continue;
+      }
+      const k = (b.age - b.delay) / life;
       if (k >= 1) {
         for (const p of b.particles) this.dropParticle(p);
         this.bursts.splice(i, 1);
@@ -149,6 +174,25 @@ export class DestroyFx {
           if (p.obj instanceof THREE.Mesh) p.obj.scale.setScalar(b.em * 0.6 * (1 - k));
         }
       }
+    }
+  }
+
+  /**
+   * Green tracer in the grid from the Cockpit to the word: a bright head (`*`) with a short trail
+   * drawn with the line glyph for its direction. Grid = behind every word.
+   */
+  private drawTracer(text: TextGrid, b: Burst, k: number) {
+    const from = this.toGrid(tmp2.copy(MUZZLE_LOCAL).add(this.camera.position));
+    const to = this.toGrid(b.center);
+    const dx = to.col - from.col;
+    const dy = to.row - from.row;
+    const glyph = lineGlyph(Math.atan2(-dy, dx / CELL_ASPECT));
+    const len = Math.hypot(dx / CELL_ASPECT, dy); // in rows
+    const trail = 6;
+    for (let t = 0; t <= trail; t++) {
+      const kk = k - (t * 0.9) / Math.max(len, 1);
+      if (kk < 0) break;
+      text.write(Math.floor(from.col + dx * kk), Math.floor(from.row + dy * kk), t === 0 ? '*' : glyph, 'green');
     }
   }
 
