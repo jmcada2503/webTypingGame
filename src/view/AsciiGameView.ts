@@ -3,12 +3,11 @@ import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
-import { WORD_LOOK, WORD_STYLES, WordBulletSprites, type WordStyle } from './words/WordBulletSprites';
+import { WordBulletSprites } from './words/WordBulletSprites';
 import { WORD_FLIGHT } from './words/flightPath';
 import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -30,18 +29,14 @@ export class AsciiGameView implements GameView {
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
-  private readonly words: WordBulletSprites;
+  /** Word bullets: real-font, outlined, over the ASCII frame. */
+  private readonly words = new WordBulletSprites();
 
   static async create(): Promise<AsciiGameView> {
-    const [ascii, words] = await Promise.all([GpuAsciiRenderer.create(), WordBulletSprites.create()]);
-    return new AsciiGameView(ascii, words);
+    return new AsciiGameView(await GpuAsciiRenderer.create());
   }
 
-  private constructor(
-    private readonly ascii: GpuAsciiRenderer,
-    words: WordBulletSprites,
-  ) {
-    this.words = words;
+  private constructor(private readonly ascii: GpuAsciiRenderer) {
     this.canvas = ascii.canvas;
     const { directional, ambient } = ASCII_STYLE.lighting;
     const sun = new THREE.DirectionalLight(0xffffff, directional.intensity);
@@ -51,7 +46,6 @@ export class AsciiGameView implements GameView {
     this.camera.position.set(0, 0, 7);
     this.scene.add(this.enemy.root, this.stars.points);
     this.cockpit = new Cockpit(this.scene, this.camera);
-    WORD_LOOK.style = mountPrototypeSwitcher(WORD_STYLES) as WordStyle; // PROTOTYPE: word background
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
