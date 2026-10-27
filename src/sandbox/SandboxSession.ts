@@ -1,6 +1,6 @@
 import type { GameSession, SessionStatus } from '../app/GameSession';
 import type { TypingInput } from '../input/TypingInput';
-import type { GameViewState, ViewEvent, WordBulletState } from '../view/GameViewState';
+import type { GameViewState, ShotState, ViewEvent, WordBulletState } from '../view/GameViewState';
 
 /** Spanish sample words, 1–20 chars, lowercase + ñ / accents. */
 export const SAMPLE_WORDS = [
@@ -28,9 +28,14 @@ export class SandboxSession implements GameSession {
   lastSubmitted = '';
   /** Submitting a word destroys the matching Word bullet. */
   submitDestroys = true;
+  /** Seconds for a Shot to reach the Enemy ship. */
+  shotFlightSeconds = 5;
+  /** After firing, the Attack word changes to a random sample word. */
+  newAttackWordOnFire = true;
 
   private typed = '';
   private bullets: WordBulletState[] = [];
+  private shots: ShotState[] = [];
   private pending: ViewEvent[] = [];
   private nextId = 1;
   private spawnTimer = 0;
@@ -61,6 +66,8 @@ export class SandboxSession implements GameSession {
     if (advance > 0) {
       for (const b of this.bullets) b.flight += advance / this.flightSeconds;
       for (const b of this.bullets.filter((b) => b.flight >= 1)) this.remove(b.id, 'wordBulletArrived');
+      for (const s of this.shots) s.flight += advance / this.shotFlightSeconds;
+      for (const s of this.shots.filter((s) => s.flight >= 1)) this.removeShot(s.id, 'shotHit');
       if (this.autoSpawn && (this.spawnTimer += advance) >= this.spawnEvery) {
         this.spawnTimer = 0;
         this.spawn();
@@ -77,6 +84,7 @@ export class SandboxSession implements GameSession {
       typedWord: this.typed,
       attackWord: this.attackWord,
       wordBullets: this.bullets.map((b) => ({ ...b })),
+      shots: this.shots.map((s) => ({ ...s })),
     };
   }
 
@@ -125,8 +133,38 @@ export class SandboxSession implements GameSession {
     this.pending.push(event);
   }
 
+  /** Fire the current Attack word as a Shot. */
+  fireAttack() {
+    const id = `s${this.nextId++}`;
+    this.shots.push({ id, word: this.attackWord, flight: 0 });
+    this.pending.push({ type: 'attackFired', id, word: this.attackWord });
+    if (this.newAttackWordOnFire) {
+      const others = SAMPLE_WORDS.filter((w) => w !== this.attackWord);
+      this.attackWord = others[Math.floor(Math.random() * others.length)];
+    }
+  }
+
+  /** The opponent destroys the oldest Shot. */
+  defendOldestShot() {
+    const s = this.shots[0];
+    if (s) this.removeShot(s.id, 'shotDefended');
+  }
+
+  get shotCount() {
+    return this.shots.length;
+  }
+
+  private removeShot(id: string, type: 'shotHit' | 'shotDefended') {
+    this.shots = this.shots.filter((s) => s.id !== id);
+    this.pending.push({ type, id });
+  }
+
   private onSubmit(word: string) {
     this.lastSubmitted = word;
+    if (word.normalize('NFC') === this.attackWord.normalize('NFC')) {
+      this.fireAttack();
+      return;
+    }
     if (!this.submitDestroys) return;
     const typed = word.normalize('NFC');
     // Several bullets may carry the same word: take the one closest to the Cockpit.

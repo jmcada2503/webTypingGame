@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 
-/** Live-tunable from the sandbox panel. */
+/**
+ * Live-tunable from the sandbox panel.
+ * TODO (later effort, player settings): let players turn moving stars off, since the motion can
+ * cause dizziness. `speed = 0` already freezes them; the setting should also override any juice
+ * effect that drives the speed.
+ */
 export const STAR_DRIFT = {
   /** World units / s toward the camera. The juice tickets may drive this from game signals. */
   speed: 6,
