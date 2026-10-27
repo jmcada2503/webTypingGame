@@ -8,13 +8,13 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { ShotState } from '../GameViewState';
 
 export const RADAR_VARIANTS = [
+  { key: 'C', name: 'Radar: scope, enemy at center, sweep (chosen)' },
   { key: 'A', name: 'Radar: track line, first letters' },
-  { key: 'C', name: 'Radar: scope, enemy at center, sweep' },
 ];
 export type RadarKind = 'A' | 'C';
 
 /** Live-tunable from the sandbox panel. */
-export const RADAR_PROTO = { kind: 'A' as RadarKind };
+export const RADAR_PROTO = { kind: 'C' as RadarKind };
 
 /** Radar screen size in its local units (the cockpit builds the screen mesh from it). */
 export const RADAR_SIZE = { w: 0.42, h: 0.3 };

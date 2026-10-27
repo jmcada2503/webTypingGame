@@ -421,13 +421,14 @@ function yoke(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Cockpit {
         label.matrix.copy(panel.matrixWorld);
       }
       centerExact(text, rectOfF(yokeScreen, camera), state.typedWord, 'fg', cursor(t));
-      // Attack word just above the Typed panel's top edge: label at the left end, word at the right end.
+      // "ATTACK: <word>" just above the Typed panel's top edge, right-aligned to it.
       const edge = rectOf(yokeScreenBezel, camera);
       const row = edge.r0 - 1;
+      const label = 'ATTACK: ';
       const attack = state.attackWord;
       const aLen = [...attack].length;
       text.fill(edge.c0, row, edge.c1 - edge.c0, 1, ' ');
-      text.write(edge.c0 + 1, row, 'ATTACK', 'dim');
+      text.write(edge.c1 - aLen - 1 - label.length, row, label, 'dim');
       text.write(edge.c1 - aLen - 1, row, attack, 'red');
       drawRadar(text, radarScreen, camera, state.shots, t);
     },
