@@ -40,10 +40,10 @@
           <mxGeometry x="740" y="490" width="250" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="eb" value="&lt;b&gt;EventBridge&lt;/b&gt;&#10;every 5 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="eb" value="&lt;b&gt;EventBridge&lt;/b&gt;&#10;every 15 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="1060" y="130" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="gr" value="&lt;b&gt;Lambda: guardrails&lt;/b&gt;&#10;5-min cost estimator (trip @ 80%)&#10;+ killer (shutdown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="gr" value="&lt;b&gt;Lambda: guardrails&lt;/b&gt;&#10;cost estimator (trip @ 80%)&#10;+ killer (shutdown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="1060" y="260" width="200" height="100" as="geometry" />
         </mxCell>
         <mxCell id="bud" value="&lt;b&gt;AWS Budgets&lt;/b&gt;&#10;alerts 20/60/100% of limit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">

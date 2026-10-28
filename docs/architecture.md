@@ -10,8 +10,6 @@ and the [map](https://github.com/jmcada2503/webTypingGame/issues/38).
 
 ## Diagram
 
-Rendered from [`architecture.drawio`](./architecture.drawio) (open in [draw.io](https://app.diagrams.net)
-or the VS Code Draw.io Integration extension). The same source is embedded below so this file is
 self-contained — paste it into draw.io via **Extras → Edit Diagram**.
 
 ```drawio
@@ -51,10 +49,10 @@ self-contained — paste it into draw.io via **Extras → Edit Diagram**.
         <mxCell id="cw" value="&lt;b&gt;CloudWatch Logs&lt;/b&gt;&#10;1 JSON line / match&#10;+ Logs Insights saved queries&#10;(analytics / time-range metrics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="740" y="490" width="250" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="eb" value="&lt;b&gt;EventBridge&lt;/b&gt;&#10;every 5 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="eb" value="&lt;b&gt;EventBridge&lt;/b&gt;&#10;every 15 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="1060" y="130" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="gr" value="&lt;b&gt;Lambda: guardrails&lt;/b&gt;&#10;5-min cost estimator (trip @ 80%)&#10;+ killer (shutdown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="gr" value="&lt;b&gt;Lambda: guardrails&lt;/b&gt;&#10;cost estimator (trip @ 80%)&#10;+ killer (shutdown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="1060" y="260" width="200" height="100" as="geometry" />
         </mxCell>
         <mxCell id="bud" value="&lt;b&gt;AWS Budgets&lt;/b&gt;&#10;alerts 20/60/100% of limit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
@@ -142,7 +140,7 @@ TTL is cleanup only (deletes can lag ~48 h); liveness is checked in code via `la
 **CloudWatch Logs.** `POST report` writes the `match_details` item *and* emits one JSON log line;
 Logs Insights saved queries (CDK `CfnQueryDefinition`) serve time-range analytics DynamoDB can't do cheaply.
 
-**Cost guardrails.** `guardrails` Lambda, two triggers: EventBridge (5 min) estimates month spend from
+**Cost guardrails.** `guardrails` Lambda, two triggers: EventBridge (15 min) estimates month spend from
 usage metrics and trips "resting" at 80% of the limit; SNS from AWS Budgets is the slow backup. Shutdown =
 write `/status.json {resting:true}`, set `api` concurrency 0, invalidate cache. Auto-lift on the 1st.
 The limit lives in one SSM parameter (read by the Lambda and CDK). Scripts: `guardrails:limit <usd>`,
