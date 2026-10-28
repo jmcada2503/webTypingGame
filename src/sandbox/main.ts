@@ -104,9 +104,9 @@ pc.add(PACE_PROTO, 'fast', 1, 10, 0.1).name('fast Pace');
 pc.add(PACE_PROTO, 'limit', 2, 15, 0.1).name('limit Pace');
 pc.add(PACE_PROTO, 'starsAtFast', 2, 80, 1).name('star speed at fast');
 pc.add(PACE_PROTO, 'starsAtLimit', 2, 120, 1).name('star speed at limit');
-pc.add(PACE_PROTO, 'maxGap', 0.2, 6, 0.1).name('gap for max size');
-pc.add(PACE_PROTO, 'minSize', 0.1, 1.5, 0.05).name('ship size, no gap');
-pc.add(PACE_PROTO, 'maxSize', 0.5, 4, 0.05).name('ship size, max gap');
+pc.add(PACE_PROTO, 'maxGap', 0.2, 6, 0.1).name('gap for min / max size');
+pc.add(PACE_PROTO, 'minSize', 0.1, 1, 0.05).name('ship size, you way ahead');
+pc.add(PACE_PROTO, 'maxSize', 1, 4, 0.05).name('ship size, enemy way ahead');
 pc.add({ test: () => (location.href = '/pace-test/') }, 'test').name('take the Pace test →');
 
 const ev = gui.addFolder('Events');

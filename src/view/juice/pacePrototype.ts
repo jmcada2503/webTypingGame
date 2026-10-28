@@ -1,7 +1,7 @@
 // PROTOTYPE ("Juice: Pace-driven motion"): stars + Enemy ship react to both players' Pace,
 // ?variant=A..C. Throwaway.
 //   star speed (magnitude) ← player Pace;  direction ← sign(player − enemy)
-//   Enemy ship size ← |player − enemy| (big gap = big ship: one is closing in on the other)
+//   Enemy ship size ← enemy − player: enemy ahead = bigger, player ahead = smaller, equal = normal
 // Calibrated on the user's own Pace test: 4 chars/s = fast; 8 chars/s = the limit (super fast).
 import type { EnemyShip } from '../enemy/EnemyShip';
 import { STAR_DRIFT } from '../enemy/StarDrift';
@@ -23,9 +23,9 @@ export const PACE_PROTO = {
   /** Star speed at `fast` and at `limit` (old idle drift was 6). */
   starsAtFast: 20,
   starsAtLimit: 50,
-  /** Pace gap (chars/s) at which the ship reaches its biggest. */
+  /** Pace gap (chars/s) at which the ship reaches its smallest / biggest size. */
   maxGap: 2,
-  /** Ship size with no gap (equal Paces) and at the max gap. */
+  /** Ship size when you're ahead by the max gap (smallest) and when the enemy is (biggest). Equal = 1. */
   minSize: 0.5,
   maxSize: 2,
 };
@@ -46,45 +46,54 @@ export function starSpeedFor(pace: number) {
   return starsAtFast + ((starsAtLimit - starsAtFast) * (p - fast)) / (limit - fast);
 }
 
+/** Ship size for a lead in −1..1 (−1 = you way ahead, 0 = equal, 1 = enemy way ahead). */
+function sizeFor(lead: number) {
+  const { minSize, maxSize } = PACE_PROTO;
+  return lead >= 0 ? 1 + (maxSize - 1) * lead : 1 + (1 - minSize) * lead;
+}
+
 export class PaceMotion {
   private speed = 0;
-  private grow = 0;
+  /** Smoothed enemy lead, −1..1. */
+  private lead = 0;
 
   constructor(private readonly enemy: EnemyShip) {}
 
   update(pace: { player: number; enemy: number }, dt: number) {
-    const { limit, maxGap, minSize, maxSize } = PACE_PROTO;
+    const { limit, maxGap } = PACE_PROTO;
     const player = Math.min(pace.player, limit);
     const enemy = Math.min(pace.enemy, limit);
     const d = player - enemy;
-    const gap = Math.abs(d);
     const mag = starSpeedFor(player);
+    /** Enemy lead in −1..1: positive when the enemy types faster. */
+    const leadRaw = Math.max(-1, Math.min(1, -d / maxGap));
     let target: number;
-    let growTarget: number;
+    let leadTarget: number;
 
     if (PACE_PROTO.kind === 'A') {
       target = (d >= 0 ? 1 : -1) * mag;
       this.speed += (target - this.speed) * follow(dt, 0.4);
-      growTarget = clamp01(gap / maxGap);
-      this.grow += (growTarget - this.grow) * follow(dt, 0.4);
-      this.enemy.effectScale = minSize + (maxSize - minSize) * this.grow;
+      leadTarget = leadRaw;
+      this.lead += (leadTarget - this.lead) * follow(dt, 0.4);
+      this.enemy.effectScale = sizeFor(this.lead);
       this.enemy.approach = 1;
     } else if (PACE_PROTO.kind === 'B') {
       // Direction blends through 0: near-equal Paces (within ~0.6 chars/s) ease the stars to a stop.
       target = Math.tanh(d / 0.6) * mag;
       this.speed += (target - this.speed) * follow(dt, 0.8);
-      growTarget = smoothstep(0.4, maxGap, gap); // gaps under 0.4 chars/s don't move the ship
-      this.grow += (growTarget - this.grow) * follow(dt, 1.5);
-      this.enemy.effectScale = minSize + (maxSize - minSize) * this.grow;
+      // Gaps under 0.4 chars/s keep the ship at normal size.
+      leadTarget = Math.sign(leadRaw) * smoothstep(0.4, maxGap, Math.abs(d));
+      this.lead += (leadTarget - this.lead) * follow(dt, 1.5);
+      this.enemy.effectScale = sizeFor(this.lead);
       this.enemy.approach = 1;
     } else {
       // Stars with inertia; the ship actually flies closer (bigger) / farther instead of scaling.
       target = Math.tanh(d / 0.4) * mag;
       this.speed += (target - this.speed) * follow(dt, 1.2);
-      growTarget = clamp01(gap / maxGap);
-      this.grow += (growTarget - this.grow) * follow(dt, 1);
+      leadTarget = leadRaw;
+      this.lead += (leadTarget - this.lead) * follow(dt, 1);
       this.enemy.effectScale = 1;
-      this.enemy.approach = minSize + (maxSize - minSize) * this.grow; // same size range, by distance
+      this.enemy.approach = sizeFor(this.lead); // same size range, by distance
     }
     STAR_DRIFT.speed = this.speed;
   }
