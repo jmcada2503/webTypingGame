@@ -1,6 +1,6 @@
 # Web Typing Game
 
-A two-player typing duel in the browser, rendered as ASCII-shaded 3D. Each player defends their ship by typing incoming words and attacks by typing their own word.
+A two-player typing game in the browser, played in Matches, rendered as ASCII-shaded 3D. Each player defends their ship by typing incoming words and attacks by typing their own word.
 
 ## Language
 

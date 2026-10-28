@@ -4,8 +4,8 @@ import type { GameViewState, ViewEvent } from '../view/GameViewState';
 export type SessionStatus = 'idle' | 'running' | 'won' | 'lost';
 
 /**
- * Anything the app shell can run: SandboxSession now (tweak-panel driven), DuelSession later
- * (real mechanics + networking). No pause/resume: an online duel can't pause; the sandbox's
+ * Anything the app shell can run: SandboxSession now (tweak-panel driven), MatchSession later
+ * (real mechanics + networking). No pause/resume: an online Match can't pause; the sandbox's
  * pause/step live on SandboxSession only.
  *
  * Shell loop each frame:  events = session.update(dt); events.forEach(view.trigger); view.render(session.state(), dt)
