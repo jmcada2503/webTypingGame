@@ -3,13 +3,13 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 
 /** Live-tunable from the sandbox panel. */
 export const ATTACK_SPARKS_LOOK = {
-  count: 24,
+  count: 16,
   /** Life (s) and how far they fly (fraction of the way to the Enemy ship). */
   seconds: 0.35,
-  reach: 0.35,
+  reach: 0.15,
   /** Streak thickness and length, per unit of distance from the camera (thin + short = spark). */
   thickness: 0.0065,
-  length: 0.08,
+  length: 0.055,
   /** Downward pull (world units / s²) so sparks arc a little as they fly. */
   gravity: 6,
 };
@@ -17,7 +17,7 @@ export const ATTACK_SPARKS_LOOK = {
 /** Where the sparks start: the Cockpit's center, just behind the yoke (camera-local), so it hides them. */
 const ORIGIN_LOCAL = new THREE.Vector3(0, -0.45, -1.9);
 /** Half-angle of the fan around the aim, radians. */
-const FAN = 0.7;
+const FAN = 0.45;
 const UP = new THREE.Vector3(0, 1, 0);
 
 type Spark = { mesh: THREE.Mesh; vel: THREE.Vector3; age: number };
