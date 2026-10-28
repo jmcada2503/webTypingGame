@@ -10,6 +10,8 @@ import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
 import { HitFx } from './juice/HitFx';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { SHOT_HIT_PROTO, SHOT_HIT_VARIANTS, ShotHitFx, type ShotHitKind } from './juice/shotHitPrototype';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -32,6 +34,8 @@ export class AsciiGameView implements GameView {
   private readonly destroyFx: WordDestroyFx;
   /** Hit taken: red debris at the impact point + camera jitter on a life lost. */
   private readonly hitFx: HitFx;
+  /** PROTOTYPE ("Juice: Shot hit"): Radar HIT!! + enemy explosion / dip. */
+  private readonly shotHitFx: ShotHitFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -54,6 +58,8 @@ export class AsciiGameView implements GameView {
     this.cockpit = new Cockpit(this.scene, this.camera);
     this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
     this.hitFx = new HitFx(this.scene, this.camera);
+    this.shotHitFx = new ShotHitFx(this.scene, this.camera, this.enemy, this.cockpit.radar);
+    SHOT_HIT_PROTO.kind = mountPrototypeSwitcher(SHOT_HIT_VARIANTS) as ShotHitKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -72,6 +78,7 @@ export class AsciiGameView implements GameView {
     this.words.update(state, this.camera);
     this.hitFx.update(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
+    this.shotHitFx.update(dt, text);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -89,6 +96,7 @@ export class AsciiGameView implements GameView {
       if (snap) this.hitFx.explode(snap.center);
     }
     if (event.type === 'lifeLost') this.hitFx.shake();
+    if (event.type === 'shotHit') this.shotHitFx.hit();
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
@@ -108,6 +116,7 @@ export class AsciiGameView implements GameView {
     this.cockpit.dispose();
     this.destroyFx.dispose();
     this.hitFx.dispose();
+    this.shotHitFx.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();

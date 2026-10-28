@@ -24,8 +24,13 @@ type Box = { c0: number; r0: number; c1: number; r1: number };
  * angle, dim trail). Each Shot is its word's first letter (red), moving from the outer ring to the
  * enemy as its Flight grows; it disappears when it leaves the snapshot (hit or defended).
  */
+/** Geometry handed to Radar overlays (in grid cells). */
+export type RadarGeometry = { c0: number; r0: number; c1: number; r1: number; cx: number; cy: number; R: number };
+
 export class Radar {
   private t = 0;
+  /** PROTOTYPE hook ("Juice: Shot hit"): drawn last, over the scope. */
+  overlay?: (text: TextGrid, g: RadarGeometry, dt: number) => void;
 
   constructor(private readonly screen: THREE.Object3D) {}
 
@@ -69,6 +74,7 @@ export class Radar {
     }
 
     text.write(Math.floor(cx) - 1, Math.floor(cy), ENEMY, 'fg');
+    this.overlay?.(text, { ...b, cx, cy, R }, dt);
   }
 
   /** Grid-aligned box inside the screen's projected quad (2nd-smallest / 2nd-largest corners). */
