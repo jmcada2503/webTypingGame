@@ -1,6 +1,6 @@
 // PROTOTYPE ("Juice: Pace-driven motion"): measures the player's Pace, one word at a time.
-// Pace = correct words per minute, from the first key to the last submit (pauses count, as in
-// the game). The result is the "fast" Pace in pacePrototype.
+// Pace = letters of correct words per second, from the first key to the last submit (pauses
+// count, as in the game). The result is the "fast" Pace in pacePrototype.
 import '../app/app.css';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { ASCII_STYLE } from '../render/asciiStyle';
@@ -21,6 +21,7 @@ let index = 0;
 let typed = '';
 let chars = 0;
 let correct = 0;
+let correctChars = 0;
 let start = 0;
 let flash: 'ok' | 'bad' | '' = '';
 
@@ -38,6 +39,7 @@ function begin() {
   typed = '';
   chars = 0;
   correct = 0;
+  correctChars = 0;
   start = 0;
   flash = '';
   input.clear();
@@ -70,11 +72,11 @@ function render() {
 function finish() {
   input.setEnabled(false);
   const seconds = (performance.now() - start) / 1000;
-  const pace = (correct * 60) / seconds;
+  const pace = correctChars / seconds;
   box.innerHTML = `
     <div style="color:${P.dim};letter-spacing:.3em">PACE TEST</div>
-    <div style="margin:40px 0 4px;font-size:64px;color:${P.yellow}">${Math.round(pace)}</div>
-    <div style="color:${P.dim}">correct words / min, your Pace (${(chars / seconds).toFixed(1)} chars/s)</div>
+    <div style="margin:40px 0 4px;font-size:64px;color:${P.yellow}">${pace.toFixed(2)}</div>
+    <div style="color:${P.dim}">chars/s of correct words, your Pace (${Math.round((correct * 60) / seconds)} correct words/min)</div>
     <div style="margin-top:24px">${correct} / ${words.length} words right · ${chars} chars in ${seconds.toFixed(1)} s</div>
     <div style="margin-top:36px;display:flex;gap:16px;justify-content:center">
       <button id="again" style="font:inherit;padding:8px 16px;background:#111;color:${P.fg};border:1px solid #444;border-radius:4px;cursor:pointer">Again</button>
@@ -97,7 +99,10 @@ input.onChange((w) => {
 input.onSubmit((w) => {
   if (!start || index >= words.length) return;
   const ok = w.normalize('NFC') === words[index].normalize('NFC');
-  if (ok) correct++;
+  if (ok) {
+    correct++;
+    correctChars += [...words[index]].length;
+  }
   flash = ok ? 'ok' : 'bad';
   typed = '';
   index++;

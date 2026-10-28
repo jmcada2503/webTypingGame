@@ -91,19 +91,19 @@ ask.add(ATTACK_SPARKS_LOOK, 'thickness', 0.001, 0.02, 0.0005);
 ask.add(ATTACK_SPARKS_LOOK, 'length', 0.01, 0.2, 0.005);
 ask.add(ATTACK_SPARKS_LOOK, 'gravity', 0, 20, 0.5);
 
-// PROTOTYPE ("Juice: Pace-driven motion"): Pace in correct words / min (33 = fast, 66 = limit).
+// PROTOTYPE ("Juice: Pace-driven motion"): Pace in chars of correct words / s (4 = fast, 8 = limit).
 const pc = gui.addFolder('Pace');
-pc.add(session, 'measuredPace').name('your Pace, words/min').disable().listen();
-pc.add(session, 'playerPaceOverride', -1, 90, 1).name('your Pace override (-1 = off)');
-pc.add(session, 'enemyPace', 0, 90, 1).name('enemy Pace, words/min');
+pc.add(session, 'measuredPace').name('your Pace, chars/s').disable().listen();
+pc.add(session, 'playerPaceOverride', -1, 10, 0.1).name('your Pace override (-1 = off)');
+pc.add(session, 'enemyPace', 0, 10, 0.1).name('enemy Pace, chars/s');
 pc.add(STAR_DRIFT, 'motion').name('moving stars (player setting)');
 pc.add(STAR_DRIFT, 'speed').name('star speed (now)').disable().listen();
 pc.add(PACE_PROTO, 'kind', ['A', 'B', 'C']).name('style (prototype)').listen();
-pc.add(PACE_PROTO, 'fast', 5, 100, 1).name('fast Pace');
-pc.add(PACE_PROTO, 'limit', 10, 150, 1).name('limit Pace');
+pc.add(PACE_PROTO, 'fast', 1, 10, 0.1).name('fast Pace');
+pc.add(PACE_PROTO, 'limit', 2, 15, 0.1).name('limit Pace');
 pc.add(PACE_PROTO, 'starsAtFast', 2, 80, 1).name('star speed at fast');
 pc.add(PACE_PROTO, 'starsAtLimit', 2, 120, 1).name('star speed at limit');
-pc.add(PACE_PROTO, 'maxGap', 2, 50, 1).name('gap for min / max size');
+pc.add(PACE_PROTO, 'maxGap', 0.2, 6, 0.1).name('gap for min / max size');
 pc.add(PACE_PROTO, 'minSize', 0.1, 1, 0.05).name('ship size, you way ahead');
 pc.add(PACE_PROTO, 'maxSize', 1, 4, 0.05).name('ship size, enemy way ahead');
 pc.add({ test: () => (location.href = '/pace-test/') }, 'test').name('take the Pace test →');

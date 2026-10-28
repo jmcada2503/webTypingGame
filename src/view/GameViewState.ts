@@ -29,7 +29,7 @@ export interface GameViewState {
   shots: ShotState[];
   /** How damaged the Enemy ship is: 0 = intact, 1 = about to be destroyed. */
   enemyDamage: number;
-  /** Each player's Pace: correct words (Word bullets destroyed + Attack words fired) per minute, recent. */
+  /** Each player's Pace: letters of correct words (Word bullets destroyed + Attack words fired) per second, recent. */
   pace: { player: number; enemy: number };
 }
 

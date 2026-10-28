@@ -2,8 +2,8 @@
 // ?variant=A..C. Throwaway.
 //   star speed (magnitude) ← player Pace;  direction ← sign(player − enemy)
 //   Enemy ship size ← enemy − player: enemy ahead = bigger, player ahead = smaller, equal = normal
-// Pace = correct words per minute. Calibrated on the user's Pace test (4 chars/s ≈ 33 words/min
-// with the sample words, avg 7.3 chars): 33 = fast; 66 = the limit (super fast).
+// Pace = letters of correct words per second. Calibrated on the user's Pace test: 4 = fast;
+// 8 = the limit (super fast).
 import type { EnemyShip } from '../enemy/EnemyShip';
 import { STAR_DRIFT } from '../enemy/StarDrift';
 
@@ -14,18 +14,18 @@ export const PACE_VARIANTS = [
 ];
 export type PaceKind = 'A' | 'B' | 'C';
 
-/** Live-tunable from the sandbox panel. Paces in correct words / min, star speeds in world units/s. */
+/** Live-tunable from the sandbox panel. Paces in chars of correct words / s, star speeds in world units/s. */
 export const PACE_PROTO = {
   kind: 'A' as PaceKind,
   /** A fast typist (the user's measured Pace). Stars move fast here. */
-  fast: 33,
+  fast: 4,
   /** The Pace limit: stars move super fast here; faster Paces count as this. */
-  limit: 66,
+  limit: 8,
   /** Star speed at `fast` and at `limit` (old idle drift was 6). */
   starsAtFast: 20,
   starsAtLimit: 50,
-  /** Pace gap (words / min) at which the ship reaches its smallest / biggest size. */
-  maxGap: 16,
+  /** Pace gap (chars/s) at which the ship reaches its smallest / biggest size. */
+  maxGap: 2,
   /** Ship size when you're ahead by the max gap (smallest) and when the enemy is (biggest). Equal = 1. */
   minSize: 0.5,
   maxSize: 2,
@@ -79,17 +79,17 @@ export class PaceMotion {
       this.enemy.effectScale = sizeFor(this.lead);
       this.enemy.approach = 1;
     } else if (PACE_PROTO.kind === 'B') {
-      // Direction blends through 0: near-equal Paces (within ~5 words/min) ease the stars to a stop.
-      target = Math.tanh(d / 5) * mag;
+      // Direction blends through 0: near-equal Paces (within ~0.6 chars/s) ease the stars to a stop.
+      target = Math.tanh(d / 0.6) * mag;
       this.speed += (target - this.speed) * follow(dt, 0.8);
-      // Gaps under 3 words/min keep the ship at normal size.
-      leadTarget = Math.sign(leadRaw) * smoothstep(3, maxGap, Math.abs(d));
+      // Gaps under 0.4 chars/s keep the ship at normal size.
+      leadTarget = Math.sign(leadRaw) * smoothstep(0.4, maxGap, Math.abs(d));
       this.lead += (leadTarget - this.lead) * follow(dt, 1.5);
       this.enemy.effectScale = sizeFor(this.lead);
       this.enemy.approach = 1;
     } else {
       // Stars with inertia; the ship actually flies closer (bigger) / farther instead of scaling.
-      target = Math.tanh(d / 3) * mag;
+      target = Math.tanh(d / 0.4) * mag;
       this.speed += (target - this.speed) * follow(dt, 1.2);
       leadTarget = leadRaw;
       this.lead += (leadTarget - this.lead) * follow(dt, 1);
