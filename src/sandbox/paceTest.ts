@@ -1,10 +1,9 @@
-// PROTOTYPE ("Juice: Pace-driven motion"): measures the player's Pace, one word at a time, and
-// saves it as "fast" for the sandbox. Pace = characters typed / time, from the first key to the
+// PROTOTYPE ("Juice: Pace-driven motion"): measures the player's Pace, one word at a time.
+// (The user's result, 4 chars/s, is the "fast" Pace in pacePrototype.) Pace = characters typed / time, from the first key to the
 // last submit (pauses between words count, as in the game).
 import '../app/app.css';
 import { KeyboardTypingInput } from '../input/KeyboardTypingInput';
 import { ASCII_STYLE } from '../render/asciiStyle';
-import { loadFastPace, saveFastPace } from './paceCalibration';
 import { SAMPLE_WORDS } from './SandboxSession';
 
 const WORD_COUNT = 20;
@@ -49,7 +48,6 @@ function begin() {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 function render() {
-  const prev = loadFastPace();
   if (index >= words.length) return;
   const word = words[index];
   const t = [...typed];
@@ -66,22 +64,19 @@ function render() {
     <div style="color:${P.dim};margin-top:6px;font-size:13px">Type each word, Space or Enter to submit. The clock starts on your first key.</div>
     <div style="margin:48px 0 8px;font-size:56px;padding:16px 24px;border:1px solid ${border};border-radius:6px">${esc(word)}</div>
     <div style="font-size:40px;min-height:56px">${typedHtml}</div>
-    <div style="color:${P.dim};margin-top:32px">${index + 1} / ${words.length}${start ? '' : ' · waiting for your first key'}</div>
-    <div style="color:${P.dim};margin-top:8px;font-size:12px">current "fast": ${prev.value.toFixed(2)} chars/s ${prev.measured ? '(measured)' : '(default)'}</div>`;
+    <div style="color:${P.dim};margin-top:32px">${index + 1} / ${words.length}${start ? '' : ' · waiting for your first key'}</div>`;
 }
 
 function finish() {
   input.setEnabled(false);
   const seconds = (performance.now() - start) / 1000;
   const pace = chars / seconds;
-  saveFastPace(pace);
   const wpm = (pace * 60) / 5;
   box.innerHTML = `
     <div style="color:${P.dim};letter-spacing:.3em">PACE TEST</div>
     <div style="margin:40px 0 4px;font-size:64px;color:${P.yellow}">${pace.toFixed(2)}</div>
     <div style="color:${P.dim}">chars/s, your Pace (≈ ${Math.round(wpm)} wpm)</div>
     <div style="margin-top:24px">${correct} / ${words.length} words right · ${chars} chars in ${seconds.toFixed(1)} s</div>
-    <div style="margin-top:8px;color:${P.green}">Saved as "fast" for the sandbox.</div>
     <div style="margin-top:36px;display:flex;gap:16px;justify-content:center">
       <button id="again" style="font:inherit;padding:8px 16px;background:#111;color:${P.fg};border:1px solid #444;border-radius:4px;cursor:pointer">Again</button>
       <a href="/sandbox/?variant=A" style="font:inherit;padding:8px 16px;background:${P.yellow};color:#000;border-radius:4px;text-decoration:none">Open sandbox →</a>
