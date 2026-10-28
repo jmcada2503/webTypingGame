@@ -13,8 +13,9 @@ export const SAMPLE_WORDS = [
  * no Lives. Sandbox shortcut (toggle `submitDestroys`): submitting a word destroys the
  * closest Word bullet with exactly that word, so any bullet can be destroyed, not just the oldest.
  */
-/** Pace smoothing window (s). */
-const PACE_SMOOTHING_SECONDS = 2;
+/** Pace counts the correct words of the last PACE_WINDOW_SECONDS, then eases toward that (s). */
+const PACE_WINDOW_SECONDS = 10;
+const PACE_EASE_SECONDS = 1;
 
 export class SandboxSession implements GameSession {
   status: SessionStatus = 'idle';
@@ -39,13 +40,15 @@ export class SandboxSession implements GameSession {
   newAttackWordOnFire = true;
   /** Enemy ship damage, 0..1 (panel slider). */
   enemyDamage = 0;
-  /** Enemy Pace (chars/s), panel slider. */
-  enemyPace = 4;
-  /** Player Pace override (chars/s); below 0 = measure real typing. */
+  /** Enemy Pace (correct words / min), panel slider. */
+  enemyPace = 25;
+  /** Player Pace override (correct words / min); below 0 = measure real typing. */
   playerPaceOverride = -1;
-  /** Measured player Pace (chars/s, smoothed). */
+  /** Measured player Pace (correct words / min, smoothed). */
   measuredPace = 0;
-  private charsThisFrame = 0;
+  /** Session clock (s) and when each recent correct word was submitted. */
+  private clock = 0;
+  private correctWordTimes: number[] = [];
   /** Sandbox shortcut: each Shot that hits adds this much damage (0 = off). */
   damagePerHit = 0.5;
 
@@ -71,23 +74,17 @@ export class SandboxSession implements GameSession {
   attachInput(input: TypingInput) {
     this.typed = input.typedWord;
     this.unsubs.push(
-      input.onChange((w) => {
-        // Count characters added (not deletions) for the player's Pace.
-        const added = [...w].length - [...this.typed].length;
-        if (added > 0) this.charsThisFrame += added;
-        this.typed = w;
-      }),
+      input.onChange((w) => (this.typed = w)),
       input.onSubmit((w) => this.onSubmit(w)),
     );
   }
 
   update(dt: number): ViewEvent[] {
-    // Pace: chars/s, exponentially smoothed over ~2 s.
-    if (dt > 0) {
-      const rate = this.charsThisFrame / dt;
-      this.measuredPace += (rate - this.measuredPace) * (1 - Math.exp(-dt / PACE_SMOOTHING_SECONDS));
-    }
-    this.charsThisFrame = 0;
+    // Pace: correct words in the last window, per minute, eased so it doesn't step.
+    this.clock += dt;
+    while (this.correctWordTimes.length && this.correctWordTimes[0] < this.clock - PACE_WINDOW_SECONDS) this.correctWordTimes.shift();
+    const rate = (this.correctWordTimes.length * 60) / PACE_WINDOW_SECONDS;
+    if (dt > 0) this.measuredPace += (rate - this.measuredPace) * (1 - Math.exp(-dt / PACE_EASE_SECONDS));
     const advance = this.paused ? (this.stepOnce ? 1 / 60 : 0) : dt;
     this.stepOnce = false;
     if (advance > 0) {
@@ -206,10 +203,14 @@ export class SandboxSession implements GameSession {
         .sort((a, b) => b.flight - a.flight)[0];
       if (hit) {
         this.destroy(hit.id);
+        this.correctWordTimes.push(this.clock);
         return;
       }
     }
-    if (typed === this.attackWord.normalize('NFC')) this.fireAttack();
+    if (typed === this.attackWord.normalize('NFC')) {
+      this.fireAttack();
+      this.correctWordTimes.push(this.clock);
+    }
   }
 
   private remove(id: string, type: 'wordBulletDestroyed' | 'wordBulletArrived') {
