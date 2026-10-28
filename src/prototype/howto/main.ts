@@ -5,8 +5,7 @@
 // Four structurally different layouts, all driven by the same 10 s looping demo
 // (a word flies in -> it gets typed -> destroyed; then the red word is typed -> fired -> hit).
 //   [ and ]  switch layout     M  Public / Private (only changes the "next" label)
-//   \        wait-for-key / auto-advance after 15 s (prototype-only; decides how the screen ends)
-//   Enter or Space = continue, Q = skip (both just show a toast here)
+//   Enter = start now (the only button); the screen also auto-starts after 30 s. No Q.
 // Real renderer + CRT filter; layout D uses the real game scene. No networking, no game logic.
 import * as THREE from 'three';
 import '../../app/app.css';
@@ -26,14 +25,13 @@ const VARIANTS: { key: Variant; name: string }[] = [
   { key: 'D', name: 'Real scene + callouts' },
 ];
 const COLS = 128;
-const AUTO_SECONDS = 15;
+const AUTO_SECONDS = 30;
 const DEF_WORD = 'planet';
 const ATK_WORD = 'rocket';
 
 const params = new URLSearchParams(location.search);
-let variant: Variant = (VARIANTS.find((v) => v.key === params.get('variant'))?.key ?? 'A') as Variant;
+let variant: Variant = (VARIANTS.find((v) => v.key === params.get('variant'))?.key ?? 'B') as Variant;
 let priv = params.get('mode') === 'private';
-let auto = params.get('end') === 'auto';
 const t0 = performance.now();
 let screenStart = 0;
 let toast: { msg: string; at: number } | null = null;
@@ -165,32 +163,29 @@ function prompt(c: number, r: number, typed: string, t: number, color: PaletteCo
 
 function drawFooter(t: number, top = false) {
   const left = Math.max(0, AUTO_SECONDS - (now() - screenStart));
+  const secs = Math.ceil(left);
+  if (left <= 0) {
+    say(`AUTO-START -> ${NEXT()}`);
+    screenStart = now();
+  }
   if (top) {
-    text.fill(26, 0, 76, 4, ' ');
-    const msg = auto ? `STARTING ${NEXT()} IN ${Math.ceil(left)}S` : `[ENTER] CONTINUE TO ${NEXT()}`;
-    centered(1.4, msg, auto ? 'dim' : blink(t, 1.5) ? 'yellow' : 'dim');
-    centered(2.6, auto ? '[Q] SKIP     [ENTER] CONTINUE NOW' : '[Q] SKIP', 'fg');
-    if (auto && left <= 0) {
-      say(`AUTO-CONTINUE -> ${NEXT()}`);
-      screenStart = now();
-    }
-    if (toast && now() - toast.at < 2.4) centered(41, toast.msg, 'green');
-    return;
-  }
-  if (auto) {
-    const n = Math.round((left / AUTO_SECONDS) * 30);
-    put(44, 40, `[${'#'.repeat(n)}${'-'.repeat(30 - n)}]`, 'dim');
-    centered(41, `STARTING ${NEXT()} IN ${Math.ceil(left)}S`, 'dim');
-    centered(42, '[Q] SKIP        [ENTER] CONTINUE NOW', 'fg');
-    if (left <= 0) {
-      say(`AUTO-CONTINUE -> ${NEXT()}`);
-      screenStart = now();
-    }
+    text.fill(20, 0, 88, 4, ' ');
+    centered(1.4, `[ENTER] START NOW      AUTO-START IN ${secs}S`, blink(t, 1.5) ? 'yellow' : 'fg');
+    centered(2.7, `NEXT: ${NEXT()}`, 'dim');
   } else {
-    centered(41, blink(t, 1.5) ? `[ENTER] CONTINUE TO ${NEXT()}` : '', 'yellow');
-    centered(42, '[Q] SKIP', 'fg');
+    // The Enter "button": a framed, blinking box. Under it, a big countdown and a draining bar.
+    const w = 60;
+    const c0 = (COLS - w) / 2;
+    box(c0, 34, w, 5, blink(t, 1.5) ? 'yellow' : 'fg');
+    const label = '[ENTER]  START NOW';
+    text.writeScaled((COLS - [...label].length * 1.5) / 2, 35.1, label, 1.5, 'yellow');
+    centered(37.2, `NEXT: ${NEXT()}`, 'dim');
+    const msg = `AUTO-START IN ${secs}S`;
+    text.writeScaled((COLS - [...msg].length * 1.4) / 2, 39.6, msg, 1.4, secs <= 5 && blink(t, 3) ? 'yellow' : 'fg');
+    const n = Math.round((left / AUTO_SECONDS) * (w - 2));
+    put(c0, 42, `[${'#'.repeat(n)}${'-'.repeat(w - 2 - n)}]`, secs <= 5 ? 'yellow' : 'dim');
   }
-  if (toast && now() - toast.at < 2.4) centered(38, toast.msg, 'green');
+  if (toast && now() - toast.at < 2.4) centered(top ? 41 : 33, toast.msg, 'green');
 }
 
 // ---------------------------------------------------------------- A: diagram with arrows
@@ -358,10 +353,8 @@ window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key;
   if (k === '[' || k === ']') return cycle(k === ']' ? 1 : -1);
-  if (k === '\\') return setAuto(!auto);
   if (k === 'm' || k === 'M') return setPriv(!priv);
-  if (k === 'q' || k === 'Q') say(`SKIPPED -> ${NEXT()}`);
-  else if (k === 'Enter' || k === ' ') say(`CONTINUE -> ${NEXT()}`);
+  if (k === 'Enter') say(`START -> ${NEXT()}`);
 });
 
 const bar = document.createElement('div');
@@ -380,19 +373,16 @@ const mk = (label: string, onclick: () => void) => {
 };
 const label = document.createElement('span');
 const modeBtn = mk('', () => setPriv(!priv));
-const endBtn = mk('', () => setAuto(!auto));
-bar.append(mk('←', () => cycle(-1)), label, mk('→', () => cycle(1)), modeBtn, endBtn);
+bar.append(mk('←', () => cycle(-1)), label, mk('→', () => cycle(1)), modeBtn);
 document.body.append(bar);
 
 function refreshBar() {
   const v = VARIANTS.find((x) => x.key === variant)!;
   label.textContent = `${v.key} (${v.name})  [ ]`;
   modeBtn.textContent = `next: ${priv ? 'private' : 'public'} (M)`;
-  endBtn.textContent = `ends: ${auto ? 'auto 15s' : 'on key'} (\\)`;
   const p = new URLSearchParams(location.search);
   p.set('variant', variant);
   p.set('mode', priv ? 'private' : 'public');
-  p.set('end', auto ? 'auto' : 'key');
   history.replaceState(null, '', `?${p}`);
 }
 function cycle(d: number) {
@@ -403,11 +393,6 @@ function cycle(d: number) {
 }
 function setPriv(v: boolean) {
   priv = v;
-  refreshBar();
-}
-function setAuto(v: boolean) {
-  auto = v;
-  screenStart = now();
   refreshBar();
 }
 refreshBar();
