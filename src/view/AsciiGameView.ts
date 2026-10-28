@@ -159,8 +159,8 @@ export class AsciiGameView implements GameView {
   resize(viewW: number, viewH: number, dpr: number) {
     const fit = fitToViewport(viewW, viewH, dpr);
     this.ascii.resize(fit);
-    this.canvas.style.width = `${fit.canvasW / dpr}px`;
-    this.canvas.style.height = `${fit.canvasH / dpr}px`;
+    this.canvas.style.width = `${fit.cssW}px`;
+    this.canvas.style.height = `${fit.cssH}px`;
     // Integer cells can't keep 10:16 exactly: match the camera to the real canvas so nothing is squashed.
     this.camera.aspect = fit.canvasW / fit.canvasH;
     this.camera.updateProjectionMatrix();

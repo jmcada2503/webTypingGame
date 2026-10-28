@@ -141,6 +141,21 @@ Each effect has a `*_LOOK` object of numbers (sizes, times, strengths), exported
 - **Player setting for moving stars:** `STAR_DRIFT.motion = false` freezes the stars whatever the Pace (moving stars can cause dizziness). The settings screen is out of this effort's scope.
 - **Screen filters:** `SCREEN_FILTERS` is the old-monitor look. All off renders straight to the screen with no extra cost.
 
+## Performance budget
+
+Measured in Chrome with the sandbox (60 Hz display, one Mac), under the worst moment the sandbox can make: 60 and 150 Word bullets on screen, a damaged Enemy ship with smoke, Paces at the limit (fast stars), and every effect firing over and over (Shots hit and defended, attack sparks, enemy firing, life lost, wrong keys), with the old-monitor filter on.
+
+| Drawing size | Result |
+|---|---|
+| up to 3840×2160 (4K), incl. 2560×1440 and 1920×1080 | 60 fps, frame times 16.7–18 ms, with 150 Word bullets and everything firing |
+| 5120×2880 (5K), before the cap | 40–58 fps, spikes to 67 ms |
+
+- **The cost is pixels, not objects.** Word bullets (150 at once), effects and typing feedback cost nothing measurable up to 4K; the full-screen passes (glow, text layer, ASCII) are what grow with the screen. Glow is the largest single part (about 8 fps at 5K).
+- **Limit in the code:** the drawing buffer is capped at 3840 px wide (`MAX_CANVAS_WIDTH` in `src/render/asciiStyle.ts`). On bigger screens (e.g. a 5K display) it draws at 4K and the browser scales the canvas to the full screen size. At 5K this brings it back to 60 fps.
+- **No cap on Word bullets or effects is needed.** Limits for the game to respect: none beyond the above. A real duel has far fewer than 150 Word bullets.
+- **Levers if a slower machine struggles:** turn `SCREEN_FILTERS.glow` off (the biggest saving), then lower `MAX_CANVAS_WIDTH` (e.g. 2560).
+- **Not measured:** Safari, and low-end or integrated GPUs. To check: `npm run sandbox`, set a large window or fullscreen, turn on auto-spawn with a fast spawn rate and read the FPS meter at the top left.
+
 ## The sandbox as a reference client
 
 `src/sandbox/` (open with `npm run sandbox`, page `/sandbox/`):
