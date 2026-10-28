@@ -16,6 +16,7 @@ import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
 import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
 import { PACE_PROTO } from '../view/juice/pacePrototype';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
+import { loadFastPace } from './paceCalibration';
 
 const session = new SandboxSession();
 const input = new KeyboardTypingInput();
@@ -91,17 +92,22 @@ ask.add(ATTACK_SPARKS_LOOK, 'thickness', 0.001, 0.02, 0.0005);
 ask.add(ATTACK_SPARKS_LOOK, 'length', 0.01, 0.2, 0.005);
 ask.add(ATTACK_SPARKS_LOOK, 'gravity', 0, 20, 0.5);
 
+// PROTOTYPE ("Juice: Pace-driven motion"): everything relative to the player's own Pace ("fast").
+const fast = loadFastPace();
+PACE_PROTO.fast = fast.value;
+session.enemyPace = +(0.7 * fast.value).toFixed(1);
 const pc = gui.addFolder('Pace');
+pc.add(PACE_PROTO, 'fast', 0.5, Math.max(15, Math.ceil(2 * fast.value)), 0.05).name(fast.measured ? '"fast" (your test)' : '"fast" (default, take test)');
 pc.add(session, 'measuredPace').name('your Pace (measured)').disable().listen();
-pc.add(session, 'playerPaceOverride', -1, 12, 0.1).name('your Pace override (-1 = off)');
-pc.add(session, 'enemyPace', 0, 12, 0.1).name('enemy Pace');
+pc.add(session, 'playerPaceOverride', -1, +(2 * fast.value).toFixed(1), 0.1).name('your Pace override (-1 = off)');
+pc.add(session, 'enemyPace', 0, +(2 * fast.value).toFixed(1), 0.1).name('enemy Pace');
 pc.add(STAR_DRIFT, 'motion').name('moving stars (player setting)');
 pc.add(STAR_DRIFT, 'speed').name('star speed (now)').disable().listen();
-// PROTOTYPE knobs ("Juice: Pace-driven motion")
 pc.add(PACE_PROTO, 'kind', ['A', 'B', 'C']).name('style (prototype)').listen();
-pc.add(PACE_PROTO, 'speedPerPace', 0.2, 4, 0.05).name('star speed per Pace');
-pc.add(PACE_PROTO, 'maxGap', 0.5, 10, 0.1).name('gap for max size');
+pc.add(PACE_PROTO, 'starsAtFast', 2, 40, 0.5).name('star speed at "fast"');
+pc.add(PACE_PROTO, 'maxGapOfFast', 0.1, 1.5, 0.05).name('gap for max size (× fast)');
 pc.add(PACE_PROTO, 'maxGrow', 0, 2, 0.05).name('max extra size');
+pc.add({ test: () => (location.href = '/pace-test/') }, 'test').name('take the Pace test →');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
