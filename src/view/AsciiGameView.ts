@@ -9,12 +9,13 @@ import { ENEMY_LOOK, EnemyShip } from './enemy/EnemyShip';
 import { StarDrift } from './enemy/StarDrift';
 import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
-import { HitFx } from './juice/HitFx';
+import { HIT_LOOK, HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
 import { PaceMotion } from './juice/PaceMotion';
+import { SCREEN_HIT } from '../render/ScreenFilters';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -94,6 +95,7 @@ export class AsciiGameView implements GameView {
     this.typingFeedback(state);
     this.words.update(state, this.camera, dt);
     this.hitFx.update(dt);
+    SCREEN_HIT.level = Math.max(0, SCREEN_HIT.level - dt / HIT_LOOK.flashSeconds);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
     this.paceMotion.update(state.pace, dt);
@@ -134,7 +136,10 @@ export class AsciiGameView implements GameView {
       const snap = this.words.take(event.id);
       if (snap) this.hitFx.explode(snap.center);
     }
-    if (event.type === 'lifeLost') this.hitFx.shake();
+    if (event.type === 'lifeLost') {
+      this.hitFx.shake();
+      SCREEN_HIT.level = 1;
+    }
     if (event.type === 'shotHit') this.shotHitFx.hit();
     if (event.type === 'shotDefended') this.cockpit.radar.defended(event.id);
     if (event.type === 'enemyFired') {

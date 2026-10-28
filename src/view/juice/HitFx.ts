@@ -4,18 +4,20 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 /** Live-tunable from the sandbox panel. */
 export const HIT_LOOK = {
   /** Red debris life (s) and spread (world units at the impact). */
-  boomSeconds: 0.5,
-  boomSize: 0.9,
+  boomSeconds: 0.8,
+  boomSize: 1.8,
   /** Camera shake length (s), strength (world units) and roll (radians). */
-  shakeSeconds: 0.3,
-  shake: 0.06,
-  roll: 0.04,
+  shakeSeconds: 0.7,
+  shake: 0.22,
+  roll: 0.12,
+  /** Black screen flash length (s). */
+  flashSeconds: 0.7,
   /** Wrong key: a quick horizontal "no" shake of the camera (s, world units). */
   noSeconds: 0.22,
   no: 0.05,
 };
 
-const DEBRIS_COUNT = 22;
+const DEBRIS_COUNT = 36;
 /** Debris piece radius, as a fraction of boomSize. */
 const PIECE_RADIUS = 0.06;
 

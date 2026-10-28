@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ScreenFilters, anyFilterOn } from './ScreenFilters';
 import '@fontsource/ibm-plex-mono/400.css';
 import { ASCII_STYLE, type ViewportFit } from './asciiStyle';
 import type { AsciiRenderer, PaletteColor, TextGrid } from './AsciiRenderer';
@@ -23,6 +24,8 @@ const hexToVec3 = (hex: string) => {
   return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
+type ScaledRun = { col: number; row: number; text: string; scale: number; color: PaletteColor };
+
 /** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot. */
 class DataTextGrid implements TextGrid {
   readonly cols = ASCII_STYLE.grid.cols;
@@ -35,6 +38,9 @@ class DataTextGrid implements TextGrid {
     this.texture.needsUpdate = true;
   }
 
+  /** Scaled text runs of this frame (drawn by the renderer on a canvas layer). */
+  runs: ScaledRun[] = [];
+
   private put(col: number, row: number, ch: string, color: PaletteColor) {
     if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
     // Texture row 0 is the bottom of the screen; TextGrid row 0 is the top.
@@ -42,6 +48,10 @@ class DataTextGrid implements TextGrid {
     this.data[o] = glyphIndex(ch) + 1;
     this.data[o + 1] = PALETTE[color];
     this.texture.needsUpdate = true;
+  }
+
+  writeScaled(col: number, row: number, text: string, scale: number, color: PaletteColor = 'fg') {
+    if (text) this.runs.push({ col, row, text, scale, color });
   }
 
   write(col: number, row: number, text: string, color: PaletteColor = 'fg') {
@@ -53,6 +63,7 @@ class DataTextGrid implements TextGrid {
   }
 
   clear() {
+    this.runs = [];
     this.data.fill(0);
     this.texture.needsUpdate = true;
   }
@@ -70,6 +81,7 @@ const FULLSCREEN_VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0);
  *  2. cell pass: average brightness per cell → ramp glyph; clearly red/green cells keep that accent (cellRT, 128×45)
  *  3. composite: glyph atlas at the real device cell size; TextGrid cells win over shading
  *  4. optional overlay scene drawn on top with no ASCII treatment
+ *  5. screen filters (scanlines, glow, vignette) over the whole frame, only when any is on
  */
 export class GpuAsciiRenderer implements AsciiRenderer {
   readonly canvas: HTMLCanvasElement;
@@ -79,10 +91,19 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private readonly sceneRT: THREE.WebGLRenderTarget;
   private readonly cellRT: THREE.WebGLRenderTarget;
   private atlas: THREE.CanvasTexture | null = null;
+  /** Scaled text runs: drawn on a canvas the size of the screen, laid over the frame. */
+  private runCanvas = document.createElement('canvas');
+  /** Rebuilt on every resize: WebGL fixes a texture's size at its first upload. */
+  private runTexture = new THREE.CanvasTexture(this.runCanvas);
+  private readonly runMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
+  private readonly runScene = new THREE.Scene();
+  private runSignature = '';
+  private fit: ViewportFit | null = null;
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly quad = new THREE.PlaneGeometry(2, 2);
   private readonly cellPass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
   private readonly compositePass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
+  private readonly filters: ScreenFilters;
 
   /** Use this instead of the constructor: waits for the font so the atlas is drawn with it. */
   static async create(): Promise<GpuAsciiRenderer> {
@@ -147,6 +168,9 @@ export class GpuAsciiRenderer implements AsciiRenderer {
       },
     );
 
+    this.filters = new ScreenFilters(this.quad, this.ortho);
+    this.runScene.add(new THREE.Mesh(this.quad, this.runMaterial));
+
     this.compositePass = this.pass(
       /* glsl */ `
       precision highp float;
@@ -194,10 +218,20 @@ export class GpuAsciiRenderer implements AsciiRenderer {
 
   resize(fit: ViewportFit) {
     this.gl.setSize(fit.canvasW, fit.canvasH, false);
+    this.filters.resize(fit.canvasW, fit.canvasH);
     this.buildAtlas(fit);
     const u = this.compositePass.mat.uniforms;
     u.cellDev.value.set(fit.cellW, fit.cellH);
     u.tAtlas.value = this.atlas;
+    this.fit = fit;
+    this.runTexture.dispose();
+    this.runCanvas = document.createElement('canvas');
+    this.runCanvas.width = fit.canvasW;
+    this.runCanvas.height = fit.canvasH;
+    this.runTexture = new THREE.CanvasTexture(this.runCanvas);
+    this.runMaterial.map = this.runTexture;
+    this.runMaterial.needsUpdate = true;
+    this.runSignature = ''; // repaint at the new size
   }
 
   /** One row of glyphs, each drawn into a cellW×cellH slot at the real device font size. */
@@ -218,6 +252,30 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.atlas.generateMipmaps = false;
   }
 
+  /** Redraw the scaled text runs onto their canvas, only when this frame's runs changed. */
+  private paintRuns() {
+    const fit = this.fit;
+    if (!fit) return;
+    const runs = this.textGrid.runs;
+    const sig = runs.map((r) => `${r.col},${r.row},${r.scale},${r.color},${r.text}`).join('|');
+    if (sig === this.runSignature) return;
+    this.runSignature = sig;
+    const ctx = this.runCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, this.runCanvas.width, this.runCanvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // The grid sits at the bottom-left of the canvas (same as the composite shader).
+    const top = this.runCanvas.height - ASCII_STYLE.grid.rows * fit.cellH;
+    for (const r of runs) {
+      const w = fit.cellW * r.scale;
+      const h = fit.cellH * r.scale;
+      ctx.font = `${fit.fontPx * r.scale}px "${ASCII_STYLE.font.family}"`;
+      ctx.fillStyle = ASCII_STYLE.palette[r.color];
+      [...r.text].forEach((ch, i) => ctx.fillText(ch, (r.col + i * r.scale) * fit.cellW + w / 2, top + r.row * fit.cellH + h / 2 + h / 16));
+    }
+    this.runTexture.needsUpdate = true;
+  }
+
   render(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera }) {
     const gl = this.gl;
     gl.setClearColor(0x000000, 1);
@@ -225,22 +283,32 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     gl.render(scene, camera);
     gl.setRenderTarget(this.cellRT);
     gl.render(this.cellPass.scene, this.ortho);
-    gl.setRenderTarget(null);
+    // With a filter on, the finished frame goes to a texture first; otherwise straight to screen.
+    const filtered = anyFilterOn();
+    gl.setRenderTarget(filtered ? this.filters.frameRT : null);
     gl.render(this.compositePass.scene, this.ortho);
+    this.paintRuns();
+    gl.autoClear = false;
+    gl.render(this.runScene, this.ortho);
+    gl.autoClear = true;
     if (overlay) {
       gl.autoClear = false;
       gl.render(overlay.scene, overlay.camera);
       gl.autoClear = true;
     }
+    if (filtered) this.filters.apply(gl);
   }
 
   dispose() {
     this.sceneRT.dispose();
     this.cellRT.dispose();
     this.atlas?.dispose();
+    this.runTexture.dispose();
+    this.runMaterial.dispose();
     this.textGrid.dispose();
     this.cellPass.mat.dispose();
     this.compositePass.mat.dispose();
+    this.filters.dispose();
     this.quad.dispose();
     this.gl.dispose();
   }
