@@ -1,7 +1,7 @@
 import type { Camera, Scene } from 'three';
 import type { ViewportFit } from './asciiStyle';
 
-export type PaletteColor = 'fg' | 'red' | 'green' | 'dim';
+export type PaletteColor = 'fg' | 'red' | 'green' | 'dim' | 'yellow';
 
 /**
  * Grid-locked text drawn on top of the shaded cells, same font and cell as the shading.

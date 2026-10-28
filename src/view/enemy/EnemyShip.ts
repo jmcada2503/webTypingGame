@@ -14,6 +14,8 @@ export const ENEMY_LOOK = {
 const BOB_HZ = 0.5;
 const SWAY_HZ = 0.23;
 const BANK_HZ = 0.11;
+const FLASH_SECONDS = 0.15;
+const FLASH_STRENGTH = 0.8;
 
 /**
  * The Enemy ship ("Enemy ship and space backdrop": the dart). Built from primitives:
@@ -25,6 +27,9 @@ export class EnemyShip {
   private readonly model = new THREE.Group();
   private readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   private t = 0;
+  /** Seconds of firing flash left. */
+  private flashLeft = 0;
+
   /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
   readonly effectOffset = new THREE.Vector3();
   /** Named parts, for damage effects (left / right = the player's left / right, -x / +x). */
@@ -74,6 +79,14 @@ export class EnemyShip {
     this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale);
     this.model.rotation.z = wave(BANK_HZ) * bank;
+    // Firing flash: a short emissive boost, so the hull's glyphs go denser for a moment.
+    this.flashLeft = Math.max(0, this.flashLeft - dt);
+    this.material.emissive.setScalar((this.flashLeft / FLASH_SECONDS) * FLASH_STRENGTH);
+  }
+
+  /** Flash bright for a moment (the ship just fired a Word bullet). */
+  flash() {
+    this.flashLeft = FLASH_SECONDS;
   }
 
   dispose() {

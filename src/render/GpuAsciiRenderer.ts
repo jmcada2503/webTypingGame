@@ -15,7 +15,7 @@ const GLYPH = new Map(CHARSET.map((ch, i) => [ch, i]));
 const glyphIndex = (ch: string) => GLYPH.get(ch) ?? GLYPH.get('?')!;
 
 /** Palette slots in the composite shader. */
-const PALETTE: Record<PaletteColor, number> = { fg: 0, red: 1, green: 2, dim: 3 };
+const PALETTE: Record<PaletteColor, number> = { fg: 0, red: 1, green: 2, dim: 3, yellow: 4 };
 const RAMP_MAX = 32;
 
 const hexToVec3 = (hex: string) => {
@@ -150,7 +150,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
       /* glsl */ `
       precision highp float;
       uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas;
-      uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[4]; uniform vec3 bg;
+      uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[5]; uniform vec3 bg;
       out vec4 outColor;
       void main() {
         ivec2 px = ivec2(gl_FragCoord.xy);
@@ -171,7 +171,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         tAtlas: { value: null },
         cellDev: { value: new THREE.Vector2(1, 1) },
         grid: { value: new THREE.Vector2(grid.cols, grid.rows) },
-        palette: { value: [palette.fg, palette.red, palette.green, palette.dim].map(hexToVec3) },
+        palette: { value: [palette.fg, palette.red, palette.green, palette.dim, palette.yellow].map(hexToVec3) },
         bg: { value: hexToVec3(palette.bg) },
       },
     );
