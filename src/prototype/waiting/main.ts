@@ -278,10 +278,12 @@ function drawC3(t: number) {
   put(18, 17, typed + (Math.floor(t * 2) % 2 === 0 ? '_' : ' '), 'fg');
   put(14, 20, 'ONLINE NOW', 'dim');
   put(26, 20, '128     ENGLISH 97   SPANISH 31', 'fg');
-  drawLog(14, 23, 100, 3, t);
+  // Private shows the Invite link panel, so the log is short; Public gives that space to the log.
+  drawLog(14, 23, 100, p ? 3 : 10, t);
   if (p) invitePanel(29, t);
-  centered(p ? 36 : 30, `ELAPSED ${clock(t)}`, 'fg');
-  centered(p ? 38 : 32, 'LANGUAGE: ENGLISH        [Q] CANCEL', 'dim');
+  else signalBar(14, 35, 60, t);
+  centered(p ? 36 : 38, `ELAPSED ${clock(t)}`, 'fg');
+  centered(p ? 38 : 40, 'LANGUAGE: ENGLISH        [Q] CANCEL', 'dim');
 }
 
 /** C4: sonar pings radiate across the whole screen behind a title card; log lines as captions. */
