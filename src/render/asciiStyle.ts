@@ -28,6 +28,8 @@ export const ASCII_STYLE = {
     /** Typed-word prefix match. */
     green: '#34c759',
     dim: '#5a5a5a',
+    /** Firing sparks (Enemy ship firing, Attack word fired). */
+    yellow: '#ffcc00',
   },
   lighting: {
     /** MeshLambertMaterial, white. Smooth shading by default; flat allowed per model as a style choice. */

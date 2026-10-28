@@ -175,17 +175,19 @@ export class SandboxSession implements GameSession {
 
   private onSubmit(word: string) {
     this.lastSubmitted = word;
-    if (word.normalize('NFC') === this.attackWord.normalize('NFC')) {
-      this.fireAttack();
-      return;
-    }
-    if (!this.submitDestroys) return;
     const typed = word.normalize('NFC');
-    // Several bullets may carry the same word: take the one closest to the Cockpit.
-    const hit = this.bullets
-      .filter((b) => b.word.normalize('NFC') === typed)
-      .sort((a, b) => b.flight - a.flight)[0];
-    if (hit) this.destroy(hit.id);
+    // Defending comes first: a matching Word bullet is destroyed before the Attack word fires.
+    if (this.submitDestroys) {
+      // Several bullets may carry the same word: take the one closest to the Cockpit.
+      const hit = this.bullets
+        .filter((b) => b.word.normalize('NFC') === typed)
+        .sort((a, b) => b.flight - a.flight)[0];
+      if (hit) {
+        this.destroy(hit.id);
+        return;
+      }
+    }
+    if (typed === this.attackWord.normalize('NFC')) this.fireAttack();
   }
 
   private remove(id: string, type: 'wordBulletDestroyed' | 'wordBulletArrived') {

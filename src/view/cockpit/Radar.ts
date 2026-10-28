@@ -11,6 +11,8 @@ const ENEMY = '<@>';
 /** Cell height / width: a circle needs this many more columns than rows across. */
 const CELL_ASPECT = ASCII_STYLE.referenceCell.height / ASCII_STYLE.referenceCell.width;
 const SWEEP_SPEED = 1.6; // radians / s
+/** How long a defended Shot's `x` stays on the scope (s). */
+const DEFENDED_SECONDS = 0.5;
 const v3 = new THREE.Vector3();
 
 type Box = { c0: number; r0: number; c1: number; r1: number };
@@ -29,10 +31,21 @@ export type RadarGeometry = { c0: number; r0: number; c1: number; r1: number; cx
 
 export class Radar {
   private t = 0;
+  /** Where each Shot was last drawn (scope-relative: angle + radius in R), for its defended mark. */
+  private readonly lastSeen = new Map<string, { angle: number; rad: number }>();
+  /** Defended Shots: a dim `x` where they were, for DEFENDED_SECONDS. */
+  private ghosts: { angle: number; rad: number; age: number }[] = [];
   /** Drawn last, over the scope (e.g. the Shot-hit HIT!!). */
   overlay?: (text: TextGrid, g: RadarGeometry, dt: number) => void;
 
+  private readonly pendingDefended = new Set<string>();
+
   constructor(private readonly screen: THREE.Object3D) {}
+
+  /** The opponent destroyed this Shot: it leaves a dim `x` on the scope for a moment. */
+  defended(id: string) {
+    this.pendingDefended.add(id);
+  }
 
   draw(text: TextGrid, camera: THREE.Camera, shots: ShotState[], dt: number) {
     this.t += dt;
@@ -67,11 +80,24 @@ export class Radar {
       for (let rad = 0.9; rad < R; rad += 0.35) put(cellAt(rad, a), bright ? lineGlyph(a) : '.', bright ? 'fg' : 'dim');
     }
 
+    const alive = new Set<string>();
     for (const s of shots) {
       const angle = (shotIndex(s) * 137.5 * Math.PI) / 180; // golden angle spreads Shots around
       const flight = Math.min(Math.max(s.flight, 0), 1);
-      put(cellAt(R * (1 - flight) + 0.8, angle), [...s.word][0] ?? '*', 'red');
+      const rad = (R - 0.8) * (1 - flight) + 0.8; // from the outer ring (flight 0) in to the enemy
+      put(cellAt(rad, angle), [...s.word][0] ?? '*', 'red');
+      this.lastSeen.set(s.id, { angle, rad });
+      alive.add(s.id);
     }
+    for (const id of this.lastSeen.keys()) if (!alive.has(id) && !this.pendingDefended.has(id)) this.lastSeen.delete(id);
+    for (const id of this.pendingDefended) {
+      const at = this.lastSeen.get(id);
+      if (at) this.ghosts.push({ ...at, age: 0 });
+      this.lastSeen.delete(id);
+    }
+    this.pendingDefended.clear();
+    this.ghosts = this.ghosts.filter((g) => (g.age += dt) < DEFENDED_SECONDS);
+    for (const g of this.ghosts) put(cellAt(g.rad, g.angle), 'x', 'dim');
 
     text.write(Math.floor(cx) - 1, Math.floor(cy), ENEMY, 'fg');
     this.overlay?.(text, { ...b, cx, cy, R }, dt);

@@ -15,7 +15,7 @@ const GLYPH = new Map(CHARSET.map((ch, i) => [ch, i]));
 const glyphIndex = (ch: string) => GLYPH.get(ch) ?? GLYPH.get('?')!;
 
 /** Palette slots in the composite shader. */
-const PALETTE: Record<PaletteColor, number> = { fg: 0, red: 1, green: 2, dim: 3 };
+const PALETTE: Record<PaletteColor, number> = { fg: 0, red: 1, green: 2, dim: 3, yellow: 4 };
 const RAMP_MAX = 32;
 
 const hexToVec3 = (hex: string) => {
@@ -130,10 +130,11 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         // Brightness = strongest channel, so pure red / green objects shade like white ones.
         float L = clamp(pow(clamp(max(c.r, max(c.g, c.b)) * exposure, 0.0, 1.0), gamma), 0.0, 1.0);
         int idx = int(floor(L * (float(rampLen) - 0.001)));
-        // Clearly green / red cells keep that accent (palette slot 2 / 1); everything else is fg.
+        // Clearly green / red / yellow cells keep that accent (palette slot 2 / 1 / 4); else fg.
         float pal = 0.0;
         if (c.g > 0.01 && c.g > 1.6 * c.r && c.g > 1.6 * c.b) pal = 2.0;
-        else if (c.r > 0.01 && c.r > 1.6 * c.g && c.r > 1.6 * c.b) pal = 1.0;
+        else if (c.r > 0.01 && c.g > 0.35 * c.r && c.g < 0.9 * c.r && c.r > 3.0 * c.b) pal = 4.0;
+        else if (c.r > 0.01 && c.r > 2.5 * c.g && c.r > 2.5 * c.b) pal = 1.0;
         outColor = vec4(ramp[idx] / 255.0, pal / 255.0, L, 1.0);
       }`,
       {
@@ -150,7 +151,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
       /* glsl */ `
       precision highp float;
       uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas;
-      uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[4]; uniform vec3 bg;
+      uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[5]; uniform vec3 bg;
       out vec4 outColor;
       void main() {
         ivec2 px = ivec2(gl_FragCoord.xy);
@@ -171,7 +172,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         tAtlas: { value: null },
         cellDev: { value: new THREE.Vector2(1, 1) },
         grid: { value: new THREE.Vector2(grid.cols, grid.rows) },
-        palette: { value: [palette.fg, palette.red, palette.green, palette.dim].map(hexToVec3) },
+        palette: { value: [palette.fg, palette.red, palette.green, palette.dim, palette.yellow].map(hexToVec3) },
         bg: { value: hexToVec3(palette.bg) },
       },
     );

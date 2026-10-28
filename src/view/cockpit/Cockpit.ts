@@ -4,9 +4,13 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
 import { gridRectOf, writeCentered } from './gridProjection';
 import { Radar, RADAR_SIZE } from './Radar';
+import { matchPrefix } from '../../utils/matchPrefix';
 
 const MAX_LIVES = 3;
 const CURSOR_HZ = 1;
+/** Wrong key: the Typed word shakes sideways this long (s), up to this many columns. */
+const TYPED_SHAKE_SECONDS = 0.25;
+const TYPED_SHAKE_COLS = 2;
 /** A lamp that just went out flickers this long (s) at this rate (Hz) before staying dark. */
 const LAMP_FLICKER_SECONDS = 0.6;
 const LAMP_FLICKER_HZ = 14;
@@ -39,6 +43,9 @@ export class Cockpit {
   readonly radar: Radar;
   private t = 0;
   private lastLives = -1;
+  private typedShake = 0;
+  /** Grid cell at the center of the Typed word screen (the Cockpit's center), as last drawn. */
+  readonly centerCell = { col: 0, row: 0 };
   /** Lamp index → seconds of flicker left. */
   private readonly flicker = new Map<number, number>();
 
@@ -110,6 +117,11 @@ export class Cockpit {
     this.root.add(overhead);
   }
 
+  /** A wrong key: shake the Typed word. */
+  shakeTyped() {
+    this.typedShake = TYPED_SHAKE_SECONDS;
+  }
+
   /** A label plate on the panel's top edge, in the panel's plane; drawn in the overlay. */
   private addLabel(panel: THREE.Object3D, str: string) {
     const plate = labelPlate(str, 0.05);
@@ -143,13 +155,30 @@ export class Cockpit {
     }
 
     const cursor = Math.floor(this.t * CURSOR_HZ * 2) % 2 === 0 ? '_' : ' ';
-    writeCentered(text, gridRectOf(this.typedScreen, this.camera), state.typedWord, 'fg', cursor);
+    // Wrong key: the Typed word shakes left / right for a moment (no flash).
+    this.typedShake = Math.max(0, this.typedShake - dt);
+    const fall = this.typedShake / TYPED_SHAKE_SECONDS;
+    const shift = Math.round(Math.sin(this.t * 70) * TYPED_SHAKE_COLS * fall);
+    const typedRect = gridRectOf(this.typedScreen, this.camera);
+    typedRect.c0 += shift;
+    typedRect.c1 += shift;
+    writeCentered(text, typedRect, state.typedWord, 'fg', cursor);
+    this.centerCell.col = (typedRect.c0 + typedRect.c1) / 2 - shift;
+    this.centerCell.row = (typedRect.r0 + typedRect.r1) / 2;
 
     const edge = gridRectOf(this.typedBezel, this.camera, true);
     const row = edge.r0 - 1;
     text.fill(edge.c0, row, edge.c1 - edge.c0, 1, ' ');
     text.write(edge.c0 + 1, row, 'ATTACK', 'dim');
-    text.write(edge.c1 - [...state.attackWord].length - 1, row, state.attackWord, 'red');
+    // Attack word: the letters already typed turn white as the player writes it.
+    const letters = [...state.attackWord];
+    // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
+    const len = [...state.typedWord].length;
+    const targetingBullet = len > 0 && state.wordBullets.some((b) => matchPrefix(state.typedWord, b.word) === len);
+    const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
+    const at = edge.c1 - letters.length - 1;
+    text.write(at, row, letters.slice(0, typed).join(''), 'fg');
+    text.write(at + typed, row, letters.slice(typed).join(''), 'red');
 
     this.radar.draw(text, this.camera, state.shots, dt);
   }

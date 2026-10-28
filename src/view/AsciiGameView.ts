@@ -12,6 +12,10 @@ import { WordDestroyFx } from './juice/WordDestroyFx';
 import { HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
+import { SparkBursts } from './juice/SparkBursts';
+import { AttackSparks } from './juice/AttackSparks';
+import { worldToGrid } from './cockpit/gridProjection';
+import { matchPrefix } from '../utils/matchPrefix';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -38,6 +42,12 @@ export class AsciiGameView implements GameView {
   private readonly shotHitFx: ShotHitFx;
   /** Enemy ship damage: smoke + missing pieces from enemyDamage. */
   private readonly damageFx: EnemyDamageFx;
+  /** Yellow firing sparks (Enemy ship fires, Attack word fired). */
+  private readonly sparks = new SparkBursts();
+  /** Big yellow 3D sparks from behind the Cockpit when the Attack word is fired. */
+  private readonly attackSparks: AttackSparks;
+  /** Typed word last frame, to spot correct / wrong keys. */
+  private prevTyped = '';
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -62,6 +72,7 @@ export class AsciiGameView implements GameView {
     this.hitFx = new HitFx(this.scene, this.camera);
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
+    this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -77,15 +88,36 @@ export class AsciiGameView implements GameView {
     text.clear();
     // Place Word bullets with the camera at rest, then shake: words shake with the world.
     this.hitFx.resetCamera();
-    this.words.update(state, this.camera);
+    this.typingFeedback(state);
+    this.words.update(state, this.camera, dt);
     this.hitFx.update(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
     this.damageFx.update(state.enemyDamage, dt, text);
+    this.sparks.update(dt, text);
+    this.attackSparks.update(dt);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
+  }
+
+  /**
+   * A key was added to the Typed word: if it still starts some Word bullet, those Targets' next
+   * letter pulses; if it fits no Word bullet and isn't part of the Attack word, the Typed word shakes.
+   */
+  private typingFeedback(state: GameViewState) {
+    const typed = state.typedWord;
+    const added = typed.length > this.prevTyped.length && typed.startsWith(this.prevTyped);
+    this.prevTyped = typed;
+    if (!added) return;
+    const len = [...typed].length;
+    const targets = state.wordBullets.filter((b) => matchPrefix(typed, b.word) === len);
+    targets.forEach((b) => this.words.pulse(b.id));
+    if (targets.length === 0 && matchPrefix(typed, state.attackWord) !== len) {
+      this.cockpit.shakeTyped();
+      this.hitFx.noShake();
+    }
   }
 
   trigger(event: ViewEvent) {
@@ -100,6 +132,17 @@ export class AsciiGameView implements GameView {
     }
     if (event.type === 'lifeLost') this.hitFx.shake();
     if (event.type === 'shotHit') this.shotHitFx.hit();
+    if (event.type === 'shotDefended') this.cockpit.radar.defended(event.id);
+    if (event.type === 'enemyFired') {
+      // The ship flashes and throws a ring of yellow sparks from where words launch.
+      this.enemy.flash();
+      const g = worldToGrid(this.enemy.root.position, this.camera);
+      this.sparks.burst(g.col, g.row, { count: 10, reach: 2.5 });
+    }
+    if (event.type === 'attackFired') {
+      // Big yellow sparks burst from behind the Cockpit's center toward the Enemy ship.
+      this.attackSparks.fire(this.enemy.root.position);
+    }
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
   }
@@ -121,6 +164,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.dispose();
     this.shotHitFx.dispose();
     this.damageFx.dispose();
+    this.attackSparks.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();

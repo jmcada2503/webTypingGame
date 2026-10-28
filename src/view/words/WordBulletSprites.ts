@@ -16,7 +16,11 @@ export const WORD_LOOK = {
 const EM_PX = 96;
 const FONT = `400 ${EM_PX}px "${ASCII_STYLE.font.family}"`;
 
-type Sprite = { sprite: THREE.Sprite; canvas: HTMLCanvasElement; paintedKey: string; aspect: number; word: string };
+type Sprite = { sprite: THREE.Sprite; canvas: HTMLCanvasElement; paintedKey: string; aspect: number; word: string; pulse: number };
+
+/** A correct key makes the Target's next letter swell briefly (s, extra scale). */
+const PULSE_SECONDS = 0.18;
+const PULSE_SCALE = 0.45;
 
 /** A Word bullet's last look, handed to destroy effects. */
 export type WordSnapshot = {
@@ -40,7 +44,13 @@ export class WordBulletSprites {
   private readonly tracks = new WordBulletTracks();
   private readonly sprites = new Map<string, Sprite>();
 
-  update(state: GameViewState, camera: THREE.Camera) {
+  /** Correct key: the next letter of this Target swells for a moment. */
+  pulse(id: string) {
+    const s = this.sprites.get(id);
+    if (s) s.pulse = PULSE_SECONDS;
+  }
+
+  update(state: GameViewState, camera: THREE.Camera, dt = 0) {
     this.tracks.update(state);
     const alive = new Set(state.wordBullets.map((b) => b.id));
     for (const [id, s] of this.sprites) if (!alive.has(id)) this.remove(id, s);
@@ -48,9 +58,11 @@ export class WordBulletSprites {
     for (const b of state.wordBullets) {
       const s = this.sprites.get(b.id) ?? this.add(b.id, b.word);
       const matched = matchPrefix(state.typedWord, b.word);
-      const key = `${matched}|${WORD_LOOK.border}`;
+      s.pulse = Math.max(0, s.pulse - dt);
+      const swell = 1 + PULSE_SCALE * (s.pulse / PULSE_SECONDS);
+      const key = `${matched}|${WORD_LOOK.border}|${swell.toFixed(2)}`;
       if (s.paintedKey !== key) {
-        s.aspect = paint(s.canvas, [...b.word], matched);
+        s.aspect = paint(s.canvas, [...b.word], matched, ASCII_STYLE.palette.fg, swell);
         // The canvas may have changed size: drop the GPU copy so it re-uploads.
         s.sprite.material.map!.dispose();
         s.sprite.material.map!.needsUpdate = true;
@@ -78,7 +90,7 @@ export class WordBulletSprites {
     // Transparent → three sorts sprites back to front, so nearer words draw on top.
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthTest: false }));
     this.scene.add(sprite);
-    const s = { sprite, canvas, paintedKey: '', aspect: 1, word };
+    const s = { sprite, canvas, paintedKey: '', aspect: 1, word, pulse: 0 };
     this.sprites.set(id, s);
     return s;
   }
@@ -101,7 +113,7 @@ export function paintGlyph(canvas: HTMLCanvasElement, ch: string, color: string)
 }
 
 /** Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green). */
-function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg) {
+function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg, swell = 1) {
   const g = canvas.getContext('2d')!;
   g.font = FONT;
   const advance = g.measureText('M').width;
@@ -116,10 +128,20 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, co
   const x = (i: number) => pad + i * advance;
   g.strokeStyle = ASCII_STYLE.palette.bg;
   g.lineWidth = border * 2;
-  letters.forEach((ch, i) => g.strokeText(ch, x(i), y));
-  letters.forEach((ch, i) => {
+  // The next letter to type (index `matched`) can swell (correct-key pulse), scaled about its center.
+  const draw = (i: number, op: (ch: string, px: number, py: number) => void) => {
+    const scale = i === matched ? swell : 1;
+    if (scale === 1) return op(letters[i], x(i), y);
+    g.save();
+    g.translate(x(i) + advance / 2, y);
+    g.scale(scale, scale);
+    op(letters[i], -advance / 2, 0);
+    g.restore();
+  };
+  letters.forEach((_, i) => draw(i, (ch, px, py) => g.strokeText(ch, px, py)));
+  letters.forEach((_, i) => {
     g.fillStyle = i < matched ? ASCII_STYLE.palette.green : color;
-    g.fillText(ch, x(i), y);
+    draw(i, (ch, px, py) => g.fillText(ch, px, py));
   });
   return canvas.width / canvas.height;
 }
