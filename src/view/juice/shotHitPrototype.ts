@@ -8,7 +8,7 @@ import type { EnemyShip } from '../enemy/EnemyShip';
 
 export const SHOT_HIT_VARIANTS = [
   { key: 'A', name: 'HIT!! on Radar top + spark ring; green debris + springy dip' },
-  { key: 'B', name: 'HIT!! next to <@> (green flash); green grid ring + slow sag' },
+  { key: 'B', name: 'HIT!! next to <@> (green flash); big green grid explosion + slow sag' },
   { key: 'C', name: 'Big HIT!! over the scope; ship flashes green + tilted drop' },
 ];
 export type ShotHitKind = 'A' | 'B' | 'C';
@@ -36,6 +36,7 @@ export class ShotHitFx {
   private readonly mat = new THREE.MeshBasicMaterial({ color: GREEN });
   private readonly sphere = new THREE.SphereGeometry(1, 10, 8);
   private readonly ringCenter = new THREE.Vector3();
+  private seed = 0;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -51,6 +52,7 @@ export class ShotHitFx {
     this.age = 0;
     const kind = SHOT_HIT_PROTO.kind;
     this.ringCenter.copy(this.enemy.root.position);
+    this.seed = Math.random() * 100;
     if (kind === 'A' || kind === 'C') {
       const n = kind === 'A' ? 20 : 8;
       const size = SHOT_HIT_PROTO.boomSize;
@@ -105,16 +107,27 @@ export class ShotHitFx {
   }
 
   /** Variant B: an expanding green ring of grid glyphs over the Enemy ship. */
+  /**
+   * Variant B: a big filled green explosion of grid glyphs over the Enemy ship. Dense at the
+   * center (@ #), lighter outward (* + .); it grows fast, then thins out and breaks apart.
+   */
   private drawShipRing(text: TextGrid, k: number) {
     const { cols, rows } = ASCII_STYLE.grid;
     tmp.copy(this.ringCenter).project(this.camera);
     const col = ((tmp.x + 1) / 2) * cols;
     const row = ((1 - tmp.y) / 2) * rows;
-    const r = 1 + 7 * Math.sqrt(k);
-    const ch = k < 0.3 ? '@' : k < 0.6 ? '*' : '+';
-    for (let deg = 0; deg < 360; deg += Math.max(6, 40 / r)) {
-      const a = (deg * Math.PI) / 180;
-      text.write(Math.floor(col + Math.cos(a) * r * CELL_ASPECT), Math.floor(row - Math.sin(a) * r), ch, 'green');
+    const R = SHOT_HIT_PROTO.boomSize * 2.6 * Math.min(1, Math.sqrt(k / 0.35)); // radius in rows
+    const ramp = '.+*#@';
+    for (let r = Math.floor(row - R) - 1; r <= row + R + 1; r++) {
+      for (let c = Math.floor(col - R * CELL_ASPECT) - 1; c <= col + R * CELL_ASPECT + 1; c++) {
+        const d = Math.hypot((c + 0.5 - col) / CELL_ASPECT, r + 0.5 - row) / Math.max(R, 0.01);
+        if (d > 1) continue;
+        // Stable per-cell noise so the shape is ragged and breaks up instead of shrinking evenly.
+        const n = Math.abs(Math.sin(c * 12.9898 + r * 78.233 + this.seed) * 43758.5453) % 1;
+        const heat = (1 - d) * (1.2 - k) + n * 0.35 - k * 0.6;
+        if (heat <= 0.05) continue;
+        text.write(c, r, ramp[Math.min(ramp.length - 1, Math.floor(heat * ramp.length))], 'green');
+      }
     }
   }
 
