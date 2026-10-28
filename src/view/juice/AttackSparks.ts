@@ -3,15 +3,15 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 
 /** Live-tunable from the sandbox panel. */
 export const ATTACK_SPARKS_LOOK = {
-  count: 16,
+  count: 40,
   /** Life (s) and how far they fly (fraction of the way to the Enemy ship). */
-  seconds: 0.35,
-  reach: 0.15,
+  seconds: 0.25,
+  reach: 0.05,
   /** Streak thickness and length, per unit of distance from the camera (thin + short = spark). */
-  thickness: 0.0065,
-  length: 0.055,
+  thickness: 0.0025,
+  length: 0.01,
   /** Downward pull (world units / s²) so sparks arc a little as they fly. */
-  gravity: 6,
+  gravity: 0,
 };
 
 /** Where the sparks start: the Cockpit's center, just behind the yoke (camera-local), so it hides them. */
