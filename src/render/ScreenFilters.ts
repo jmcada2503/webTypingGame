@@ -13,11 +13,25 @@ export const SCREEN_FILTERS = {
   glowRadius: 1.5,
   /** Brightness (0..1) a pixel needs before it glows. */
   glowThreshold: 0.25,
-  /** Darker corners, 0 = off. */
+  /** Darker edges and corners, 0 = off. */
   vignette: 0,
+  /** Old-monitor screen bulge (0 = flat); the picture sits inside a rounded, curved frame. */
+  curvature: 0,
+  /** Rounded screen corners, as a fraction of the screen height. */
+  cornerRadius: 0.06,
+  /** Red / blue fringes (device px at the screen edges). */
+  aberration: 0,
+  /** Tube glass: a faint gray inside the screen so its curved shape shows on black. */
+  glass: 0,
+  /** Grain and brightness flicker, 0 = off. */
+  noise: 0,
+  flicker: 0,
 };
 
-export const anyFilterOn = () => SCREEN_FILTERS.scanlines || SCREEN_FILTERS.glow || SCREEN_FILTERS.vignette > 0;
+export const anyFilterOn = () => {
+  const f = SCREEN_FILTERS;
+  return f.scanlines || f.glow || f.vignette > 0 || f.curvature > 0 || f.aberration > 0 || f.noise > 0 || f.flicker > 0 || f.glass > 0;
+};
 
 const VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
@@ -74,11 +88,39 @@ export class ScreenFilters {
       precision highp float;
       uniform sampler2D tFrame; uniform sampler2D tGlow; uniform vec2 res;
       uniform float glow; uniform float scan; uniform float scanPeriod; uniform float vignette;
+      uniform float curvature; uniform float cornerRadius; uniform float aberration;
+      uniform float noise; uniform float flicker; uniform float time; uniform float glass;
       out vec4 outColor;
+
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
       void main() {
-        vec2 uv = gl_FragCoord.xy / res;
-        vec3 c = texture(tFrame, uv).rgb;
+        vec2 screenUv = gl_FragCoord.xy / res;
+        // Barrel bulge: the picture shrinks toward its corners inside a curved frame.
+        vec2 cc = screenUv - 0.5;
+        vec2 uv = cc * (1.0 + curvature * dot(cc, cc)) + 0.5;
+        // Rounded-rectangle screen edge (in picture space, so the frame curves with the bulge).
+        float aspect = res.x / res.y;
+        vec2 q = abs(uv - 0.5) * vec2(aspect, 1.0);
+        vec2 halfSize = vec2(0.5 * aspect, 0.5);
+        float rad = cornerRadius;
+        vec2 dq = q - (halfSize - rad);
+        float dist = length(max(dq, 0.0)) + min(max(dq.x, dq.y), 0.0) - rad;
+        float inside = curvature > 0.0 ? 1.0 - smoothstep(-1.5 / res.y, 1.5 / res.y, dist) : 1.0;
+        if (inside <= 0.0) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+
+        vec3 c;
+        if (aberration > 0.0) {
+          // Fringes grow toward the edges, mostly sideways.
+          vec2 dir = vec2(cc.x * 2.0, cc.y * 0.6) * aberration / res;
+          c = vec3(texture(tFrame, uv + dir).r, texture(tFrame, uv).g, texture(tFrame, uv - dir).b);
+          c += 0.35 * vec3(0.0, 0.0, texture(tFrame, uv + dir * 1.5).b) + 0.35 * vec3(texture(tFrame, uv - dir * 1.5).r, 0.0, 0.0);
+        } else {
+          c = texture(tFrame, uv).rgb;
+        }
         c += texture(tGlow, uv).rgb * glow;
+        // Tube glass: dark gray, a touch blue-green, so the screen reads as a lit tube.
+        c += glass * vec3(0.85, 1.0, 0.95);
         if (scan > 0.0) {
           // Smooth dark band once per period; brighten a little so the screen doesn't just dim.
           float y = mod(gl_FragCoord.y, scanPeriod) / scanPeriod;
@@ -86,10 +128,14 @@ export class ScreenFilters {
           c *= (1.0 - scan * band) * (1.0 + scan * 0.35);
         }
         if (vignette > 0.0) {
-          vec2 d = uv - 0.5;
-          c *= clamp(1.0 - vignette * dot(d, d) * 2.5, 0.0, 1.0);
+          // Darker toward the edges, strongest in the corners (old tube falloff).
+          vec2 e = uv * (1.0 - uv.yx);
+          float v = pow(clamp(e.x * e.y * 16.0, 0.0, 1.0), 0.6 * vignette);
+          c *= mix(1.0, v, clamp(vignette, 0.0, 1.0));
         }
-        outColor = vec4(c, 1.0);
+        if (noise > 0.0) c += (hash(gl_FragCoord.xy + fract(time) * 100.0) - 0.5) * noise;
+        if (flicker > 0.0) c *= 1.0 + flicker * sin(time * 60.0) * 0.5 + flicker * (hash(vec2(floor(time * 24.0), 3.0)) - 0.5);
+        outColor = vec4(max(c, 0.0) * inside, 1.0);
       }`,
       {
         tFrame: { value: this.frameRT.texture },
@@ -99,6 +145,13 @@ export class ScreenFilters {
         scan: { value: 0 },
         scanPeriod: { value: 3 },
         vignette: { value: 0 },
+        curvature: { value: 0 },
+        cornerRadius: { value: 0.06 },
+        aberration: { value: 0 },
+        noise: { value: 0 },
+        flicker: { value: 0 },
+        time: { value: 0 },
+        glass: { value: 0 },
       },
     );
   }
@@ -152,6 +205,13 @@ export class ScreenFilters {
     fu.scan.value = f.scanlines ? f.scanStrength : 0;
     fu.scanPeriod.value = Math.max(2, f.scanPeriod);
     fu.vignette.value = f.vignette;
+    fu.curvature.value = f.curvature;
+    fu.cornerRadius.value = f.cornerRadius;
+    fu.aberration.value = f.aberration;
+    fu.noise.value = f.noise;
+    fu.flicker.value = f.flicker;
+    fu.glass.value = f.glass;
+    fu.time.value = (performance.now() / 1000) % 1000;
     gl.setRenderTarget(null);
     gl.render(this.final.scene, this.ortho);
   }

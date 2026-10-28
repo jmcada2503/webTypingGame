@@ -115,7 +115,13 @@ sf.add(SCREEN_FILTERS, 'glow').listen();
 sf.add(SCREEN_FILTERS, 'glowStrength', 0, 3, 0.05).name('glow strength').listen();
 sf.add(SCREEN_FILTERS, 'glowRadius', 0.5, 6, 0.1).name('glow radius').listen();
 sf.add(SCREEN_FILTERS, 'glowThreshold', 0, 1, 0.01).name('glow threshold').listen();
-sf.add(SCREEN_FILTERS, 'vignette', 0, 1, 0.01).listen();
+sf.add(SCREEN_FILTERS, 'vignette', 0, 1, 0.01).name('dark edges').listen();
+sf.add(SCREEN_FILTERS, 'curvature', 0, 1, 0.01).name('screen curve').listen();
+sf.add(SCREEN_FILTERS, 'cornerRadius', 0, 0.3, 0.005).name('corner roundness').listen();
+sf.add(SCREEN_FILTERS, 'aberration', 0, 10, 0.1).name('color fringes (px)').listen();
+sf.add(SCREEN_FILTERS, 'glass', 0, 0.2, 0.005).name('tube glass').listen();
+sf.add(SCREEN_FILTERS, 'noise', 0, 0.3, 0.005).name('grain').listen();
+sf.add(SCREEN_FILTERS, 'flicker', 0, 0.2, 0.005).listen();
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
