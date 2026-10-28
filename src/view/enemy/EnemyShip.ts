@@ -32,6 +32,8 @@ export class EnemyShip {
 
   /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
   readonly effectOffset = new THREE.Vector3();
+  /** Extra size multiplier on top of ENEMY_LOOK.scale (effects like Pace distance). */
+  effectScale = 1;
   /** Named parts, for damage effects (left / right = the player's left / right, -x / +x). */
   readonly parts = {} as Record<'hull' | 'wingL' | 'wingR' | 'engineL' | 'engineR', THREE.Mesh>;
 
@@ -77,7 +79,7 @@ export class EnemyShip {
     const wave = (hz: number) => Math.sin(this.t * hz * Math.PI * 2);
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
     this.root.position.add(this.effectOffset);
-    this.root.scale.setScalar(scale);
+    this.root.scale.setScalar(scale * this.effectScale);
     this.model.rotation.z = wave(BANK_HZ) * bank;
     // Firing flash: a short emissive boost, so the hull's glyphs go denser for a moment.
     this.flashLeft = Math.max(0, this.flashLeft - dt);

@@ -13,6 +13,9 @@ export const SAMPLE_WORDS = [
  * no Lives. Sandbox shortcut (toggle `submitDestroys`): submitting a word destroys the
  * closest Word bullet with exactly that word, so any bullet can be destroyed, not just the oldest.
  */
+/** Pace smoothing window (s). */
+const PACE_SMOOTHING_SECONDS = 2;
+
 export class SandboxSession implements GameSession {
   status: SessionStatus = 'idle';
 
@@ -36,6 +39,13 @@ export class SandboxSession implements GameSession {
   newAttackWordOnFire = true;
   /** Enemy ship damage, 0..1 (panel slider). */
   enemyDamage = 0;
+  /** Enemy Pace (chars/s), panel slider. */
+  enemyPace = 4;
+  /** Player Pace override (chars/s); below 0 = measure real typing. */
+  playerPaceOverride = -1;
+  /** Measured player Pace (chars/s, smoothed). */
+  measuredPace = 0;
+  private charsThisFrame = 0;
   /** Sandbox shortcut: each Shot that hits adds this much damage (0 = off). */
   damagePerHit = 0.5;
 
@@ -61,12 +71,23 @@ export class SandboxSession implements GameSession {
   attachInput(input: TypingInput) {
     this.typed = input.typedWord;
     this.unsubs.push(
-      input.onChange((w) => (this.typed = w)),
+      input.onChange((w) => {
+        // Count characters added (not deletions) for the player's Pace.
+        const added = [...w].length - [...this.typed].length;
+        if (added > 0) this.charsThisFrame += added;
+        this.typed = w;
+      }),
       input.onSubmit((w) => this.onSubmit(w)),
     );
   }
 
   update(dt: number): ViewEvent[] {
+    // Pace: chars/s, exponentially smoothed over ~2 s.
+    if (dt > 0) {
+      const rate = this.charsThisFrame / dt;
+      this.measuredPace += (rate - this.measuredPace) * (1 - Math.exp(-dt / PACE_SMOOTHING_SECONDS));
+    }
+    this.charsThisFrame = 0;
     const advance = this.paused ? (this.stepOnce ? 1 / 60 : 0) : dt;
     this.stepOnce = false;
     if (advance > 0) {
@@ -92,6 +113,7 @@ export class SandboxSession implements GameSession {
       wordBullets: this.bullets.map((b) => ({ ...b })),
       shots: this.shots.map((s) => ({ ...s })),
       enemyDamage: this.enemyDamage,
+      pace: { player: this.playerPaceOverride >= 0 ? this.playerPaceOverride : this.measuredPace, enemy: this.enemyPace },
     };
   }
 

@@ -29,6 +29,8 @@ export interface GameViewState {
   shots: ShotState[];
   /** How damaged the Enemy ship is: 0 = intact, 1 = about to be destroyed. */
   enemyDamage: number;
+  /** Each player's Pace: characters per second, smoothed over ~2 s. */
+  pace: { player: number; enemy: number };
 }
 
 /**
