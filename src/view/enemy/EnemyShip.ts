@@ -23,10 +23,14 @@ const BANK_HZ = 0.11;
 export class EnemyShip {
   readonly root = new THREE.Group();
   private readonly model = new THREE.Group();
-  private readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   private t = 0;
   /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
   readonly effectOffset = new THREE.Vector3();
+  /** Extra roll added to the banking (effects like damage wobble). */
+  effectRoll = 0;
+  /** Named parts, for damage effects (left / right = the player's left / right). */
+  readonly parts = {} as Record<'hull' | 'wingL' | 'wingR' | 'engineL' | 'engineR', THREE.Mesh>;
 
   constructor() {
     const mesh = (geo: THREE.BufferGeometry) => new THREE.Mesh(geo, this.material);
@@ -47,6 +51,7 @@ export class EnemyShip {
       wing.scale.x = side;
       wing.position.y = -0.1;
       this.model.add(wing);
+      this.parts[side > 0 ? 'wingR' : 'wingL'] = wing;
     }
 
     for (const x of [-1.1, 1.1]) {
@@ -54,9 +59,11 @@ export class EnemyShip {
       engine.rotation.x = Math.PI / 2;
       engine.position.set(x, 0.2, -1.6);
       this.model.add(engine);
+      this.parts[x > 0 ? 'engineR' : 'engineL'] = engine;
     }
 
     this.model.add(hull);
+    this.parts.hull = hull;
     this.model.rotation.x = 0.45; // nose dipped so the player sees its back
     this.root.add(this.model);
   }
@@ -68,7 +75,7 @@ export class EnemyShip {
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
     this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale);
-    this.model.rotation.z = wave(BANK_HZ) * bank;
+    this.model.rotation.z = wave(BANK_HZ) * bank + this.effectRoll;
   }
 
   dispose() {

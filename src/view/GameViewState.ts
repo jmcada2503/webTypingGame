@@ -27,6 +27,8 @@ export interface GameViewState {
   wordBullets: WordBulletState[];
   /** The player's Shots still flying, shown on the Radar. */
   shots: ShotState[];
+  /** How damaged the Enemy ship is: 0 = intact, 1 = about to be destroyed. */
+  enemyDamage: number;
 }
 
 /**

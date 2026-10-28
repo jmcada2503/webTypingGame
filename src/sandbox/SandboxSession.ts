@@ -34,6 +34,10 @@ export class SandboxSession implements GameSession {
   shotFlightSeconds = 5;
   /** After firing, the Attack word changes to a random sample word. */
   newAttackWordOnFire = true;
+  /** Enemy ship damage, 0..1 (panel slider). */
+  enemyDamage = 0;
+  /** Sandbox shortcut: each Shot that hits adds this much damage (0 = off). */
+  damagePerHit = 0.25;
 
   private typed = '';
   private bullets: WordBulletState[] = [];
@@ -87,6 +91,7 @@ export class SandboxSession implements GameSession {
       attackWord: this.attackWord,
       wordBullets: this.bullets.map((b) => ({ ...b })),
       shots: this.shots.map((s) => ({ ...s })),
+      enemyDamage: this.enemyDamage,
     };
   }
 
@@ -165,6 +170,7 @@ export class SandboxSession implements GameSession {
   private removeShot(id: string, type: 'shotHit' | 'shotDefended') {
     this.shots = this.shots.filter((s) => s.id !== id);
     this.pending.push({ type, id });
+    if (type === 'shotHit') this.enemyDamage = Math.min(1, this.enemyDamage + this.damagePerHit);
   }
 
   private onSubmit(word: string) {
