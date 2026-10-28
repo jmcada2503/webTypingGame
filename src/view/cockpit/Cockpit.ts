@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
-import { gridRectOf, writeCentered } from './gridProjection';
+import { gridRectOf, writeCenteredBig } from './gridProjection';
 import { Radar, RADAR_SIZE } from './Radar';
 import { matchPrefix } from '../../utils/matchPrefix';
 
@@ -12,7 +12,7 @@ const CURSOR_HZ = 1;
 const TYPED_SHAKE_SECONDS = 0.25;
 const TYPED_SHAKE_COLS = 2;
 /** A lamp that just went out flickers this long (s) at this rate (Hz) before staying dark. */
-const LAMP_FLICKER_SECONDS = 0.6;
+const LAMP_FLICKER_SECONDS = 1.2;
 const LAMP_FLICKER_HZ = 14;
 
 /**
@@ -162,23 +162,23 @@ export class Cockpit {
     const typedRect = gridRectOf(this.typedScreen, this.camera);
     typedRect.c0 += shift;
     typedRect.c1 += shift;
-    writeCentered(text, typedRect, state.typedWord, 'fg', cursor);
+    writeCenteredBig(text, typedRect, state.typedWord, 'fg', cursor);
     this.centerCell.col = (typedRect.c0 + typedRect.c1) / 2 - shift;
     this.centerCell.row = (typedRect.r0 + typedRect.r1) / 2;
 
     const edge = gridRectOf(this.typedBezel, this.camera, true);
-    const row = edge.r0 - 1;
-    text.fill(edge.c0, row, edge.c1 - edge.c0, 1, ' ');
-    text.write(edge.c0 + 1, row, 'ATTACK', 'dim');
+    const row = edge.r0 - 2; // double-size text: this row and the one below
+    text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' ');
+    text.writeBig(edge.c0 + 1, row, 'ATTACK', 'dim');
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
     const len = [...state.typedWord].length;
     const targetingBullet = len > 0 && state.wordBullets.some((b) => matchPrefix(state.typedWord, b.word) === len);
     const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
-    const at = edge.c1 - letters.length - 1;
-    text.write(at, row, letters.slice(0, typed).join(''), 'fg');
-    text.write(at + typed, row, letters.slice(typed).join(''), 'red');
+    const at = edge.c1 - letters.length * 2 - 1;
+    text.writeBig(at, row, letters.slice(0, typed).join(''), 'fg');
+    text.writeBig(at + typed * 2, row, letters.slice(typed).join(''), 'red');
 
     this.radar.draw(text, this.camera, state.shots, dt);
   }

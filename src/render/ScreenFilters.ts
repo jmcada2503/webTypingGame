@@ -3,34 +3,37 @@ import * as THREE from 'three';
 /** Live-tunable from the sandbox panel ("Juice: Screen filters"). */
 export const SCREEN_FILTERS = {
   /** Old-monitor scanlines: dark horizontal bands every `scanPeriod` device pixels. */
-  scanlines: false,
-  scanStrength: 0.35,
-  scanPeriod: 3,
+  scanlines: true,
+  scanStrength: 0.4,
+  scanPeriod: 4,
   /** Glow (bloom) around bright areas. */
-  glow: false,
-  glowStrength: 0.9,
+  glow: true,
+  glowStrength: 1.1,
   /** Blur spread, in half-resolution texels. */
-  glowRadius: 1.5,
+  glowRadius: 2.5,
   /** Brightness (0..1) a pixel needs before it glows. */
-  glowThreshold: 0.25,
+  glowThreshold: 0.15,
   /** Darker edges and corners, 0 = off. */
-  vignette: 0,
+  vignette: 0.9,
   /** Old-monitor screen bulge (0 = flat); the picture sits inside a rounded, curved frame. */
-  curvature: 0,
+  curvature: 0.35,
   /** Rounded screen corners, as a fraction of the screen height. */
-  cornerRadius: 0.06,
+  cornerRadius: 0.09,
   /** Red / blue fringes (device px at the screen edges). */
-  aberration: 0,
+  aberration: 4,
   /** Tube glass: a faint gray inside the screen so its curved shape shows on black. */
-  glass: 0,
+  glass: 0.06,
   /** Grain and brightness flicker, 0 = off. */
-  noise: 0,
-  flicker: 0,
+  noise: 0.08,
+  flicker: 0.04,
 };
+
+/** One-off screen flash (0..1), e.g. when a life is lost: red glow at the edges + stronger color fringes. */
+export const SCREEN_HIT = { level: 0 };
 
 export const anyFilterOn = () => {
   const f = SCREEN_FILTERS;
-  return f.scanlines || f.glow || f.vignette > 0 || f.curvature > 0 || f.aberration > 0 || f.noise > 0 || f.flicker > 0 || f.glass > 0;
+  return f.scanlines || f.glow || f.vignette > 0 || f.curvature > 0 || f.aberration > 0 || f.noise > 0 || f.flicker > 0 || f.glass > 0 || SCREEN_HIT.level > 0;
 };
 
 const VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -89,7 +92,7 @@ export class ScreenFilters {
       uniform sampler2D tFrame; uniform sampler2D tGlow; uniform vec2 res;
       uniform float glow; uniform float scan; uniform float scanPeriod; uniform float vignette;
       uniform float curvature; uniform float cornerRadius; uniform float aberration;
-      uniform float noise; uniform float flicker; uniform float time; uniform float glass;
+      uniform float noise; uniform float flicker; uniform float time; uniform float glass; uniform float hit;
       out vec4 outColor;
 
       float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -112,7 +115,7 @@ export class ScreenFilters {
         vec3 c;
         if (aberration > 0.0) {
           // Fringes grow toward the edges, mostly sideways.
-          vec2 dir = vec2(cc.x * 2.0, cc.y * 0.6) * aberration / res;
+          vec2 dir = vec2(cc.x * 2.0, cc.y * 0.6) * (aberration * (1.0 + hit * 3.0)) / res;
           c = vec3(texture(tFrame, uv + dir).r, texture(tFrame, uv).g, texture(tFrame, uv - dir).b);
           c += 0.35 * vec3(0.0, 0.0, texture(tFrame, uv + dir * 1.5).b) + 0.35 * vec3(texture(tFrame, uv - dir * 1.5).r, 0.0, 0.0);
         } else {
@@ -135,6 +138,12 @@ export class ScreenFilters {
         }
         if (noise > 0.0) c += (hash(gl_FragCoord.xy + fract(time) * 100.0) - 0.5) * noise;
         if (flicker > 0.0) c *= 1.0 + flicker * sin(time * 60.0) * 0.5 + flicker * (hash(vec2(floor(time * 24.0), 3.0)) - 0.5);
+        if (hit > 0.0) {
+          // Life lost: the whole screen flushes red, strongest toward the edges.
+          float edge = clamp(length(cc) * 1.8, 0.0, 1.0);
+          c = mix(c, vec3(max(c.r, 0.15) * 1.6, c.g * 0.35, c.b * 0.35), hit * 0.6);
+          c += vec3(0.55, 0.0, 0.0) * hit * (0.25 + 0.75 * edge * edge);
+        }
         outColor = vec4(max(c, 0.0) * inside, 1.0);
       }`,
       {
@@ -152,6 +161,7 @@ export class ScreenFilters {
         flicker: { value: 0 },
         time: { value: 0 },
         glass: { value: 0 },
+        hit: { value: 0 },
       },
     );
   }
@@ -211,6 +221,7 @@ export class ScreenFilters {
     fu.noise.value = f.noise;
     fu.flicker.value = f.flicker;
     fu.glass.value = f.glass;
+    fu.hit.value = SCREEN_HIT.level;
     fu.time.value = (performance.now() / 1000) % 1000;
     gl.setRenderTarget(null);
     gl.render(this.final.scene, this.ortho);

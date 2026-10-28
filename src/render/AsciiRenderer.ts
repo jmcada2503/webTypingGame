@@ -11,6 +11,8 @@ export interface TextGrid {
   readonly cols: number;
   readonly rows: number;
   write(col: number, row: number, text: string, color?: PaletteColor): void;
+  /** Double-size text: each character covers 2×2 cells (col, row = top-left; advances 2 columns per character). */
+  writeBig(col: number, row: number, text: string, color?: PaletteColor): void;
   /** Fill a rectangle with one character (' ' blanks the shading underneath). */
   fill(col: number, row: number, width: number, height: number, char?: string, color?: PaletteColor): void;
   clear(): void;

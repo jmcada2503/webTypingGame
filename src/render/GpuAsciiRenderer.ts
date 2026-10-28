@@ -24,7 +24,7 @@ const hexToVec3 = (hex: string) => {
   return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
-/** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot. */
+/** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot, b = quarter of a double-size glyph (0 = normal, 1..4 = TL TR BL BR). */
 class DataTextGrid implements TextGrid {
   readonly cols = ASCII_STYLE.grid.cols;
   readonly rows = ASCII_STYLE.grid.rows;
@@ -36,13 +36,20 @@ class DataTextGrid implements TextGrid {
     this.texture.needsUpdate = true;
   }
 
-  private put(col: number, row: number, ch: string, color: PaletteColor) {
+  private put(col: number, row: number, ch: string, color: PaletteColor, quarter = 0) {
     if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
     // Texture row 0 is the bottom of the screen; TextGrid row 0 is the top.
     const o = ((this.rows - 1 - row) * this.cols + col) * 4;
     this.data[o] = glyphIndex(ch) + 1;
     this.data[o + 1] = PALETTE[color];
+    this.data[o + 2] = quarter;
     this.texture.needsUpdate = true;
+  }
+
+  writeBig(col: number, row: number, text: string, color: PaletteColor = 'fg') {
+    [...text].forEach((ch, i) => {
+      for (let q = 0; q < 4; q++) this.put(col + i * 2 + (q & 1), row + (q >> 1), ch, color, q + 1);
+    });
   }
 
   write(col: number, row: number, text: string, color: PaletteColor = 'fg') {
@@ -81,6 +88,8 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private readonly sceneRT: THREE.WebGLRenderTarget;
   private readonly cellRT: THREE.WebGLRenderTarget;
   private atlas: THREE.CanvasTexture | null = null;
+  /** Same glyphs at twice the size, for double-size text. */
+  private atlasBig: THREE.CanvasTexture | null = null;
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly quad = new THREE.PlaneGeometry(2, 2);
   private readonly cellPass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
@@ -155,7 +164,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.compositePass = this.pass(
       /* glsl */ `
       precision highp float;
-      uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas;
+      uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas; uniform sampler2D tAtlasBig;
       uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[5]; uniform vec3 bg;
       out vec4 outColor;
       void main() {
@@ -168,13 +177,23 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         vec4 t = texelFetch(tText, c, 0);
         if (t.r > 0.0) { glyph = t.r * 255.0 - 1.0; pal = int(t.g * 255.0 + 0.5); }
         ivec2 local = px - c * cellDev;
-        float a = texelFetch(tAtlas, ivec2(int(glyph + 0.5) * cellDev.x + local.x, local.y), 0).a;
+        int q = int(t.b * 255.0 + 0.5);
+        float a;
+        if (t.r > 0.0 && q > 0) {
+          // Double-size glyph: this cell shows one quarter (1..4 = TL TR BL BR) of the 2x atlas slot.
+          int qx = (q - 1) & 1;
+          int qy = (q - 1) >> 1;
+          a = texelFetch(tAtlasBig, ivec2(int(glyph + 0.5) * cellDev.x * 2 + qx * cellDev.x + local.x, (1 - qy) * cellDev.y + local.y), 0).a;
+        } else {
+          a = texelFetch(tAtlas, ivec2(int(glyph + 0.5) * cellDev.x + local.x, local.y), 0).a;
+        }
         outColor = vec4(mix(bg, palette[pal], a), 1.0);
       }`,
       {
         tCells: { value: this.cellRT.texture },
         tText: { value: this.textGrid.texture },
         tAtlas: { value: null },
+        tAtlasBig: { value: null },
         cellDev: { value: new THREE.Vector2(1, 1) },
         grid: { value: new THREE.Vector2(grid.cols, grid.rows) },
         palette: { value: [palette.fg, palette.red, palette.green, palette.dim, palette.yellow].map(hexToVec3) },
@@ -204,24 +223,34 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     const u = this.compositePass.mat.uniforms;
     u.cellDev.value.set(fit.cellW, fit.cellH);
     u.tAtlas.value = this.atlas;
+    u.tAtlasBig.value = this.atlasBig;
   }
 
   /** One row of glyphs, each drawn into a cellW×cellH slot at the real device font size. */
   private buildAtlas(fit: ViewportFit) {
-    const { cellW, cellH } = fit;
+    this.atlas?.dispose();
+    this.atlasBig?.dispose();
+    this.atlas = this.atlasTexture(fit, 1);
+    this.atlasBig = this.atlasTexture(fit, 2);
+  }
+
+  /** Glyph slots of (scale × cell) size, drawn at scale × the device font size. */
+  private atlasTexture(fit: ViewportFit, scale: number) {
+    const w = fit.cellW * scale;
+    const h = fit.cellH * scale;
     const cv = document.createElement('canvas');
-    cv.width = cellW * CHARSET.length;
-    cv.height = cellH;
+    cv.width = w * CHARSET.length;
+    cv.height = h;
     const ctx = cv.getContext('2d')!;
-    ctx.font = `${fit.fontPx}px "${ASCII_STYLE.font.family}"`;
+    ctx.font = `${fit.fontPx * scale}px "${ASCII_STYLE.font.family}"`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    CHARSET.forEach((ch, i) => ctx.fillText(ch, i * cellW + cellW / 2, cellH / 2 + cellH / 16));
-    this.atlas?.dispose();
-    this.atlas = new THREE.CanvasTexture(cv);
-    this.atlas.minFilter = this.atlas.magFilter = THREE.NearestFilter;
-    this.atlas.generateMipmaps = false;
+    CHARSET.forEach((ch, i) => ctx.fillText(ch, i * w + w / 2, h / 2 + h / 16));
+    const tex = new THREE.CanvasTexture(cv);
+    tex.minFilter = tex.magFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    return tex;
   }
 
   render(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera }) {
@@ -247,6 +276,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.sceneRT.dispose();
     this.cellRT.dispose();
     this.atlas?.dispose();
+    this.atlasBig?.dispose();
     this.textGrid.dispose();
     this.cellPass.mat.dispose();
     this.compositePass.mat.dispose();

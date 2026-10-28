@@ -29,6 +29,13 @@ export function gridRectOf(obj: THREE.Object3D, camera: THREE.Camera, round = fa
 }
 
 /** Write `str` centered on both axes of a fractional rect; `suffix` follows it without shifting it. */
+/** Like writeCentered, but double-size (2×2 cells per character). */
+export function writeCenteredBig(text: TextGrid, rect: GridRect, str: string, color: PaletteColor, suffix = '') {
+  const col = Math.round((rect.c0 + rect.c1) / 2 - [...str + suffix].length);
+  const row = Math.round((rect.r0 + rect.r1) / 2 - 1);
+  text.writeBig(col, row, str + suffix, color);
+}
+
 export function writeCentered(text: TextGrid, rect: GridRect, str: string, color: PaletteColor, suffix = '') {
   const col = Math.round((rect.c0 + rect.c1) / 2 - [...str].length / 2);
   const row = Math.round((rect.r0 + rect.r1) / 2 - 0.5);
