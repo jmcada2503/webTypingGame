@@ -14,6 +14,7 @@ import { HIT_LOOK } from '../view/juice/HitFx';
 import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
 import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
+import { PACE_LOOK } from '../view/juice/PaceMotion';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -58,7 +59,6 @@ en.add(ENEMY_LOOK.position, 'z', -70, -5, 0.5).name('position z');
 en.add(ENEMY_LOOK, 'bob', 0, 2, 0.05);
 en.add(ENEMY_LOOK, 'sway', 0, 3, 0.05);
 en.add(ENEMY_LOOK, 'bank', 0, 1, 0.01);
-en.add(STAR_DRIFT, 'speed', 0, 40, 0.5).name('star speed');
 
 const dx = gui.addFolder('Destroy effect');
 dx.add(DESTROY_LOOK, 'shardSpeed', 2, 30, 0.5).name('shard speed');
@@ -90,6 +90,21 @@ ask.add(ATTACK_SPARKS_LOOK, 'reach', 0.05, 1, 0.01);
 ask.add(ATTACK_SPARKS_LOOK, 'thickness', 0.001, 0.02, 0.0005);
 ask.add(ATTACK_SPARKS_LOOK, 'length', 0.01, 0.2, 0.005);
 ask.add(ATTACK_SPARKS_LOOK, 'gravity', 0, 20, 0.5);
+
+const pc = gui.addFolder('Pace');
+pc.add(session, 'measuredPace').name('your Pace, chars/s').disable().listen();
+pc.add(session, 'playerPaceOverride', -1, 10, 0.1).name('your Pace override (-1 = off)');
+pc.add(session, 'enemyPace', 0, 10, 0.1).name('enemy Pace, chars/s');
+pc.add(STAR_DRIFT, 'motion').name('moving stars (player setting)');
+pc.add(STAR_DRIFT, 'speed').name('star speed (now)').disable().listen();
+pc.add(PACE_LOOK, 'fast', 1, 10, 0.1).name('fast Pace');
+pc.add(PACE_LOOK, 'limit', 2, 15, 0.1).name('limit Pace');
+pc.add(PACE_LOOK, 'starsAtFast', 2, 80, 1).name('star speed at fast');
+pc.add(PACE_LOOK, 'starsAtLimit', 2, 120, 1).name('star speed at limit');
+pc.add(PACE_LOOK, 'maxGap', 0.2, 6, 0.1).name('lead for min / max size');
+pc.add(PACE_LOOK, 'minSize', 0.1, 1.5, 0.05).name('ship size, you way ahead');
+pc.add(PACE_LOOK, 'equalSize', 0.5, 2, 0.05).name('ship size, equal Pace');
+pc.add(PACE_LOOK, 'maxSize', 1, 4, 0.05).name('ship size, enemy way ahead');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

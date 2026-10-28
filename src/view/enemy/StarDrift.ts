@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 /**
- * Live-tunable from the sandbox panel.
- * TODO (later effort, player settings): let players turn moving stars off, since the motion can
- * cause dizziness. `speed = 0` already freezes them; the setting should also override any juice
- * effect that drives the speed.
+ * TODO (later effort, player settings): expose `motion` as a player setting, since the moving
+ * stars can cause dizziness.
  */
 export const STAR_DRIFT = {
-  /** World units / s toward the camera. The juice tickets may drive this from game signals. */
-  speed: 6,
+  /** World units / s toward the camera (negative = away). Driven by the Paces (PaceMotion). */
+  speed: 0,
+  /** The player setting: false = stars stay still, whatever drives the speed. */
+  motion: true,
 };
 
 const COUNT = 450;
@@ -48,10 +48,13 @@ export class StarDrift {
 
   update(dt: number) {
     for (let i = 0; i < COUNT; i++) {
-      const z = this.pos[i * 3 + 2] + dt * STAR_DRIFT.speed;
+      const speed = STAR_DRIFT.motion ? STAR_DRIFT.speed : 0;
+      const z = this.pos[i * 3 + 2] + dt * speed;
+      // Wrap both ways: forward (toward the camera) and backward (negative speed).
       if (z > BOX.near) this.respawn(i, BOX.far);
+      else if (z < BOX.far) this.respawn(i, BOX.near);
       else this.pos[i * 3 + 2] = z;
-      const v = this.brightness[i] * Math.min(1, (this.pos[i * 3 + 2] - BOX.far) / FADE);
+      const v = this.brightness[i] * Math.min(1, (this.pos[i * 3 + 2] - BOX.far) / FADE, (BOX.near - this.pos[i * 3 + 2]) / 2);
       this.col[i * 3] = this.col[i * 3 + 1] = this.col[i * 3 + 2] = v;
     }
     this.points.geometry.attributes.position.needsUpdate = true;

@@ -14,6 +14,7 @@ import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
+import { PaceMotion } from './juice/PaceMotion';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -46,6 +47,7 @@ export class AsciiGameView implements GameView {
   private readonly sparks = new SparkBursts();
   /** Big yellow 3D sparks from behind the Cockpit when the Attack word is fired. */
   private readonly attackSparks: AttackSparks;
+  private readonly paceMotion: PaceMotion;
   /** Typed word last frame, to spot correct / wrong keys. */
   private prevTyped = '';
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
@@ -73,6 +75,7 @@ export class AsciiGameView implements GameView {
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
     this.attackSparks = new AttackSparks(this.scene, this.camera);
+    this.paceMotion = new PaceMotion(this.enemy);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -93,6 +96,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.update(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
+    this.paceMotion.update(state.pace, dt);
     this.damageFx.update(state.enemyDamage, dt, text);
     this.sparks.update(dt, text);
     this.attackSparks.update(dt);

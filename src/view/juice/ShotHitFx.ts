@@ -74,7 +74,7 @@ export class ShotHitFx {
   update(dt: number, text: TextGrid) {
     const T = SHOT_HIT_LOOK.seconds;
     if (this.age >= T) {
-      this.enemy.effectOffset.set(0, 0, 0);
+      this.enemy.effectOffset.y = 0; // only the sag axis is ours
       return;
     }
     this.age += dt;
@@ -137,6 +137,6 @@ export class ShotHitFx {
   }
 
   dispose() {
-    this.enemy.effectOffset.set(0, 0, 0);
+    this.enemy.effectOffset.y = 0;
   }
 }
