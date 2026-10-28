@@ -34,6 +34,12 @@ export class EnemyShip {
   readonly effectOffset = new THREE.Vector3();
   /** Extra size multiplier on top of ENEMY_LOOK.scale (effects like Pace distance). */
   effectScale = 1;
+  /**
+   * Fly closer (> 1) or farther (< 1) along the line from `approachFrom` (the camera), keeping
+   * the same spot on screen: 2 = half the distance, so it looks twice as big.
+   */
+  approach = 1;
+  readonly approachFrom = new THREE.Vector3(0, 0, 7);
   /** Named parts, for damage effects (left / right = the player's left / right, -x / +x). */
   readonly parts = {} as Record<'hull' | 'wingL' | 'wingR' | 'engineL' | 'engineR', THREE.Mesh>;
 
@@ -78,6 +84,7 @@ export class EnemyShip {
     const { position, scale, bob, sway, bank } = ENEMY_LOOK;
     const wave = (hz: number) => Math.sin(this.t * hz * Math.PI * 2);
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
+    this.root.position.sub(this.approachFrom).divideScalar(this.approach).add(this.approachFrom);
     this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale * this.effectScale);
     this.model.rotation.z = wave(BANK_HZ) * bank;

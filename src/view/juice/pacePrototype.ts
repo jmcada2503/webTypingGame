@@ -25,8 +25,9 @@ export const PACE_PROTO = {
   starsAtLimit: 50,
   /** Pace gap (chars/s) at which the ship reaches its biggest. */
   maxGap: 2,
-  /** Extra ship size at the max gap (0.7 = 70 % bigger). */
-  maxGrow: 0.7,
+  /** Ship size with no gap (equal Paces) and at the max gap. */
+  minSize: 0.5,
+  maxSize: 2,
 };
 
 /** Exponential approach factor for a smoothing time `tau` (s). */
@@ -52,7 +53,7 @@ export class PaceMotion {
   constructor(private readonly enemy: EnemyShip) {}
 
   update(pace: { player: number; enemy: number }, dt: number) {
-    const { limit, maxGap, maxGrow } = PACE_PROTO;
+    const { limit, maxGap, minSize, maxSize } = PACE_PROTO;
     const player = Math.min(pace.player, limit);
     const enemy = Math.min(pace.enemy, limit);
     const d = player - enemy;
@@ -66,16 +67,16 @@ export class PaceMotion {
       this.speed += (target - this.speed) * follow(dt, 0.4);
       growTarget = clamp01(gap / maxGap);
       this.grow += (growTarget - this.grow) * follow(dt, 0.4);
-      this.enemy.effectScale = 1 + maxGrow * this.grow;
-      this.enemy.effectOffset.z = 0;
+      this.enemy.effectScale = minSize + (maxSize - minSize) * this.grow;
+      this.enemy.approach = 1;
     } else if (PACE_PROTO.kind === 'B') {
       // Direction blends through 0: near-equal Paces (within ~0.6 chars/s) ease the stars to a stop.
       target = Math.tanh(d / 0.6) * mag;
       this.speed += (target - this.speed) * follow(dt, 0.8);
       growTarget = smoothstep(0.4, maxGap, gap); // gaps under 0.4 chars/s don't move the ship
       this.grow += (growTarget - this.grow) * follow(dt, 1.5);
-      this.enemy.effectScale = 1 + maxGrow * this.grow;
-      this.enemy.effectOffset.z = 0;
+      this.enemy.effectScale = minSize + (maxSize - minSize) * this.grow;
+      this.enemy.approach = 1;
     } else {
       // Stars with inertia; the ship actually flies closer (bigger) / farther instead of scaling.
       target = Math.tanh(d / 0.4) * mag;
@@ -83,7 +84,7 @@ export class PaceMotion {
       growTarget = clamp01(gap / maxGap);
       this.grow += (growTarget - this.grow) * follow(dt, 1);
       this.enemy.effectScale = 1;
-      this.enemy.effectOffset.z = 18 * maxGrow * this.grow; // toward the camera
+      this.enemy.approach = minSize + (maxSize - minSize) * this.grow; // same size range, by distance
     }
     STAR_DRIFT.speed = this.speed;
   }
