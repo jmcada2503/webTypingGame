@@ -28,6 +28,8 @@ export class SandboxSession implements GameSession {
   lastSubmitted = '';
   /** Submitting a word destroys the matching Word bullet. */
   submitDestroys = true;
+  /** An arriving Word bullet takes a life (and emits lifeLost). */
+  arrivalCostsLife = true;
   /** Seconds for a Shot to reach the Enemy ship. */
   shotFlightSeconds = 5;
   /** After firing, the Attack word changes to a random sample word. */
@@ -177,5 +179,14 @@ export class SandboxSession implements GameSession {
   private remove(id: string, type: 'wordBulletDestroyed' | 'wordBulletArrived') {
     this.bullets = this.bullets.filter((b) => b.id !== id);
     this.pending.push({ type, id });
+    // Sandbox shortcut (not the real rule): an arrival costs a life when enabled.
+    if (type === 'wordBulletArrived' && this.arrivalCostsLife && this.lives > 0) {
+      this.lives--;
+      this.pending.push({ type: 'lifeLost' });
+    }
+  }
+
+  refillLives() {
+    this.lives = 3;
   }
 }

@@ -7,13 +7,17 @@ import { Radar, RADAR_SIZE } from './Radar';
 
 const MAX_LIVES = 3;
 const CURSOR_HZ = 1;
+/** A lamp that just went out flickers this long (s) at this rate (Hz) before staying dark. */
+const LAMP_FLICKER_SECONDS = 0.6;
+const LAMP_FLICKER_HZ = 14;
 
 /**
  * The player's Cockpit ("Cockpit design": pilot controls), built from primitives in camera-local
  * space (a group that sits at the camera, looking down -z):
  * - center: control yoke with the Typed word screen between the grips; just above its top edge,
  *   `ATTACK` at the left end and the Attack word (red) at the right end
- * - left console: Lives as 3 red lamps in black sockets (a lost life is a dim lamp)
+ * - left console: Lives as 3 red lamps in black sockets (a lost life is a dim lamp; it flickers
+ *   briefly when the life is lost)
  * - right console: the Radar (see Radar.ts)
  * - overhead bar framing the window
  *
@@ -34,6 +38,9 @@ export class Cockpit {
   private readonly labelAnchors: { panel: THREE.Object3D; anchor: THREE.Object3D }[] = [];
   private readonly radar: Radar;
   private t = 0;
+  private lastLives = -1;
+  /** Lamp index → seconds of flicker left. */
+  private readonly flicker = new Map<number, number>();
 
   constructor(
     scene: THREE.Scene,
@@ -116,7 +123,20 @@ export class Cockpit {
 
   update(state: GameViewState, dt: number, text: TextGrid) {
     this.t += dt;
-    this.lamps.forEach((l, i) => (l.material = i < state.lives ? this.lampOn : this.lampOff));
+    // A life lost: the lamp(s) that just went out flicker before staying dark ("Juice: Hit taken").
+    if (this.lastLives >= 0 && state.lives < this.lastLives) {
+      for (let i = state.lives; i < this.lastLives; i++) this.flicker.set(i, LAMP_FLICKER_SECONDS);
+    }
+    this.lastLives = state.lives;
+    this.lamps.forEach((l, i) => {
+      const left = this.flicker.get(i);
+      if (left !== undefined) {
+        if (left - dt <= 0 || i < state.lives) this.flicker.delete(i);
+        else this.flicker.set(i, left - dt);
+      }
+      const flickering = this.flicker.has(i) && Math.floor(this.t * LAMP_FLICKER_HZ * 2) % 2 === 0;
+      l.material = i < state.lives || flickering ? this.lampOn : this.lampOff;
+    });
     for (const { panel, anchor } of this.labelAnchors) {
       panel.updateWorldMatrix(true, false);
       anchor.matrix.copy(panel.matrixWorld);
