@@ -555,7 +555,8 @@ function drawCountdown(t: number) {
 function cdA(t: number, n: number, frac: number, go: boolean) {
   twoTone(5, 'MATCH STARTS ', 'IN', 2);
   const scale = 13 - 2 * frac;
-  if (go) bigNumber('0', 11, 13, 'red', 1); // the counter ended: the TV is switching off
+  // After the last second the screen keeps showing the final "1" while the TV switches off (no 0).
+  if (go) bigNumber('1', 13 - 2 * 0.99, 13, 'red', 1);
   else bigNumber(String(n), scale, 13, n <= 2 ? 'red' : 'yellow', frac);
   centered(33, '[x] INPUT LOCKED', 'dim');
   centered(38, 'OPPONENT CONNECTED     CLOCKS SYNCED     WORDS LOADED', 'dim');
