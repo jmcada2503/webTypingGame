@@ -93,7 +93,9 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private atlas: THREE.CanvasTexture | null = null;
   /** Scaled text runs: drawn on a canvas the size of the screen, laid over the frame. */
   private runCanvas = document.createElement('canvas');
-  private readonly runTexture = new THREE.CanvasTexture(this.runCanvas);
+  /** Rebuilt on every resize: WebGL fixes a texture's size at its first upload. */
+  private runTexture = new THREE.CanvasTexture(this.runCanvas);
+  private readonly runMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   private readonly runScene = new THREE.Scene();
   private runSignature = '';
   private fit: ViewportFit | null = null;
@@ -167,9 +169,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     );
 
     this.filters = new ScreenFilters(this.quad, this.ortho);
-    this.runScene.add(
-      new THREE.Mesh(this.quad, new THREE.MeshBasicMaterial({ map: this.runTexture, transparent: true, depthTest: false, depthWrite: false })),
-    );
+    this.runScene.add(new THREE.Mesh(this.quad, this.runMaterial));
 
     this.compositePass = this.pass(
       /* glsl */ `
@@ -224,8 +224,13 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     u.cellDev.value.set(fit.cellW, fit.cellH);
     u.tAtlas.value = this.atlas;
     this.fit = fit;
+    this.runTexture.dispose();
+    this.runCanvas = document.createElement('canvas');
     this.runCanvas.width = fit.canvasW;
     this.runCanvas.height = fit.canvasH;
+    this.runTexture = new THREE.CanvasTexture(this.runCanvas);
+    this.runMaterial.map = this.runTexture;
+    this.runMaterial.needsUpdate = true;
     this.runSignature = ''; // repaint at the new size
   }
 
@@ -299,6 +304,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.cellRT.dispose();
     this.atlas?.dispose();
     this.runTexture.dispose();
+    this.runMaterial.dispose();
     this.textGrid.dispose();
     this.cellPass.mat.dispose();
     this.compositePass.mat.dispose();
