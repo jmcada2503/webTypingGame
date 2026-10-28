@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "sandbox": "vite --open /sandbox/"
+    "sandbox": "vite --open /sandbox/",
+    "waiting-prototype": "vite --open /waiting-prototype/"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
