@@ -11,7 +11,7 @@ import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
-import { SHOT_HIT_PROTO } from '../view/juice/shotHitPrototype';
+import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -71,12 +71,10 @@ hx.add(HIT_LOOK, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
 hx.add(HIT_LOOK, 'shake', 0, 0.3, 0.005).name('shake strength');
 hx.add(HIT_LOOK, 'roll', 0, 0.2, 0.005).name('roll');
 
-// PROTOTYPE knobs ("Juice: Shot hit")
-const shx = gui.addFolder('Shot hit (prototype)');
-shx.add(SHOT_HIT_PROTO, 'kind', ['A', 'B', 'C']).name('style').listen();
-shx.add(SHOT_HIT_PROTO, 'seconds', 0.3, 3, 0.05).name('time (s)');
-shx.add(SHOT_HIT_PROTO, 'dip', 0, 4, 0.05).name('dip');
-shx.add(SHOT_HIT_PROTO, 'boomSize', 0.5, 8, 0.1).name('explosion size');
+const shx = gui.addFolder('Shot hit effect');
+shx.add(SHOT_HIT_LOOK, 'seconds', 0.3, 3, 0.05).name('time (s)');
+shx.add(SHOT_HIT_LOOK, 'dip', 0, 4, 0.05).name('ship sag');
+shx.add(SHOT_HIT_LOOK, 'boomSize', 0.5, 8, 0.1).name('explosion size');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

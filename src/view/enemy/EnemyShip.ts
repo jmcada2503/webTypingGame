@@ -25,9 +25,8 @@ export class EnemyShip {
   private readonly model = new THREE.Group();
   private readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   private t = 0;
-  /** Extra offset / roll added on top of the idle motion (effects like the Shot-hit dip). */
+  /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
   readonly effectOffset = new THREE.Vector3();
-  effectRoll = 0;
 
   constructor() {
     const mesh = (geo: THREE.BufferGeometry) => new THREE.Mesh(geo, this.material);
@@ -69,12 +68,7 @@ export class EnemyShip {
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
     this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale);
-    this.model.rotation.z = wave(BANK_HZ) * bank + this.effectRoll;
-  }
-
-  /** Tint the whole ship (e.g. a green hit flash); null = back to white. */
-  tint(color: THREE.ColorRepresentation | null) {
-    this.material.color.set(color ?? 0xffffff);
+    this.model.rotation.z = wave(BANK_HZ) * bank;
   }
 
   dispose() {

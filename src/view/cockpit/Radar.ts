@@ -29,7 +29,7 @@ export type RadarGeometry = { c0: number; r0: number; c1: number; r1: number; cx
 
 export class Radar {
   private t = 0;
-  /** PROTOTYPE hook ("Juice: Shot hit"): drawn last, over the scope. */
+  /** Drawn last, over the scope (e.g. the Shot-hit HIT!!). */
   overlay?: (text: TextGrid, g: RadarGeometry, dt: number) => void;
 
   constructor(private readonly screen: THREE.Object3D) {}
