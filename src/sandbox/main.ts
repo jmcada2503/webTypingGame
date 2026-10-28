@@ -87,7 +87,9 @@ const ask = gui.addFolder('Attack sparks');
 ask.add(ATTACK_SPARKS_LOOK, 'count', 1, 40, 1);
 ask.add(ATTACK_SPARKS_LOOK, 'seconds', 0.1, 3, 0.05).name('sparks time (s)');
 ask.add(ATTACK_SPARKS_LOOK, 'reach', 0.05, 1, 0.01);
-ask.add(ATTACK_SPARKS_LOOK, 'size', 0.005, 0.08, 0.001);
+ask.add(ATTACK_SPARKS_LOOK, 'thickness', 0.001, 0.02, 0.0005);
+ask.add(ATTACK_SPARKS_LOOK, 'length', 0.01, 0.2, 0.005);
+ask.add(ATTACK_SPARKS_LOOK, 'gravity', 0, 20, 0.5);
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
