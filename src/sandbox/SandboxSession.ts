@@ -37,7 +37,7 @@ export class SandboxSession implements GameSession {
   /** Enemy ship damage, 0..1 (panel slider). */
   enemyDamage = 0;
   /** Sandbox shortcut: each Shot that hits adds this much damage (0 = off). */
-  damagePerHit = 0.25;
+  damagePerHit = 0.5;
 
   private typed = '';
   private bullets: WordBulletState[] = [];

@@ -23,13 +23,11 @@ const BANK_HZ = 0.11;
 export class EnemyShip {
   readonly root = new THREE.Group();
   private readonly model = new THREE.Group();
-  readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  private readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   private t = 0;
   /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
   readonly effectOffset = new THREE.Vector3();
-  /** Extra roll added to the banking (effects like damage wobble). */
-  effectRoll = 0;
-  /** Named parts, for damage effects (left / right = the player's left / right). */
+  /** Named parts, for damage effects (left / right = the player's left / right, -x / +x). */
   readonly parts = {} as Record<'hull' | 'wingL' | 'wingR' | 'engineL' | 'engineR', THREE.Mesh>;
 
   constructor() {
@@ -75,7 +73,7 @@ export class EnemyShip {
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
     this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale);
-    this.model.rotation.z = wave(BANK_HZ) * bank + this.effectRoll;
+    this.model.rotation.z = wave(BANK_HZ) * bank;
   }
 
   dispose() {

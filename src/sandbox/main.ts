@@ -12,7 +12,7 @@ import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
 import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
-import { DAMAGE_PROTO } from '../view/juice/damagePrototype';
+import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -77,10 +77,10 @@ shx.add(SHOT_HIT_LOOK, 'seconds', 0.3, 3, 0.05).name('time (s)');
 shx.add(SHOT_HIT_LOOK, 'dip', 0, 4, 0.05).name('ship sag');
 shx.add(SHOT_HIT_LOOK, 'boomSize', 0.5, 8, 0.1).name('explosion size');
 
-// PROTOTYPE knobs ("Juice: Damaged Enemy ship")
-const dmg = gui.addFolder('Enemy damage (prototype)');
-dmg.add(DAMAGE_PROTO, 'kind', ['A', 'B', 'C']).name('style').listen();
-dmg.add(DAMAGE_PROTO, 'smoke', 0, 3, 0.05).name('smoke amount');
+const dmg = gui.addFolder('Enemy damage effect');
+dmg.add(DAMAGE_LOOK, 'smoke', 0, 6, 0.1).name('smoke amount');
+dmg.add(DAMAGE_LOOK, 'wingTipAt', 0, 1, 0.05).name('wing tip lost at');
+dmg.add(DAMAGE_LOOK, 'engineAt', 0, 1, 0.05).name('engine lost at');
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

@@ -11,8 +11,7 @@ import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
 import { HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { DAMAGE_PROTO, DAMAGE_VARIANTS, DamageFx, type DamageKind } from './juice/damagePrototype';
+import { EnemyDamageFx } from './juice/EnemyDamageFx';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -37,8 +36,8 @@ export class AsciiGameView implements GameView {
   private readonly hitFx: HitFx;
   /** Shot hit: Radar HIT!! + big green explosion on the Enemy ship, which sags. */
   private readonly shotHitFx: ShotHitFx;
-  /** PROTOTYPE ("Juice: Damaged Enemy ship"). */
-  private readonly damageFx: DamageFx;
+  /** Enemy ship damage: smoke + missing pieces from enemyDamage. */
+  private readonly damageFx: EnemyDamageFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -62,8 +61,7 @@ export class AsciiGameView implements GameView {
     this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
     this.hitFx = new HitFx(this.scene, this.camera);
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
-    this.damageFx = new DamageFx(this.enemy, this.camera);
-    DAMAGE_PROTO.kind = mountPrototypeSwitcher(DAMAGE_VARIANTS) as DamageKind; // PROTOTYPE
+    this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
