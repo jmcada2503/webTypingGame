@@ -35,7 +35,9 @@ let priv = params.get('mode') === 'private';
 const t0 = performance.now();
 let screenStart = 0;
 let toast: { msg: string; at: number } | null = null;
-const now = () => (performance.now() - t0) / 1000;
+// ?t=6.6 freezes the demo at that second (for reviewing a specific moment).
+const frozen = params.get('t') !== null ? Number(params.get('t')) : null;
+const now = () => frozen ?? (performance.now() - t0) / 1000;
 
 // ---------------------------------------------------------------- the looping demo
 
@@ -148,9 +150,9 @@ function title(row: number) {
   text.writeScaled(c + [...a].length * scale, row, b, scale, 'yellow');
 }
 
-/** A word with its first `n` letters typed (green) and the rest in `rest` color. */
-function word(c: number, r: number, w: string, n: number, rest: PaletteColor = 'fg') {
-  put(c, r, w.slice(0, n), 'green');
+/** A word with its first `n` letters typed and the rest in `rest` color. Word bullets turn green, the Attack word turns white. */
+function word(c: number, r: number, w: string, n: number, rest: PaletteColor = 'fg', typed: PaletteColor = 'green') {
+  put(c, r, w.slice(0, n), typed);
   put(c + n, r, w.slice(n), rest);
 }
 
@@ -213,7 +215,7 @@ function drawA(t: number) {
   box(54, 30, 20, 5, 'fg');
   put(56, 30, ' YOU ', 'fg');
   put(64 - 3, 32, ATK_WORD, 'red');
-  if (d.atkTyped) word(64 - 3, 32, ATK_WORD, d.atkTyped, 'red');
+  if (d.atkTyped) word(64 - 3, 32, ATK_WORD, d.atkTyped, 'red', 'fg');
   put(60, 31, 'ATTACK', 'dim');
   // moving word in the left lane
   if (d.bulletOn) {
@@ -260,7 +262,7 @@ function miniScene(c0: number, r0: number, kind: 'defend' | 'attack', t: number)
     put(c0 + 4, r0 + 22, 'TYPE THE WORD FLYING AT YOU', 'fg');
     put(c0 + 4, r0 + 23, 'THEN PRESS ENTER', 'dim');
   } else {
-    word(cx - 3, r0 + 13, ATK_WORD, d.atkTyped, 'red');
+    word(cx - 3, r0 + 13, ATK_WORD, d.atkTyped, 'red', 'fg');
     if (d.shotOn) put(cx, r0 + 13 - d.shotFlight * 9, '^', 'yellow');
     if (d.hit >= 0 && d.hit < 0.7) put(cx + 3, r0 + 3, 'HIT!', 'green');
     prompt(cx - 6, r0 + 19, ATK_WORD.slice(0, d.atkTyped), t, 'fg');
@@ -309,7 +311,7 @@ function drawC(t: number) {
   if (d.defTyped === 6) put(47 + 20, 19, '[ENTER]', blink(t, 4) ? 'yellow' : 'fg');
   if (d.boom >= 0) put(47 + 3, 22, '* * * *  DESTROYED', 'green');
   // card 3 visual
-  word(88 + 3, 15, ATK_WORD, d.atkTyped, 'red');
+  word(88 + 3, 15, ATK_WORD, d.atkTyped, 'red', 'fg');
   prompt(88 + 3, 19, ATK_WORD.slice(0, d.atkTyped), t, 'fg');
   if (d.atkTyped === 6) put(88 + 20, 19, '[ENTER]', blink(t, 4) ? 'yellow' : 'fg');
   if (d.shotOn) put(88 + 8, 22 - d.shotFlight * 3, '^ ^ ^', 'yellow');
