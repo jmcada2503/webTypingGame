@@ -510,7 +510,7 @@ function sceneSetup(t: number) {
 }
 
 let goAt = -99;
-/** The Match really starts now: the enemy fires, and GO! shows over the game. */
+/** The Match really starts now: the enemy fires, and GO shows over the game. */
 function startMatch() {
   session.go();
   goAt = clock();
@@ -566,7 +566,7 @@ function cdA(t: number, n: number, frac: number, go: boolean) {
 function cdB(t: number, n: number, frac: number, go: boolean) {
   centered(11, 'MATCH STARTS IN', go ? 'dim' : 'fg');
   if (go) {
-    if (blink(t, 8)) bigNumber('GO!', 10, 14, 'green', 1);
+    if (blink(t, 8)) bigNumber('GO', 10, 14, 'green', 1);
   } else bigNumber(String(n), 12 - 2 * frac, 14, n <= 2 ? 'red' : 'yellow', frac);
   lockLabel(t, go);
 }
@@ -590,7 +590,7 @@ function cdC(t: number, n: number, frac: number, go: boolean) {
     }
   });
   if (go) {
-    if (blink(t, 8)) bigNumber('GO!', 9, 23, 'green', 1);
+    if (blink(t, 8)) bigNumber('GO', 9, 23, 'green', 1);
   } else bigNumber(String(n), 8 - 1.2 * frac, 23, n <= 2 ? 'red' : 'yellow', frac);
 }
 
@@ -598,7 +598,7 @@ function cdC(t: number, n: number, frac: number, go: boolean) {
 function cdD(t: number, n: number, frac: number, go: boolean) {
   centered(17.5, go ? 'CONTACT' : 'ENEMY CONTACT IN', go ? 'green' : 'fg');
   if (go) {
-    if (blink(t, 8)) bigNumber('GO!', 10, 20, 'green', 1);
+    if (blink(t, 8)) bigNumber('GO', 10, 20, 'green', 1);
   } else bigNumber(String(n), 9 - 1.4 * frac, 20, n <= 2 ? 'red' : 'yellow', frac);
   lockLabel(t, go);
 }
@@ -608,7 +608,7 @@ function drawMatch(t: number) {
   void t;
   text.fill(7, 1, 30, 3, ' '); // hides the game view's dim debug event label
   const g = clock() - goAt;
-  if (g >= 0 && g < 0.9 && blink(g, 8)) bigNumber('GO!', 11, 13, 'green', 1);
+  if (g >= 0 && g < 0.9 && blink(g, 8)) bigNumber('GO', 11, 13, 'green', 1);
   centered(1.2, 'MATCH (STUB)    [Q] BACK TO MENU', 'dim');
 }
 
