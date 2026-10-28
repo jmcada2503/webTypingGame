@@ -10,6 +10,10 @@
 //   Practice is a stub. Input is locked while an effect plays.
 // Prototype-only keys:  [ ] change the navigation effect   , . shorten / lengthen the black hold
 //   \ menu servers resting   F waiting: opponent found   R replay navigation effect   T replay match-start effect
+//
+// COUNTDOWN round (this branch): four countdown variants, switch with ; and '  (or ?cd=A..D). T replays the
+// match-start effect and restarts the countdown. Variants B/C/D draw over the live game scene and flow into
+// the Match without a cut; A is its own black screen and glitches into the Match.
 // Real renderer + CRT filter. Placeholder game name, online numbers and sponsor link. No networking.
 import * as THREE from 'three';
 import '../../app/app.css';
@@ -20,7 +24,8 @@ import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import type { GpuAsciiRenderer } from '../../render/GpuAsciiRenderer';
 import { SCREEN_TRANSITION } from '../../render/ScreenFilters';
 import { AsciiGameView } from '../../view/AsciiGameView';
-import type { GameViewState } from '../../view/GameViewState';
+import { ENEMY_LOOK } from '../../view/enemy/EnemyShip';
+import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 
 // ---------------------------------------------------------------- state
 
@@ -41,6 +46,14 @@ const AUTO_SECONDS = 30;
 
 const params = new URLSearchParams(location.search);
 let fxIndex = Math.max(0, Number(params.get('fx') ?? 4) - 1) % EFFECTS.length; // navigation effect (default: Glitch)
+type Cd = 'A' | 'B' | 'C' | 'D';
+const CDS: { key: Cd; name: string }[] = [
+  { key: 'A', name: 'Big number on black' },
+  { key: 'B', name: 'Number over the live game' },
+  { key: 'C', name: 'Systems check' },
+  { key: 'D', name: 'Arrival' },
+];
+let cdVariant: Cd = (CDS.find((c) => c.key === params.get('cd'))?.key ?? 'B') as Cd;
 const START_FX = EFFECTS[1]; // match start: TV off / on
 let hold = Number(params.get('hold') ?? 1); // seconds the screen stays black between TV off and TV on
 let screen: ScreenId = (['menu', 'howto', 'waiting', 'countdown', 'match'].includes(params.get('screen') ?? '') ? params.get('screen') : 'menu') as ScreenId;
@@ -54,21 +67,61 @@ let copiedAt = -99;
 const t0 = performance.now();
 const clock = () => (performance.now() - t0) / 1000;
 let screenStart = clock();
-const screenT = () => clock() - screenStart;
+// ?t=2.3 freezes the screen clock (for reviewing a specific moment, e.g. ?screen=countdown&cd=B&t=2.3).
+const freezeT = params.get('t') !== null ? Number(params.get('t')) : null;
+const screenT = () => freezeT ?? clock() - screenStart;
 
 /** The running screen change: `out` ramps the effect up, then we swap screens, then `in` ramps it down. */
 let trans: { phase: 'out' | 'hold' | 'in'; t: number; to: ScreenId; toKind: Kind; fx: Fx; hold: number } | null = null;
 
 class ProtoSession implements GameSession {
   status: SessionStatus = 'running';
+  pace = { player: 1, enemy: 1 };
+  private bullets: { id: string; word: string; flight: number }[] = [];
+  private events: ViewEvent[] = [];
+  private n = 0;
+  private nextAt = -1;
   start() {}
   dispose() {}
   attachInput() {}
-  update() {
-    return [];
+  reset() {
+    this.bullets = [];
+    this.events = [];
+    this.nextAt = -1;
+  }
+  /** GO: the enemy fires its first Word bullet, then another every ~2.6 s. */
+  go() {
+    this.reset();
+    this.fire();
+    this.nextAt = 2.2;
+  }
+  private fire() {
+    const words = ['planet', 'comet', 'orbit', 'signal', 'engine'];
+    const id = `w${this.n++}`;
+    this.bullets.push({ id, word: words[this.n % words.length], flight: 0 });
+    this.events.push({ type: 'enemyFired', id });
+  }
+  update(dt: number): ViewEvent[] {
+    for (const b of this.bullets) b.flight += dt / 9;
+    for (const b of [...this.bullets]) {
+      if (b.flight >= 1) {
+        this.events.push({ type: 'wordBulletArrived', id: b.id });
+        this.bullets.splice(this.bullets.indexOf(b), 1);
+      }
+    }
+    if (this.nextAt > 0) {
+      this.nextAt -= dt;
+      if (this.nextAt <= 0) {
+        this.fire();
+        this.nextAt = 2.6;
+      }
+    }
+    const ev = this.events;
+    this.events = [];
+    return ev;
   }
   state(): GameViewState {
-    return { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 } };
+    return { lives: 3, typedWord: '', attackWord: 'rocket', wordBullets: this.bullets.map((b) => ({ ...b })), shots: [], enemyDamage: 0, pace: this.pace };
   }
 }
 const session = new ProtoSession();
@@ -83,10 +136,11 @@ hidden.ascii.render = (scene, camera, overlay) => {
   const nowMs = performance.now();
   tickTransition(Math.min((nowMs - lastFrame) / 1000, 0.1));
   lastFrame = nowMs;
-  const world = screen === 'match';
+  const world = screen === 'match' || (screen === 'countdown' && cdVariant !== 'A');
   hidden.scene.visible = world;
   hidden.overlay.visible = world;
   if (!world) text.clear();
+  sceneSetup(screenT());
   ({ menu: drawMenu, howto: drawHowto, waiting: drawWaiting, countdown: drawCountdown, match: drawMatch })[screen](screenT());
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   asciiRender(scene, camera, overlay);
@@ -121,6 +175,8 @@ function tickTransition(dt: number) {
     SCREEN_TRANSITION.level = u * u; // accelerates into the effect
     if (u >= 1) {
       screen = trans.to; // swapped while the picture is hidden
+      if (screen === 'menu' || screen === 'countdown') session.reset();
+      if (screen === 'match') session.go();
       kind = trans.toKind;
       screenStart = clock();
       trans = { ...trans, phase: trans.hold > 0 ? 'hold' : 'in', t: 0 };
@@ -438,27 +494,110 @@ function drawWaiting(t: number) {
 
 // ================================================================ COUNTDOWN + MATCH (stubs)
 
-/** Stub for the Countdown ticket: a big 5..1, then the Match starts. */
-function drawCountdown(t: number) {
-  const n = Math.max(0, 5 - Math.floor(t));
-  const frac = t % 1;
-  twoTone(4, 'GET ', 'READY', 3);
-  const scale = 9 - frac * 1.2; // each number shrinks slightly as its second runs out
-  const s = String(n);
-  text.writeScaled((COLS - [...s].length * scale) / 2, 12, s, scale, n <= 2 ? 'red' : 'yellow');
-  centered(30, 'THE MATCH STARTS WHEN THE COUNTDOWN ENDS', 'dim');
-  centered(32, '(COUNTDOWN SCREEN IS A STUB: ITS OWN PROTOTYPE TICKET DESIGNS IT)', 'dim');
-  if (t >= 5 && !trans) {
-    screen = 'match';
-    screenStart = clock();
-  }
+const ease = (u: number) => 1 - (1 - Math.min(1, Math.max(0, u))) ** 3;
+
+/** Per-frame scene setup: where the enemy is and how fast the stars fly. */
+function sceneSetup(t: number) {
+  const arriving = screen === 'countdown' && cdVariant === 'D';
+  ENEMY_LOOK.position.z = arriving ? -80 + 53 * ease(t / 5) : -27;
+  const speed = arriving ? 9 - 7.5 * ease(t / 5) : 1;
+  session.pace = { player: speed, enemy: speed };
 }
 
-/** Stub: the real game scene, so you can feel the jump from the screens into the Match. */
+let firedFor = -1;
+const lockLabel = (t: number, go: boolean) => {
+  if (go) centered(33, 'INPUT UNLOCKED', 'green');
+  else centered(33, blink(t, 1.5) ? '[x] INPUT LOCKED' : '    INPUT LOCKED', 'dim');
+};
+
+/** Big number: `scale` columns wide per digit; RGB-split ghosts for the first moments of each second. */
+function bigNumber(s: string, scale: number, row: number, color: PaletteColor, frac: number) {
+  const c = (COLS - [...s].length * scale) / 2;
+  if (frac < 0.14) {
+    text.writeScaled(c - 1.2, row, s, scale, 'red');
+    text.writeScaled(c + 1.2, row, s, scale, 'green');
+  }
+  text.writeScaled(c, row, s, scale, color);
+}
+
+function drawCountdown(t: number) {
+  const world = cdVariant !== 'A';
+  const n = Math.max(0, 5 - Math.floor(t));
+  const frac = t % 1;
+  const go = t >= 5;
+  if (go && firedFor !== screenStart) {
+    firedFor = screenStart;
+    if (world) session.go(); // B/C/D: the scene is already the Match, the enemy just starts firing
+  }
+  ({ A: cdA, B: cdB, C: cdC, D: cdD })[cdVariant](t, n, frac, go);
+  if (world) {
+    if (t >= 5.9 && !trans) {
+      screen = 'match';
+      screenStart = clock();
+    }
+  } else if (t >= 4.95 && !trans) {
+    go2match();
+  }
+}
+const go2match = () => go('match', kind);
+
+/** A: its own black screen; a glitch carries it into the Match. */
+function cdA(t: number, n: number, frac: number, go: boolean) {
+  twoTone(5, 'MATCH STARTS ', 'IN', 2);
+  const scale = 13 - 2 * frac;
+  if (go || t >= 4.95) {
+    bigNumber('GO!', 9, 14, 'green', 1);
+  } else bigNumber(String(n), scale, 13, n <= 2 ? 'red' : 'yellow', frac);
+  lockLabel(t, go);
+  centered(38, 'OPPONENT CONNECTED     CLOCKS SYNCED     WORDS LOADED', 'dim');
+}
+
+/** B: the number floats over the live game (idle ships); at 0 the enemy fires and the Match is already running. */
+function cdB(t: number, n: number, frac: number, go: boolean) {
+  centered(11, 'MATCH STARTS IN', go ? 'dim' : 'fg');
+  if (go) {
+    if (blink(t, 8)) bigNumber('GO!', 10, 14, 'green', 1);
+  } else bigNumber(String(n), 12 - 2 * frac, 14, n <= 2 ? 'red' : 'yellow', frac);
+  lockLabel(t, go);
+}
+
+/** C: a launch systems check ticks off in a terminal while the number counts; the check explains the wait. */
+function cdC(t: number, n: number, frac: number, go: boolean) {
+  const lines: [string, string, PaletteColor][] = [
+    ['OPPONENT', 'CONNECTED', 'green'],
+    ['SYNCING CLOCKS', 'OK', 'green'],
+    ['LOADING WORDS', langName(), 'fg'],
+    ['WEAPONS', 'ARMED', 'yellow'],
+    ['INPUT', go ? 'UNLOCKED' : 'LOCKED', go ? 'green' : 'red'],
+  ];
+  const c0 = 30;
+  box(c0, 8, 68, 13, 'dim');
+  put(c0 + 3, 8, ' LAUNCH CHECK ', 'fg');
+  lines.forEach(([label, status, color], i) => {
+    if (go || t >= i * 0.9 + 0.3) {
+      put(c0 + 4, 10 + i * 2, `> ${label} ${'.'.repeat(Math.max(2, 46 - label.length))}`, 'fg');
+      put(c0 + 4 + 52, 10 + i * 2, status, color);
+    }
+  });
+  if (go) {
+    if (blink(t, 8)) bigNumber('GO!', 9, 23, 'green', 1);
+  } else bigNumber(String(n), 8 - 1.2 * frac, 23, n <= 2 ? 'red' : 'yellow', frac);
+}
+
+/** D: an arrival: stars start as a streak and slow down, the enemy ship closes in from far away; contact at 0. */
+function cdD(t: number, n: number, frac: number, go: boolean) {
+  centered(17.5, go ? 'CONTACT' : 'ENEMY CONTACT IN', go ? 'green' : 'fg');
+  if (go) {
+    if (blink(t, 8)) bigNumber('GO!', 10, 20, 'green', 1);
+  } else bigNumber(String(n), 9 - 1.4 * frac, 20, n <= 2 ? 'red' : 'yellow', frac);
+  lockLabel(t, go);
+}
+
+/** Stub: the Match itself (the real game scene with the enemy firing). */
 function drawMatch(t: number) {
   void t;
-  centered(2, 'MATCH STARTS HERE  (STUB)', 'yellow');
-  centered(3.4, '[Q] BACK TO MENU', 'dim');
+  text.fill(7, 1, 30, 3, ' '); // hides the game view's dim debug event label
+  centered(1.2, 'MATCH (STUB)    [Q] BACK TO MENU', 'dim');
 }
 
 // ================================================================ keys + bar
@@ -474,6 +613,7 @@ window.addEventListener('keydown', (e) => {
   if (k === '\\') return setResting(!resting);
   if (k === 'r' || k === 'R') return go(screen, kind);
   if (k === 't' || k === 'T') return go(screen, kind, START_FX, hold);
+  if (k === ';' || k === "'") return cycleCd(k === "'" ? 1 : -1);
   if (k === ',' || k === '.') {
     hold = Math.max(0, Math.min(3, hold + (k === '.' ? 0.25 : -0.25)));
     refreshBar();
@@ -520,15 +660,21 @@ const mk = (label: string, onclick: () => void) => {
 };
 const label = document.createElement('span');
 const restBtn = mk('', () => setResting(!resting));
-bar.append(mk('←', () => cycleFx(-1)), label, mk('→', () => cycleFx(1)), mk('replay nav (R)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }))), mk('replay start (T)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 't' }))), restBtn);
+bar.append(mk('←', () => cycleCd(-1)), label, mk('→', () => cycleCd(1)), mk('replay nav (R)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }))), mk('replay start (T)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 't' }))), restBtn);
 document.body.append(bar);
 
 function refreshBar() {
-  label.textContent = `nav: ${EFFECTS[fxIndex].name} [ ]   match start: TV off/on, black ${hold.toFixed(2)}s , .`;
+  label.textContent = `countdown ${cdVariant}: ${CDS.find((c) => c.key === cdVariant)!.name}  ; '   (nav: ${EFFECTS[fxIndex].name}, black ${hold.toFixed(1)}s)`;
   restBtn.textContent = `menu servers: ${resting ? 'RESTING' : 'normal'} (\\)`;
   const p = new URLSearchParams(location.search);
   p.set('fx', String(fxIndex + 1));
+  p.set('cd', cdVariant);
   history.replaceState(null, '', `?${p}`);
+}
+function cycleCd(d: number) {
+  const i = CDS.findIndex((c) => c.key === cdVariant);
+  cdVariant = CDS[(i + d + CDS.length) % CDS.length].key;
+  refreshBar();
 }
 function cycleFx(d: number) {
   fxIndex = (fxIndex + d + EFFECTS.length) % EFFECTS.length;
