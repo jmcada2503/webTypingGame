@@ -15,6 +15,7 @@ import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
 import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
 import { PACE_LOOK } from '../view/juice/PaceMotion';
+import { SCREEN_FILTERS } from '../render/ScreenFilters';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -105,6 +106,16 @@ pc.add(PACE_LOOK, 'maxGap', 0.2, 6, 0.1).name('lead for min / max size');
 pc.add(PACE_LOOK, 'minSize', 0.1, 1.5, 0.05).name('ship size, you way ahead');
 pc.add(PACE_LOOK, 'equalSize', 0.5, 2, 0.05).name('ship size, equal Pace');
 pc.add(PACE_LOOK, 'maxSize', 1, 4, 0.05).name('ship size, enemy way ahead');
+
+const sf = gui.addFolder('Screen filters');
+sf.add(SCREEN_FILTERS, 'scanlines').listen();
+sf.add(SCREEN_FILTERS, 'scanStrength', 0, 1, 0.01).name('scanline strength').listen();
+sf.add(SCREEN_FILTERS, 'scanPeriod', 2, 12, 1).name('scanline spacing (px)').listen();
+sf.add(SCREEN_FILTERS, 'glow').listen();
+sf.add(SCREEN_FILTERS, 'glowStrength', 0, 3, 0.05).name('glow strength').listen();
+sf.add(SCREEN_FILTERS, 'glowRadius', 0.5, 6, 0.1).name('glow radius').listen();
+sf.add(SCREEN_FILTERS, 'glowThreshold', 0, 1, 0.01).name('glow threshold').listen();
+sf.add(SCREEN_FILTERS, 'vignette', 0, 1, 0.01).listen();
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

@@ -15,6 +15,8 @@ import { EnemyDamageFx } from './juice/EnemyDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
 import { PaceMotion } from './juice/PaceMotion';
+import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
+import { FILTER_VARIANTS, applyFilterVariant } from '../render/screenFiltersPrototype';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -76,6 +78,7 @@ export class AsciiGameView implements GameView {
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
     this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.paceMotion = new PaceMotion(this.enemy);
+    applyFilterVariant(mountPrototypeSwitcher(FILTER_VARIANTS)); // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 

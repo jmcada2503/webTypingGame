@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ScreenFilters, anyFilterOn } from './ScreenFilters';
 import '@fontsource/ibm-plex-mono/400.css';
 import { ASCII_STYLE, type ViewportFit } from './asciiStyle';
 import type { AsciiRenderer, PaletteColor, TextGrid } from './AsciiRenderer';
@@ -70,6 +71,7 @@ const FULLSCREEN_VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0);
  *  2. cell pass: average brightness per cell → ramp glyph; clearly red/green cells keep that accent (cellRT, 128×45)
  *  3. composite: glyph atlas at the real device cell size; TextGrid cells win over shading
  *  4. optional overlay scene drawn on top with no ASCII treatment
+ *  5. screen filters (scanlines, glow, vignette) over the whole frame, only when any is on
  */
 export class GpuAsciiRenderer implements AsciiRenderer {
   readonly canvas: HTMLCanvasElement;
@@ -83,6 +85,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private readonly quad = new THREE.PlaneGeometry(2, 2);
   private readonly cellPass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
   private readonly compositePass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
+  private readonly filters: ScreenFilters;
 
   /** Use this instead of the constructor: waits for the font so the atlas is drawn with it. */
   static async create(): Promise<GpuAsciiRenderer> {
@@ -147,6 +150,8 @@ export class GpuAsciiRenderer implements AsciiRenderer {
       },
     );
 
+    this.filters = new ScreenFilters(this.quad, this.ortho);
+
     this.compositePass = this.pass(
       /* glsl */ `
       precision highp float;
@@ -194,6 +199,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
 
   resize(fit: ViewportFit) {
     this.gl.setSize(fit.canvasW, fit.canvasH, false);
+    this.filters.resize(fit.canvasW, fit.canvasH);
     this.buildAtlas(fit);
     const u = this.compositePass.mat.uniforms;
     u.cellDev.value.set(fit.cellW, fit.cellH);
@@ -225,13 +231,16 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     gl.render(scene, camera);
     gl.setRenderTarget(this.cellRT);
     gl.render(this.cellPass.scene, this.ortho);
-    gl.setRenderTarget(null);
+    // With a filter on, the finished frame goes to a texture first; otherwise straight to screen.
+    const filtered = anyFilterOn();
+    gl.setRenderTarget(filtered ? this.filters.frameRT : null);
     gl.render(this.compositePass.scene, this.ortho);
     if (overlay) {
       gl.autoClear = false;
       gl.render(overlay.scene, overlay.camera);
       gl.autoClear = true;
     }
+    if (filtered) this.filters.apply(gl);
   }
 
   dispose() {
@@ -241,6 +250,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.textGrid.dispose();
     this.cellPass.mat.dispose();
     this.compositePass.mat.dispose();
+    this.filters.dispose();
     this.quad.dispose();
     this.gl.dispose();
   }
