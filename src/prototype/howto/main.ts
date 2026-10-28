@@ -142,7 +142,7 @@ function wrap(s: string, w: number) {
 function title(row: number) {
   const a = 'HOW TO ';
   const b = 'PLAY';
-  const scale = 1.8;
+  const scale = 3.2;
   const c = (COLS - ([...a].length + [...b].length) * scale) / 2;
   text.writeScaled(c, row, a, scale, 'fg');
   text.writeScaled(c + [...a].length * scale, row, b, scale, 'yellow');
@@ -192,7 +192,7 @@ function drawFooter(t: number, top = false) {
 
 function drawA(t: number) {
   const d = demo(t);
-  title(1.2);
+  title(1);
   // Enemy ship at the top, you at the bottom, a lane down on the left and a lane up on the right.
   put(55, 5, 'ENEMY SHIP', 'dim');
   put(61, 6, '<@>', 'fg');
@@ -270,7 +270,7 @@ function miniScene(c0: number, r0: number, kind: 'defend' | 'attack', t: number)
 }
 
 function drawB(t: number) {
-  title(1.2);
+  title(1);
   miniScene(6, 6, 'defend', t);
   miniScene(66, 6, 'attack', t);
   drawFooter(t);
@@ -280,7 +280,7 @@ function drawB(t: number) {
 
 function drawC(t: number) {
   const d = demo(t);
-  title(1.2);
+  title(1);
   const cards = [
     { n: '1', head: 'WORDS FLY AT YOU', body: 'THE ENEMY SHIP FIRES WORDS AT YOU.', active: d.tt < 2.5 },
     { n: '2', head: 'DEFEND', body: 'TYPE A WORD AND PRESS ENTER TO DESTROY IT.', active: d.tt >= 2.5 && d.tt < 5.4 },
