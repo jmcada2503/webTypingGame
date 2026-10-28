@@ -48,13 +48,28 @@ export type ViewportFit = {
   /** Drawing-buffer size in device px (= grid × cell). */
   canvasW: number;
   canvasH: number;
+  /** Size the canvas is shown at, in CSS px (bigger than canvas / dpr when the buffer is capped). */
+  cssW: number;
+  cssH: number;
 };
+
+/**
+ * Largest drawing buffer (device px, wide side): 4K. Measured ("Performance budget"): 4K holds
+ * 60 fps with 60+ Word bullets and every effect at once; 5K (5120×2880) drops to 40–58 fps.
+ * Bigger screens draw at this size and the browser scales the canvas up.
+ */
+export const MAX_CANVAS_WIDTH = 3840;
 
 /** Largest integer cell (keeping the reference 10:16 ratio) whose grid fits the viewport. */
 export function fitToViewport(viewW: number, viewH: number, dpr: number): ViewportFit {
   const { grid, referenceCell, font } = ASCII_STYLE;
-  const k = Math.min((viewW * dpr) / (grid.cols * referenceCell.width), (viewH * dpr) / (grid.rows * referenceCell.height));
+  const kFit = Math.min((viewW * dpr) / (grid.cols * referenceCell.width), (viewH * dpr) / (grid.rows * referenceCell.height));
+  const k = Math.min(kFit, MAX_CANVAS_WIDTH / (grid.cols * referenceCell.width));
   const cellW = Math.max(1, Math.floor(referenceCell.width * k));
   const cellH = Math.max(1, Math.floor(referenceCell.height * k));
-  return { cellW, cellH, fontPx: cellH * font.sizeToCellHeight, canvasW: cellW * grid.cols, canvasH: cellH * grid.rows };
+  const canvasW = cellW * grid.cols;
+  const canvasH = cellH * grid.rows;
+  // When capped, show the smaller buffer scaled up to the room the screen allows.
+  const scale = kFit > k ? kFit / k : 1;
+  return { cellW, cellH, fontPx: cellH * font.sizeToCellHeight, canvasW, canvasH, cssW: (canvasW * scale) / dpr, cssH: (canvasH * scale) / dpr };
 }
