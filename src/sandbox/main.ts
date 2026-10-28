@@ -108,6 +108,9 @@ time.add({ step: () => session.step() }, 'step').name('step 1 frame');
 
 gui.add({ fs: () => void shell.toggleFullscreen() }, 'fs').name('⛶ fullscreen');
 
+// Every folder starts collapsed; open only what you need.
+gui.foldersRecursive().forEach((f) => f.close());
+
 const stats = new Stats();
 stats.dom.style.left = '72px'; // next to the fullscreen button
 document.body.append(stats.dom);
