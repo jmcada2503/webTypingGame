@@ -25,6 +25,8 @@ export class EnemyShip {
   private readonly model = new THREE.Group();
   private readonly material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   private t = 0;
+  /** Extra offset added on top of the idle motion (effects like the Shot-hit sag). */
+  readonly effectOffset = new THREE.Vector3();
 
   constructor() {
     const mesh = (geo: THREE.BufferGeometry) => new THREE.Mesh(geo, this.material);
@@ -64,6 +66,7 @@ export class EnemyShip {
     const { position, scale, bob, sway, bank } = ENEMY_LOOK;
     const wave = (hz: number) => Math.sin(this.t * hz * Math.PI * 2);
     this.root.position.set(position.x + wave(SWAY_HZ) * sway, position.y + wave(BOB_HZ) * bob, position.z);
+    this.root.position.add(this.effectOffset);
     this.root.scale.setScalar(scale);
     this.model.rotation.z = wave(BANK_HZ) * bank;
   }

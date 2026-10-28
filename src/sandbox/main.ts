@@ -11,6 +11,7 @@ import { STAR_DRIFT } from '../view/enemy/StarDrift';
 import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
+import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -70,6 +71,11 @@ hx.add(HIT_LOOK, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
 hx.add(HIT_LOOK, 'shake', 0, 0.3, 0.005).name('shake strength');
 hx.add(HIT_LOOK, 'roll', 0, 0.2, 0.005).name('roll');
 
+const shx = gui.addFolder('Shot hit effect');
+shx.add(SHOT_HIT_LOOK, 'seconds', 0.3, 3, 0.05).name('time (s)');
+shx.add(SHOT_HIT_LOOK, 'dip', 0, 4, 0.05).name('ship sag');
+shx.add(SHOT_HIT_LOOK, 'boomSize', 0.5, 8, 0.1).name('explosion size');
+
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
 ev.add({ destroy: () => session.destroyOldest() }, 'destroy').name('destroy oldest');
@@ -82,6 +88,7 @@ ev.add({ lifeLost: () => session.emit({ type: 'lifeLost' }) }, 'lifeLost').name(
 const sh = gui.addFolder('Shots (Radar)');
 sh.add({ fire: () => session.fireAttack() }, 'fire').name('fire Attack word');
 sh.add({ defend: () => session.defendOldestShot() }, 'defend').name('enemy defends oldest');
+sh.add({ hit: () => session.hitOldestShot() }, 'hit').name('shot hits enemy now');
 sh.add(session, 'shotFlightSeconds', 1, 20, 0.5).name('shot flight time (s)');
 sh.add(session, 'newAttackWordOnFire').name('new Attack word on fire');
 sh.add(live, 'shots').name('in flight').disable().listen();

@@ -36,7 +36,7 @@ export class Cockpit {
   private readonly lampOn = new THREE.MeshBasicMaterial({ color: ASCII_STYLE.palette.red });
   private readonly lampOff = gray(0.5, false);
   private readonly labelAnchors: { panel: THREE.Object3D; anchor: THREE.Object3D }[] = [];
-  private readonly radar: Radar;
+  readonly radar: Radar;
   private t = 0;
   private lastLives = -1;
   /** Lamp index → seconds of flicker left. */

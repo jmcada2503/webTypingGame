@@ -146,6 +146,12 @@ export class SandboxSession implements GameSession {
     }
   }
 
+  /** The oldest Shot reaches the Enemy ship now. */
+  hitOldestShot() {
+    const s = this.shots[0];
+    if (s) this.removeShot(s.id, 'shotHit');
+  }
+
   /** The opponent destroys the oldest Shot. */
   defendOldestShot() {
     const s = this.shots[0];
