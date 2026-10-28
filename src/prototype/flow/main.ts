@@ -31,7 +31,7 @@ const EFFECTS: Fx[] = [
   { mode: 1, name: 'Channel flip', out: 0.28, in: 0.34 },
   { mode: 2, name: 'TV off / on', out: 0.3, in: 0.4 },
   { mode: 3, name: 'Static cut', out: 0.18, in: 0.22 },
-  { mode: 4, name: 'Glitch', out: 0.22, in: 0.28 },
+  { mode: 4, name: 'Glitch', out: 0.13, in: 0.17 }, // 0.3 s total
 ];
 
 const COLS = 128;
