@@ -21,14 +21,14 @@ Run the reference client: `npm run sandbox`. Its tweak panel can trigger every s
 | `GameView` | `src/view/GameView.ts` | **What the game calls.** Draws a snapshot, plays events. Implementation: `AsciiGameView`. |
 | `AppShell` | `src/app/AppShell.ts` | Mounts the canvas, runs the loop, re-fits on resize / fullscreen, fullscreen button. |
 
-The future `DuelSession` (real mechanics + networking) implements `GameSession`; nothing else changes. The sandbox's `SandboxSession` is the reference implementation.
+The future `MatchSession` (real mechanics + networking) implements `GameSession`; nothing else changes. The sandbox's `SandboxSession` is the reference implementation.
 
 ## Lifecycle
 
 ```ts
 const view = await AsciiGameView.create();      // async: waits for the font before building the glyph atlas
 const input = new KeyboardTypingInput();
-const session = new DuelSession(/* ... */);     // yours, implements GameSession
+const session = new MatchSession(/* ... */);     // yours, implements GameSession
 const shell = new AppShell(view, session, input);
 shell.start();                                  // mounts canvas + fullscreen button, attaches input, starts the loop
 // ... later
@@ -152,7 +152,7 @@ Measured in Chrome with the sandbox (60 Hz display, one Mac), under the worst mo
 
 - **The cost is pixels, not objects.** Word bullets (150 at once), effects and typing feedback cost nothing measurable up to 4K; the full-screen passes (glow, text layer, ASCII) are what grow with the screen. Glow is the largest single part (about 8 fps at 5K).
 - **Limit in the code:** the drawing buffer is capped at 3840 px wide (`MAX_CANVAS_WIDTH` in `src/render/asciiStyle.ts`). On bigger screens (e.g. a 5K display) it draws at 4K and the browser scales the canvas to the full screen size. At 5K this brings it back to 60 fps.
-- **No cap on Word bullets or effects is needed.** Limits for the game to respect: none beyond the above. A real duel has far fewer than 150 Word bullets.
+- **No cap on Word bullets or effects is needed.** Limits for the game to respect: none beyond the above. A real Match has far fewer than 150 Word bullets.
 - **Levers if a slower machine struggles:** turn `SCREEN_FILTERS.glow` off (the biggest saving), then lower `MAX_CANVAS_WIDTH` (e.g. 2560).
 - **Not measured:** Safari, and low-end or integrated GPUs. To check: `npm run sandbox`, set a large window or fullscreen, turn on auto-spawn with a fast spawn rate and read the FPS meter at the top left.
 
@@ -168,4 +168,4 @@ To see an effect: spawn a Word bullet and destroy / arrive it, set Lives, fire t
 
 ## What the game must still decide (not in this layer)
 
-Hit / damage rules, word selection and spawn rules, how long a duel lasts and how it ends, networking, menus and win / game-over screens, sound, and the player settings screen. The two rules the user already set: **defending comes first** (above) and **Pace counts only the letters of correct words**.
+Hit / damage rules, word selection and spawn rules, how long a Match lasts and how it ends, networking, menus and win / game-over screens, sound, and the player settings screen. The two rules the user already set: **defending comes first** (above) and **Pace counts only the letters of correct words**.
