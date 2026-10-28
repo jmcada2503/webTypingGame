@@ -4,10 +4,12 @@
 //   1 Channel flip (roll + tearing + snow)   2 TV off/on (collapse to a line, then a dot, and back)
 //   3 Static cut (short burst of snow)       4 Glitch (jumping slices + color split)
 //
-// Flow:  MENU --Enter on Public/Private--> HOW-TO --Enter or 30 s--> WAITING --Q--> MENU
-//   Practice is a stub. Input is locked while the effect plays.
-// Prototype-only keys:  [ and ] change the effect   \ menu servers resting   F "opponent found" (toast)
-//   R replay the last transition on the current screen (to judge the effect without navigating)
+// Decided by the user: GLITCH for menu navigation, TV OFF/ON (with a black hold) when a Match starts.
+// Flow:  MENU --Enter on Public/Private--> HOW-TO --Enter or 30 s--> WAITING --Q--> MENU  (glitch)
+//        WAITING --F (opponent found)--> [TV off, black hold, TV on] --> COUNTDOWN stub --> MATCH stub --Q--> MENU
+//   Practice is a stub. Input is locked while an effect plays.
+// Prototype-only keys:  [ ] change the navigation effect   , . shorten / lengthen the black hold
+//   \ menu servers resting   F waiting: opponent found   R replay navigation effect   T replay match-start effect
 // Real renderer + CRT filter. Placeholder game name, online numbers and sponsor link. No networking.
 import * as THREE from 'three';
 import '../../app/app.css';
@@ -22,7 +24,7 @@ import type { GameViewState } from '../../view/GameViewState';
 
 // ---------------------------------------------------------------- state
 
-type ScreenId = 'menu' | 'howto' | 'waiting';
+type ScreenId = 'menu' | 'howto' | 'waiting' | 'countdown' | 'match';
 type Kind = 'public' | 'private';
 type Fx = { mode: number; name: string; out: number; in: number };
 const EFFECTS: Fx[] = [
@@ -38,8 +40,10 @@ const LINK = 'https://typingame.example/#/m/K7Q2-9XPD';
 const AUTO_SECONDS = 30;
 
 const params = new URLSearchParams(location.search);
-let fxIndex = Math.max(0, Number(params.get('fx') ?? 1) - 1) % EFFECTS.length;
-let screen: ScreenId = (['menu', 'howto', 'waiting'].includes(params.get('screen') ?? '') ? params.get('screen') : 'menu') as ScreenId;
+let fxIndex = Math.max(0, Number(params.get('fx') ?? 4) - 1) % EFFECTS.length; // navigation effect (default: Glitch)
+const START_FX = EFFECTS[1]; // match start: TV off / on
+let hold = Number(params.get('hold') ?? 1); // seconds the screen stays black between TV off and TV on
+let screen: ScreenId = (['menu', 'howto', 'waiting', 'countdown', 'match'].includes(params.get('screen') ?? '') ? params.get('screen') : 'menu') as ScreenId;
 let kind: Kind = params.get('kind') === 'private' ? 'private' : 'public';
 let resting = params.get('state') === 'resting';
 let lang: 'EN' | 'ES' = 'EN';
@@ -53,7 +57,7 @@ let screenStart = clock();
 const screenT = () => clock() - screenStart;
 
 /** The running screen change: `out` ramps the effect up, then we swap screens, then `in` ramps it down. */
-let trans: { phase: 'out' | 'in'; t: number; to: ScreenId; toKind: Kind; fx: Fx } | null = null;
+let trans: { phase: 'out' | 'hold' | 'in'; t: number; to: ScreenId; toKind: Kind; fx: Fx; hold: number } | null = null;
 
 class ProtoSession implements GameSession {
   status: SessionStatus = 'running';
@@ -79,10 +83,11 @@ hidden.ascii.render = (scene, camera, overlay) => {
   const nowMs = performance.now();
   tickTransition(Math.min((nowMs - lastFrame) / 1000, 0.1));
   lastFrame = nowMs;
-  hidden.scene.visible = false;
-  hidden.overlay.visible = false;
-  text.clear();
-  ({ menu: drawMenu, howto: drawHowto, waiting: drawWaiting })[screen](screenT());
+  const world = screen === 'match';
+  hidden.scene.visible = world;
+  hidden.overlay.visible = world;
+  if (!world) text.clear();
+  ({ menu: drawMenu, howto: drawHowto, waiting: drawWaiting, countdown: drawCountdown, match: drawMatch })[screen](screenT());
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   asciiRender(scene, camera, overlay);
 };
@@ -90,10 +95,10 @@ new AppShell(view, session, input).start();
 
 // ---------------------------------------------------------------- transition
 
-function go(to: ScreenId, toKind: Kind = kind) {
+function go(to: ScreenId, toKind: Kind = kind, fx: Fx = EFFECTS[fxIndex], holdS = 0) {
   if (trans) return;
-  trans = { phase: 'out', t: 0, to, toKind, fx: EFFECTS[fxIndex] };
-  SCREEN_TRANSITION.mode = trans.fx.mode;
+  trans = { phase: 'out', t: 0, to, toKind, fx, hold: holdS };
+  SCREEN_TRANSITION.mode = fx.mode;
 }
 
 // ?lvl=0.7 holds the effect at that strength (for reviewing stills); the flow itself still works.
@@ -110,16 +115,22 @@ function tickTransition(dt: number) {
     return;
   }
   trans.t += dt;
-  const dur = trans.phase === 'out' ? trans.fx.out : trans.fx.in;
+  const dur = trans.phase === 'out' ? trans.fx.out : trans.phase === 'hold' ? Math.max(0.001, trans.hold) : trans.fx.in;
   const u = Math.min(1, trans.t / dur);
   if (trans.phase === 'out') {
     SCREEN_TRANSITION.level = u * u; // accelerates into the effect
     if (u >= 1) {
-      screen = trans.to;
+      screen = trans.to; // swapped while the picture is hidden
       kind = trans.toKind;
       screenStart = clock();
-      trans = { ...trans, phase: 'in', t: 0 };
+      trans = { ...trans, phase: trans.hold > 0 ? 'hold' : 'in', t: 0 };
+      // the new screen's clock starts when the picture comes back
+      if (trans.phase === 'hold') SCREEN_TRANSITION.level = 1;
     }
+  } else if (trans.phase === 'hold') {
+    SCREEN_TRANSITION.level = 1; // screen stays off
+    screenStart = clock();
+    if (u >= 1) trans = { ...trans, phase: 'in', t: 0 };
   } else {
     SCREEN_TRANSITION.level = (1 - u) * (1 - u); // settles quickly
     if (u >= 1) {
@@ -421,7 +432,33 @@ function drawWaiting(t: number) {
   else signalBar(14, 35, 60, t);
   centered(p ? 36 : 38, `ELAPSED ${mmClock(t)}`, 'fg');
   centered(p ? 38 : 40, `LANGUAGE: ${langName()}        [Q] CANCEL`, 'dim');
+  centered(p ? 40 : 41.6, '[F] OPPONENT FOUND  (PROTOTYPE KEY)', 'dim');
   void dots;
+}
+
+// ================================================================ COUNTDOWN + MATCH (stubs)
+
+/** Stub for the Countdown ticket: a big 5..1, then the Match starts. */
+function drawCountdown(t: number) {
+  const n = Math.max(0, 5 - Math.floor(t));
+  const frac = t % 1;
+  twoTone(4, 'GET ', 'READY', 3);
+  const scale = 9 - frac * 1.2; // each number shrinks slightly as its second runs out
+  const s = String(n);
+  text.writeScaled((COLS - [...s].length * scale) / 2, 12, s, scale, n <= 2 ? 'red' : 'yellow');
+  centered(30, 'THE MATCH STARTS WHEN THE COUNTDOWN ENDS', 'dim');
+  centered(32, '(COUNTDOWN SCREEN IS A STUB: ITS OWN PROTOTYPE TICKET DESIGNS IT)', 'dim');
+  if (t >= 5 && !trans) {
+    screen = 'match';
+    screenStart = clock();
+  }
+}
+
+/** Stub: the real game scene, so you can feel the jump from the screens into the Match. */
+function drawMatch(t: number) {
+  void t;
+  centered(2, 'MATCH STARTS HERE  (STUB)', 'yellow');
+  centered(3.4, '[Q] BACK TO MENU', 'dim');
 }
 
 // ================================================================ keys + bar
@@ -435,9 +472,12 @@ window.addEventListener('keydown', (e) => {
     return; // input is locked while the screen changes
   }
   if (k === '\\') return setResting(!resting);
-  if (k === 'r' || k === 'R') {
-    const s = screen;
-    return void (trans = { phase: 'out', t: 0, to: s, toKind: kind, fx: EFFECTS[fxIndex] }, (SCREEN_TRANSITION.mode = EFFECTS[fxIndex].mode));
+  if (k === 'r' || k === 'R') return go(screen, kind);
+  if (k === 't' || k === 'T') return go(screen, kind, START_FX, hold);
+  if (k === ',' || k === '.') {
+    hold = Math.max(0, Math.min(3, hold + (k === '.' ? 0.25 : -0.25)));
+    refreshBar();
+    return;
   }
   if (screen === 'menu') {
     if (k === 'Tab') {
@@ -453,12 +493,14 @@ window.addEventListener('keydown', (e) => {
     } else if (k === 's' || k === 'S') copySponsor();
   } else if (screen === 'howto') {
     if (k === 'Enter') go('waiting', kind);
+  } else if (screen === 'match') {
+    if (k === 'q' || k === 'Q') go('menu', kind);
   } else if (screen === 'waiting') {
     if (k === 'q' || k === 'Q') go('menu', kind);
     else if ((k === 'c' || k === 'C') && kind === 'private') {
       copiedAt = clock();
       void navigator.clipboard?.writeText(LINK).catch(() => {});
-    } else if (k === 'f' || k === 'F') say('OPPONENT FOUND -> Countdown (next prototype)');
+    } else if (k === 'f' || k === 'F') go('countdown', kind, START_FX, hold);
   }
 });
 
@@ -478,11 +520,11 @@ const mk = (label: string, onclick: () => void) => {
 };
 const label = document.createElement('span');
 const restBtn = mk('', () => setResting(!resting));
-bar.append(mk('←', () => cycleFx(-1)), label, mk('→', () => cycleFx(1)), mk('replay (R)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }))), restBtn);
+bar.append(mk('←', () => cycleFx(-1)), label, mk('→', () => cycleFx(1)), mk('replay nav (R)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }))), mk('replay start (T)', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 't' }))), restBtn);
 document.body.append(bar);
 
 function refreshBar() {
-  label.textContent = `effect ${fxIndex + 1}: ${EFFECTS[fxIndex].name}  [ ]`;
+  label.textContent = `nav: ${EFFECTS[fxIndex].name} [ ]   match start: TV off/on, black ${hold.toFixed(2)}s , .`;
   restBtn.textContent = `menu servers: ${resting ? 'RESTING' : 'normal'} (\\)`;
   const p = new URLSearchParams(location.search);
   p.set('fx', String(fxIndex + 1));
