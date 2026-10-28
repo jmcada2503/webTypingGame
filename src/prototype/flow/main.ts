@@ -11,6 +11,8 @@
 // Prototype-only keys:  [ ] change the navigation effect   , . shorten / lengthen the black hold
 //   \ menu servers resting   F waiting: opponent found   R replay navigation effect   T replay match-start effect
 //
+// COUNTDOWN round 2 (user picked A): glitch INTO the countdown, TV off / black hold / TV on AFTER the last
+// second; the Match starts when the picture is back (never while the screen is black).
 // COUNTDOWN round (this branch): four countdown variants, switch with ; and '  (or ?cd=A..D). T replays the
 // match-start effect and restarts the countdown. Variants B/C/D draw over the live game scene and flow into
 // the Match without a cut; A is its own black screen and glitches into the Match.
@@ -53,7 +55,7 @@ const CDS: { key: Cd; name: string }[] = [
   { key: 'C', name: 'Systems check' },
   { key: 'D', name: 'Arrival' },
 ];
-let cdVariant: Cd = (CDS.find((c) => c.key === params.get('cd'))?.key ?? 'B') as Cd;
+let cdVariant: Cd = (CDS.find((c) => c.key === params.get('cd'))?.key ?? 'A') as Cd;
 const START_FX = EFFECTS[1]; // match start: TV off / on
 let hold = Number(params.get('hold') ?? 1); // seconds the screen stays black between TV off and TV on
 let screen: ScreenId = (['menu', 'howto', 'waiting', 'countdown', 'match'].includes(params.get('screen') ?? '') ? params.get('screen') : 'menu') as ScreenId;
@@ -176,7 +178,7 @@ function tickTransition(dt: number) {
     if (u >= 1) {
       screen = trans.to; // swapped while the picture is hidden
       if (screen === 'menu' || screen === 'countdown') session.reset();
-      if (screen === 'match') session.go();
+      if (screen === 'match' && trans.hold === 0) startMatch();
       kind = trans.toKind;
       screenStart = clock();
       trans = { ...trans, phase: trans.hold > 0 ? 'hold' : 'in', t: 0 };
@@ -186,7 +188,10 @@ function tickTransition(dt: number) {
   } else if (trans.phase === 'hold') {
     SCREEN_TRANSITION.level = 1; // screen stays off
     screenStart = clock();
-    if (u >= 1) trans = { ...trans, phase: 'in', t: 0 };
+    if (u >= 1) {
+      if (screen === 'match') startMatch(); // the picture is back: now the Match begins
+      trans = { ...trans, phase: 'in', t: 0 };
+    }
   } else {
     SCREEN_TRANSITION.level = (1 - u) * (1 - u); // settles quickly
     if (u >= 1) {
@@ -504,6 +509,12 @@ function sceneSetup(t: number) {
   session.pace = { player: speed, enemy: speed };
 }
 
+let goAt = -99;
+/** The Match really starts now: the enemy fires, and GO! shows over the game. */
+function startMatch() {
+  session.go();
+  goAt = clock();
+}
 let firedFor = -1;
 const lockLabel = (t: number, go: boolean) => {
   if (go) centered(33, 'INPUT UNLOCKED', 'green');
@@ -524,31 +535,29 @@ function drawCountdown(t: number) {
   const world = cdVariant !== 'A';
   const n = Math.max(0, 5 - Math.floor(t));
   const frac = t % 1;
-  const go = t >= 5;
-  if (go && firedFor !== screenStart) {
+  const ended = t >= 5;
+  if (ended && firedFor !== screenStart) {
     firedFor = screenStart;
-    if (world) session.go(); // B/C/D: the scene is already the Match, the enemy just starts firing
+    if (world) startMatch(); // B/C/D: the scene is already the Match, the enemy just starts firing
   }
-  ({ A: cdA, B: cdB, C: cdC, D: cdD })[cdVariant](t, n, frac, go);
+  ({ A: cdA, B: cdB, C: cdC, D: cdD })[cdVariant](t, n, frac, ended);
   if (world) {
     if (t >= 5.9 && !trans) {
       screen = 'match';
       screenStart = clock();
     }
-  } else if (t >= 4.95 && !trans) {
-    go2match();
+  } else if (t >= 5 && !trans) {
+    go('match', kind, START_FX, hold); // TV off, black hold, TV on, then the Match starts
   }
 }
-const go2match = () => go('match', kind);
 
 /** A: its own black screen; a glitch carries it into the Match. */
 function cdA(t: number, n: number, frac: number, go: boolean) {
   twoTone(5, 'MATCH STARTS ', 'IN', 2);
   const scale = 13 - 2 * frac;
-  if (go || t >= 4.95) {
-    bigNumber('GO!', 9, 14, 'green', 1);
-  } else bigNumber(String(n), scale, 13, n <= 2 ? 'red' : 'yellow', frac);
-  lockLabel(t, go);
+  if (go) bigNumber('0', 11, 13, 'red', 1); // the counter ended: the TV is switching off
+  else bigNumber(String(n), scale, 13, n <= 2 ? 'red' : 'yellow', frac);
+  centered(33, '[x] INPUT LOCKED', 'dim');
   centered(38, 'OPPONENT CONNECTED     CLOCKS SYNCED     WORDS LOADED', 'dim');
 }
 
@@ -597,6 +606,8 @@ function cdD(t: number, n: number, frac: number, go: boolean) {
 function drawMatch(t: number) {
   void t;
   text.fill(7, 1, 30, 3, ' '); // hides the game view's dim debug event label
+  const g = clock() - goAt;
+  if (g >= 0 && g < 0.9 && blink(g, 8)) bigNumber('GO!', 11, 13, 'green', 1);
   centered(1.2, 'MATCH (STUB)    [Q] BACK TO MENU', 'dim');
 }
 
@@ -612,7 +623,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (k === '\\') return setResting(!resting);
   if (k === 'r' || k === 'R') return go(screen, kind);
-  if (k === 't' || k === 'T') return go(screen, kind, START_FX, hold);
+  if (k === 't' || k === 'T') return go('countdown', kind);
   if (k === ';' || k === "'") return cycleCd(k === "'" ? 1 : -1);
   if (k === ',' || k === '.') {
     hold = Math.max(0, Math.min(3, hold + (k === '.' ? 0.25 : -0.25)));
@@ -640,7 +651,7 @@ window.addEventListener('keydown', (e) => {
     else if ((k === 'c' || k === 'C') && kind === 'private') {
       copiedAt = clock();
       void navigator.clipboard?.writeText(LINK).catch(() => {});
-    } else if (k === 'f' || k === 'F') go('countdown', kind, START_FX, hold);
+    } else if (k === 'f' || k === 'F') go('countdown', kind);
   }
 });
 
