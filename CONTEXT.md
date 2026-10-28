@@ -50,3 +50,45 @@ _Avoid_: Speed, WPM, typing rate
 
 **Lives**:
 How many word bullets the player can let through before losing; starts at 3.
+
+### Matches
+
+**Match**:
+One game between two players, from the end of the Countdown until it ends: one player wins, or it ends in Peace.
+_Avoid_: Duel, game, round
+
+**Practice**:
+Playing alone: Word bullets come from the game, there's no Attack word and no opponent.
+_Avoid_: Single player, training, offline mode
+
+**Public match**:
+A Match against a random opponent found by Matchmaking.
+_Avoid_: Online match, ranked match, quick match
+
+**Private match**:
+A Match against a specific person, joined through an Invite link.
+_Avoid_: Custom match, friend match, room
+
+**Invite link**:
+The link a player shares so one other person can join their Private match.
+_Avoid_: Room code, share link
+
+**Matchmaking**:
+Looking for a random opponent for a Public match.
+_Avoid_: Queue, lobby, search
+
+**Countdown**:
+The 5-second freeze once both players are connected; nobody can act until it ends and the Match starts.
+_Avoid_: Warmup, ready check
+
+**Rematch**:
+A new Match between the same two players, proposed by one and accepted by the other after a Match ends.
+_Avoid_: Revenge, replay
+
+**Idle**:
+A player who hasn't pressed a key for a while during a Match.
+_Avoid_: AFK, inactive
+
+**Peace**:
+A Match that ends with no winner because both players stayed Idle too long.
+_Avoid_: Draw, tie, stalemate
