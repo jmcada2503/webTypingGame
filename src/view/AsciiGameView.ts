@@ -109,7 +109,10 @@ export class AsciiGameView implements GameView {
     const len = [...typed].length;
     const targets = state.wordBullets.filter((b) => matchPrefix(typed, b.word) === len);
     targets.forEach((b) => this.words.pulse(b.id));
-    if (targets.length === 0 && matchPrefix(typed, state.attackWord) !== len) this.cockpit.shakeTyped();
+    if (targets.length === 0 && matchPrefix(typed, state.attackWord) !== len) {
+      this.cockpit.shakeTyped();
+      this.hitFx.noShake();
+    }
   }
 
   trigger(event: ViewEvent) {
@@ -132,9 +135,9 @@ export class AsciiGameView implements GameView {
       this.sparks.burst(g.col, g.row, { count: 10, reach: 2.5 });
     }
     if (event.type === 'attackFired') {
-      // Yellow sparks fly up from the Attack word on the yoke.
-      const c = this.cockpit.attackWordCell;
-      this.sparks.burst(c.col, c.row, { count: 12, reach: 3, aim: Math.PI / 2, spread: 1.1 });
+      // Big yellow sparks burst up from the Cockpit's center (the Typed word screen).
+      const c = this.cockpit.centerCell;
+      this.sparks.burst(c.col, c.row, { count: 16, reach: 6, life: 0.45, aim: Math.PI / 2, spread: 1.2, big: true });
     }
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };

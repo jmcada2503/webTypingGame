@@ -10,6 +10,9 @@ export const HIT_LOOK = {
   shakeSeconds: 0.3,
   shake: 0.06,
   roll: 0.04,
+  /** Wrong key: a quick horizontal "no" shake of the camera (s, world units). */
+  noSeconds: 0.22,
+  no: 0.05,
 };
 
 const DEBRIS_COUNT = 22;
@@ -34,6 +37,7 @@ export class HitFx {
   private readonly sphere = new THREE.SphereGeometry(1, 12, 8);
   private readonly basePos: THREE.Vector3;
   private shakeAge = Infinity;
+  private noAge = Infinity;
   private shakeSeed = 0;
 
   constructor(
@@ -57,6 +61,11 @@ export class HitFx {
       b.pieces.push({ mesh, vel: dir.multiplyScalar(speed) });
     }
     this.booms.push(b);
+  }
+
+  /** A wrong key: a quick horizontal "no" shake of the camera. */
+  noShake() {
+    this.noAge = 0;
   }
 
   /** A life was lost: shake the camera. */
@@ -87,6 +96,12 @@ export class HitFx {
         p.vel.multiplyScalar(Math.max(0, 1 - (dt * 1.5) / life)); // drag scaled to the life
         p.mesh.scale.multiplyScalar(1 - (dt * 1.2) / life); // shrink as it fades out
       }
+    }
+
+    if (this.noAge < HIT_LOOK.noSeconds) {
+      this.noAge += dt;
+      const k = Math.min(1, this.noAge / HIT_LOOK.noSeconds);
+      this.camera.position.x += Math.sin(k * Math.PI * 4) * HIT_LOOK.no * (1 - k); // left-right, twice
     }
 
     if (this.shakeAge >= HIT_LOOK.shakeSeconds) return;
