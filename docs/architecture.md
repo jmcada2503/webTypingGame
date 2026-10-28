@@ -10,7 +10,7 @@ and the [map](https://github.com/jmcada2503/webTypingGame/issues/38).
 
 ## Diagram
 
-self-contained — paste it into draw.io via **Extras → Edit Diagram**.
+The draw.io source is embedded below — paste it into draw.io ([app.diagrams.net](https://app.diagrams.net)) via **Extras → Edit Diagram**, or open this file with the VS Code Draw.io Integration extension.
 
 ```drawio
 <mxfile host="app.diagrams.net" type="device">
