@@ -5,8 +5,9 @@
 //
 // Four structurally different layouts (A list, B cards, C type-the-word, D split logo + status bar).
 //   Switch layout:   [ and ]  (or the bar buttons, or ?variant=A..D)
-//   Servers resting: Tab      (or the bar button, or ?state=resting)   <- prototype-only keys
-//   In the menus:    arrows / 1-3 / Enter, L = language, S = copy sponsor link (resting).
+//   Servers resting: \        (or the bar button, or ?state=resting)   <- prototype-only keys
+//   B (chosen):      arrows or h/j/k/l move, 1-3 jump, Enter confirm, Tab = language, S = copy sponsor link.
+//   A / D:           arrows / 1-3 / Enter, L = language, S = copy sponsor link.
 //   In C every letter is typed into the prompt (practice, public, private, en, es, sponsor).
 // Placeholder game name "TYPING GAME" and placeholder online numbers. No networking.
 import * as THREE from 'three';
@@ -37,7 +38,7 @@ const COLS = 128;
 const SPONSOR = 'https://github.com/sponsors/jmcada2503';
 
 const params = new URLSearchParams(location.search);
-let variant: Variant = (VARIANTS.find((v) => v.key === params.get('variant'))?.key ?? 'A') as Variant;
+let variant: Variant = (VARIANTS.find((v) => v.key === params.get('variant'))?.key ?? 'B') as Variant;
 let resting = params.get('state') === 'resting';
 let lang: 'EN' | 'ES' = 'EN';
 let sel = 0;
@@ -142,6 +143,17 @@ function restingPanel(c0: number, row: number, w: number) {
   return h;
 }
 
+/** A small, friendly ask shown while the servers are up. Returns the rows used. */
+function sponsorNote(c0: number, row: number, w: number) {
+  box(c0, row, w, 5, 'dim');
+  put(c0 + 3, row + 1, 'WANT TO HELP KEEP THE GAME RUNNING?', 'fg');
+  put(c0 + 3, row + 2, 'YOU CAN SUPPORT IT ON GITHUB SPONSORS:', 'dim');
+  put(c0 + 3 + 40, row + 2, SPONSOR, 'yellow');
+  const copied = now() - copiedAt < 1.6;
+  put(c0 + w - 3 - 17, row + 3, copied ? 'COPIED!' : '[S] COPY LINK', copied ? 'green' : 'dim');
+  return 5;
+}
+
 function drawToastAndFooter(footer: string) {
   if (toast && now() - toast.at < 2.4) centered(42, toast.msg, 'green');
   centered(43, footer, 'dim');
@@ -200,9 +212,10 @@ function drawB(t: number) {
     if (on) put(c0 + (w - 7) / 2, 27, '[ENTER]', 'yellow');
   });
   const o = online();
-  centered(31, `[L] LANGUAGE:  <  ${langName()}  >      ONLINE NOW ${o.total}  (ENGLISH ${o.en}   SPANISH ${o.es})`, 'fg');
+  centered(31, `[TAB] LANGUAGE:  <  ${langName()}  >      ONLINE NOW ${o.total}  (ENGLISH ${o.en}   SPANISH ${o.es})`, 'fg');
   if (resting) restingPanel(19, 33, 90);
-  drawToastAndFooter('LEFT/RIGHT CHOOSE   ENTER CONFIRM   L LANGUAGE   1-3 JUMP');
+  else sponsorNote(19, 34, 90);
+  drawToastAndFooter('ARROWS OR H J K L CHOOSE   ENTER CONFIRM   TAB LANGUAGE   1-3 JUMP   S SPONSOR');
 }
 
 // ---------------------------------------------------------------- C: type the word
@@ -343,9 +356,20 @@ window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key;
   if (k === '[' || k === ']') return cycle(k === ']' ? 1 : -1);
-  if (k === 'Tab') {
-    e.preventDefault();
-    return setResting(!resting);
+  if (k === '\\') return setResting(!resting);
+  if (variant === 'B') {
+    if (k === 'Tab') {
+      e.preventDefault();
+      lang = lang === 'EN' ? 'ES' : 'EN';
+    } else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') move(1);
+    else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') move(-1);
+    else if (k === 'Enter') confirm(sel);
+    else if (k === '1' || k === '2' || k === '3') {
+      const i = Number(k) - 1;
+      if (!disabled(i)) sel = i;
+      confirm(i);
+    } else if (k === 's' || k === 'S') copySponsor();
+    return;
   }
   if (variant === 'C') {
     if (k === 'Enter') runTyped();
@@ -353,8 +377,8 @@ window.addEventListener('keydown', (e) => {
     else if (k.length === 1 && /[a-z]/i.test(k) && typed.length < 14) typed += k.toLowerCase();
     return;
   }
-  if (k === 'ArrowDown' || (variant === 'B' && k === 'ArrowRight')) move(1);
-  else if (k === 'ArrowUp' || (variant === 'B' && k === 'ArrowLeft')) move(-1);
+  if (k === 'ArrowDown') move(1);
+  else if (k === 'ArrowUp') move(-1);
   else if (k === 'ArrowLeft' || k === 'ArrowRight') lang = lang === 'EN' ? 'ES' : 'EN';
   else if (k === 'Enter') confirm(sel);
   else if (k === '1' || k === '2' || k === '3') {
@@ -389,7 +413,7 @@ document.body.append(bar);
 function refreshBar() {
   const v = VARIANTS.find((x) => x.key === variant)!;
   label.textContent = `${v.key} (${v.name})  [ ]`;
-  stateBtn.textContent = `servers: ${resting ? 'RESTING' : 'normal'} (Tab)`;
+  stateBtn.textContent = `servers: ${resting ? 'RESTING' : 'normal'} (\\)`;
   const p = new URLSearchParams(location.search);
   p.set('variant', variant);
   p.set('state', resting ? 'resting' : 'normal');
