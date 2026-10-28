@@ -11,8 +11,12 @@ export interface TextGrid {
   readonly cols: number;
   readonly rows: number;
   write(col: number, row: number, text: string, color?: PaletteColor): void;
-  /** Double-size text: each character covers 2×2 cells (col, row = top-left; advances 2 columns per character). */
-  writeBig(col: number, row: number, text: string, color?: PaletteColor): void;
+  /**
+   * Text at `scale` × the normal glyph size (e.g. 1.2), at a fractional grid position (col, row =
+   * top-left). Characters advance `scale` columns. Drawn over the grid text, under the overlay.
+   * Blank the cells underneath with `fill` if the shading shouldn't show through.
+   */
+  writeScaled(col: number, row: number, text: string, scale: number, color?: PaletteColor): void;
   /** Fill a rectangle with one character (' ' blanks the shading underneath). */
   fill(col: number, row: number, width: number, height: number, char?: string, color?: PaletteColor): void;
   clear(): void;

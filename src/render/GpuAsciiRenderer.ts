@@ -24,7 +24,9 @@ const hexToVec3 = (hex: string) => {
   return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
-/** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot, b = quarter of a double-size glyph (0 = normal, 1..4 = TL TR BL BR). */
+type ScaledRun = { col: number; row: number; text: string; scale: number; color: PaletteColor };
+
+/** Text cells stored in an RGBA byte texture: r = glyph + 1 (0 = empty), g = palette slot. */
 class DataTextGrid implements TextGrid {
   readonly cols = ASCII_STYLE.grid.cols;
   readonly rows = ASCII_STYLE.grid.rows;
@@ -36,20 +38,20 @@ class DataTextGrid implements TextGrid {
     this.texture.needsUpdate = true;
   }
 
-  private put(col: number, row: number, ch: string, color: PaletteColor, quarter = 0) {
+  /** Scaled text runs of this frame (drawn by the renderer on a canvas layer). */
+  runs: ScaledRun[] = [];
+
+  private put(col: number, row: number, ch: string, color: PaletteColor) {
     if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return;
     // Texture row 0 is the bottom of the screen; TextGrid row 0 is the top.
     const o = ((this.rows - 1 - row) * this.cols + col) * 4;
     this.data[o] = glyphIndex(ch) + 1;
     this.data[o + 1] = PALETTE[color];
-    this.data[o + 2] = quarter;
     this.texture.needsUpdate = true;
   }
 
-  writeBig(col: number, row: number, text: string, color: PaletteColor = 'fg') {
-    [...text].forEach((ch, i) => {
-      for (let q = 0; q < 4; q++) this.put(col + i * 2 + (q & 1), row + (q >> 1), ch, color, q + 1);
-    });
+  writeScaled(col: number, row: number, text: string, scale: number, color: PaletteColor = 'fg') {
+    if (text) this.runs.push({ col, row, text, scale, color });
   }
 
   write(col: number, row: number, text: string, color: PaletteColor = 'fg') {
@@ -61,6 +63,7 @@ class DataTextGrid implements TextGrid {
   }
 
   clear() {
+    this.runs = [];
     this.data.fill(0);
     this.texture.needsUpdate = true;
   }
@@ -88,8 +91,12 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private readonly sceneRT: THREE.WebGLRenderTarget;
   private readonly cellRT: THREE.WebGLRenderTarget;
   private atlas: THREE.CanvasTexture | null = null;
-  /** Same glyphs at twice the size, for double-size text. */
-  private atlasBig: THREE.CanvasTexture | null = null;
+  /** Scaled text runs: drawn on a canvas the size of the screen, laid over the frame. */
+  private runCanvas = document.createElement('canvas');
+  private readonly runTexture = new THREE.CanvasTexture(this.runCanvas);
+  private readonly runScene = new THREE.Scene();
+  private runSignature = '';
+  private fit: ViewportFit | null = null;
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly quad = new THREE.PlaneGeometry(2, 2);
   private readonly cellPass: { scene: THREE.Scene; mat: THREE.ShaderMaterial };
@@ -160,11 +167,14 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     );
 
     this.filters = new ScreenFilters(this.quad, this.ortho);
+    this.runScene.add(
+      new THREE.Mesh(this.quad, new THREE.MeshBasicMaterial({ map: this.runTexture, transparent: true, depthTest: false, depthWrite: false })),
+    );
 
     this.compositePass = this.pass(
       /* glsl */ `
       precision highp float;
-      uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas; uniform sampler2D tAtlasBig;
+      uniform sampler2D tCells; uniform sampler2D tText; uniform sampler2D tAtlas;
       uniform ivec2 cellDev; uniform ivec2 grid; uniform vec3 palette[5]; uniform vec3 bg;
       out vec4 outColor;
       void main() {
@@ -177,23 +187,13 @@ export class GpuAsciiRenderer implements AsciiRenderer {
         vec4 t = texelFetch(tText, c, 0);
         if (t.r > 0.0) { glyph = t.r * 255.0 - 1.0; pal = int(t.g * 255.0 + 0.5); }
         ivec2 local = px - c * cellDev;
-        int q = int(t.b * 255.0 + 0.5);
-        float a;
-        if (t.r > 0.0 && q > 0) {
-          // Double-size glyph: this cell shows one quarter (1..4 = TL TR BL BR) of the 2x atlas slot.
-          int qx = (q - 1) & 1;
-          int qy = (q - 1) >> 1;
-          a = texelFetch(tAtlasBig, ivec2(int(glyph + 0.5) * cellDev.x * 2 + qx * cellDev.x + local.x, (1 - qy) * cellDev.y + local.y), 0).a;
-        } else {
-          a = texelFetch(tAtlas, ivec2(int(glyph + 0.5) * cellDev.x + local.x, local.y), 0).a;
-        }
+        float a = texelFetch(tAtlas, ivec2(int(glyph + 0.5) * cellDev.x + local.x, local.y), 0).a;
         outColor = vec4(mix(bg, palette[pal], a), 1.0);
       }`,
       {
         tCells: { value: this.cellRT.texture },
         tText: { value: this.textGrid.texture },
         tAtlas: { value: null },
-        tAtlasBig: { value: null },
         cellDev: { value: new THREE.Vector2(1, 1) },
         grid: { value: new THREE.Vector2(grid.cols, grid.rows) },
         palette: { value: [palette.fg, palette.red, palette.green, palette.dim, palette.yellow].map(hexToVec3) },
@@ -223,34 +223,52 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     const u = this.compositePass.mat.uniforms;
     u.cellDev.value.set(fit.cellW, fit.cellH);
     u.tAtlas.value = this.atlas;
-    u.tAtlasBig.value = this.atlasBig;
+    this.fit = fit;
+    this.runCanvas.width = fit.canvasW;
+    this.runCanvas.height = fit.canvasH;
+    this.runSignature = ''; // repaint at the new size
   }
 
   /** One row of glyphs, each drawn into a cellW×cellH slot at the real device font size. */
   private buildAtlas(fit: ViewportFit) {
-    this.atlas?.dispose();
-    this.atlasBig?.dispose();
-    this.atlas = this.atlasTexture(fit, 1);
-    this.atlasBig = this.atlasTexture(fit, 2);
-  }
-
-  /** Glyph slots of (scale × cell) size, drawn at scale × the device font size. */
-  private atlasTexture(fit: ViewportFit, scale: number) {
-    const w = fit.cellW * scale;
-    const h = fit.cellH * scale;
+    const { cellW, cellH } = fit;
     const cv = document.createElement('canvas');
-    cv.width = w * CHARSET.length;
-    cv.height = h;
+    cv.width = cellW * CHARSET.length;
+    cv.height = cellH;
     const ctx = cv.getContext('2d')!;
-    ctx.font = `${fit.fontPx * scale}px "${ASCII_STYLE.font.family}"`;
+    ctx.font = `${fit.fontPx}px "${ASCII_STYLE.font.family}"`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    CHARSET.forEach((ch, i) => ctx.fillText(ch, i * w + w / 2, h / 2 + h / 16));
-    const tex = new THREE.CanvasTexture(cv);
-    tex.minFilter = tex.magFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    return tex;
+    CHARSET.forEach((ch, i) => ctx.fillText(ch, i * cellW + cellW / 2, cellH / 2 + cellH / 16));
+    this.atlas?.dispose();
+    this.atlas = new THREE.CanvasTexture(cv);
+    this.atlas.minFilter = this.atlas.magFilter = THREE.NearestFilter;
+    this.atlas.generateMipmaps = false;
+  }
+
+  /** Redraw the scaled text runs onto their canvas, only when this frame's runs changed. */
+  private paintRuns() {
+    const fit = this.fit;
+    if (!fit) return;
+    const runs = this.textGrid.runs;
+    const sig = runs.map((r) => `${r.col},${r.row},${r.scale},${r.color},${r.text}`).join('|');
+    if (sig === this.runSignature) return;
+    this.runSignature = sig;
+    const ctx = this.runCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, this.runCanvas.width, this.runCanvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // The grid sits at the bottom-left of the canvas (same as the composite shader).
+    const top = this.runCanvas.height - ASCII_STYLE.grid.rows * fit.cellH;
+    for (const r of runs) {
+      const w = fit.cellW * r.scale;
+      const h = fit.cellH * r.scale;
+      ctx.font = `${fit.fontPx * r.scale}px "${ASCII_STYLE.font.family}"`;
+      ctx.fillStyle = ASCII_STYLE.palette[r.color];
+      [...r.text].forEach((ch, i) => ctx.fillText(ch, (r.col + i * r.scale) * fit.cellW + w / 2, top + r.row * fit.cellH + h / 2 + h / 16));
+    }
+    this.runTexture.needsUpdate = true;
   }
 
   render(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera }) {
@@ -264,6 +282,10 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     const filtered = anyFilterOn();
     gl.setRenderTarget(filtered ? this.filters.frameRT : null);
     gl.render(this.compositePass.scene, this.ortho);
+    this.paintRuns();
+    gl.autoClear = false;
+    gl.render(this.runScene, this.ortho);
+    gl.autoClear = true;
     if (overlay) {
       gl.autoClear = false;
       gl.render(overlay.scene, overlay.camera);
@@ -276,7 +298,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.sceneRT.dispose();
     this.cellRT.dispose();
     this.atlas?.dispose();
-    this.atlasBig?.dispose();
+    this.runTexture.dispose();
     this.textGrid.dispose();
     this.cellPass.mat.dispose();
     this.compositePass.mat.dispose();

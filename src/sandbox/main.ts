@@ -73,7 +73,7 @@ hx.add(HIT_LOOK, 'boomSize', 0.2, 4, 0.05).name('debris spread');
 hx.add(HIT_LOOK, 'shakeSeconds', 0.05, 1.5, 0.05).name('shake time (s)');
 hx.add(HIT_LOOK, 'shake', 0, 0.6, 0.005).name('shake strength');
 hx.add(HIT_LOOK, 'roll', 0, 0.4, 0.005).name('roll');
-hx.add(HIT_LOOK, 'flashSeconds', 0, 2, 0.05).name('red flash time (s)');
+hx.add(HIT_LOOK, 'flashSeconds', 0, 2, 0.05).name('black flash time (s)');
 
 const shx = gui.addFolder('Shot hit effect');
 shx.add(SHOT_HIT_LOOK, 'seconds', 0.3, 3, 0.05).name('time (s)');

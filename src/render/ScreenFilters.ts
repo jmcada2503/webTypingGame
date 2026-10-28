@@ -28,7 +28,7 @@ export const SCREEN_FILTERS = {
   flicker: 0.04,
 };
 
-/** One-off screen flash (0..1), e.g. when a life is lost: red glow at the edges + stronger color fringes. */
+/** One-off screen flash (0..1), e.g. when a life is lost: the screen dips to black + stronger color fringes. */
 export const SCREEN_HIT = { level: 0 };
 
 export const anyFilterOn = () => {
@@ -139,10 +139,8 @@ export class ScreenFilters {
         if (noise > 0.0) c += (hash(gl_FragCoord.xy + fract(time) * 100.0) - 0.5) * noise;
         if (flicker > 0.0) c *= 1.0 + flicker * sin(time * 60.0) * 0.5 + flicker * (hash(vec2(floor(time * 24.0), 3.0)) - 0.5);
         if (hit > 0.0) {
-          // Life lost: the whole screen flushes red, strongest toward the edges.
-          float edge = clamp(length(cc) * 1.8, 0.0, 1.0);
-          c = mix(c, vec3(max(c.r, 0.15) * 1.6, c.g * 0.35, c.b * 0.35), hit * 0.6);
-          c += vec3(0.55, 0.0, 0.0) * hit * (0.25 + 0.75 * edge * edge);
+          // Life lost: the screen dips to black, then fades back.
+          c *= 1.0 - 0.94 * hit * hit;
         }
         outColor = vec4(max(c, 0.0) * inside, 1.0);
       }`,

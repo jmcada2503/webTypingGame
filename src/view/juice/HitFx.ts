@@ -10,7 +10,7 @@ export const HIT_LOOK = {
   shakeSeconds: 0.7,
   shake: 0.22,
   roll: 0.12,
-  /** Red screen flash length (s). */
+  /** Black screen flash length (s). */
   flashSeconds: 0.7,
   /** Wrong key: a quick horizontal "no" shake of the camera (s, world units). */
   noSeconds: 0.22,

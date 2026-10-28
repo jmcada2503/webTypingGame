@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
-import { gridRectOf, writeCenteredBig } from './gridProjection';
+import { gridRectOf, writeCenteredScaled } from './gridProjection';
 import { Radar, RADAR_SIZE } from './Radar';
 import { matchPrefix } from '../../utils/matchPrefix';
 
@@ -13,6 +13,8 @@ const TYPED_SHAKE_SECONDS = 0.25;
 const TYPED_SHAKE_COLS = 2;
 /** A lamp that just went out flickers this long (s) at this rate (Hz) before staying dark. */
 const LAMP_FLICKER_SECONDS = 1.2;
+/** Typed word, ATTACK label and Attack word: size × the normal grid glyph. */
+const TEXT_SCALE = 1.2;
 const LAMP_FLICKER_HZ = 14;
 
 /**
@@ -162,23 +164,24 @@ export class Cockpit {
     const typedRect = gridRectOf(this.typedScreen, this.camera);
     typedRect.c0 += shift;
     typedRect.c1 += shift;
-    writeCenteredBig(text, typedRect, state.typedWord, 'fg', cursor);
+    writeCenteredScaled(text, typedRect, state.typedWord, TEXT_SCALE, 'fg', cursor);
     this.centerCell.col = (typedRect.c0 + typedRect.c1) / 2 - shift;
     this.centerCell.row = (typedRect.r0 + typedRect.r1) / 2;
 
     const edge = gridRectOf(this.typedBezel, this.camera, true);
-    const row = edge.r0 - 2; // double-size text: this row and the one below
-    text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' ');
-    text.writeBig(edge.c0 + 1, row, 'ATTACK', 'dim');
+    const row = edge.r0 - 2;
+    text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' '); // two rows, so the larger text sits on blank
+    const textRow = row + 1 - TEXT_SCALE / 2; // centered on the blank rows
+    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, 'dim');
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
     const len = [...state.typedWord].length;
     const targetingBullet = len > 0 && state.wordBullets.some((b) => matchPrefix(state.typedWord, b.word) === len);
     const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
-    const at = edge.c1 - letters.length * 2 - 1;
-    text.writeBig(at, row, letters.slice(0, typed).join(''), 'fg');
-    text.writeBig(at + typed * 2, row, letters.slice(typed).join(''), 'red');
+    const at = edge.c1 - letters.length * TEXT_SCALE - 1;
+    text.writeScaled(at, textRow, letters.slice(0, typed).join(''), TEXT_SCALE, 'fg');
+    text.writeScaled(at + typed * TEXT_SCALE, textRow, letters.slice(typed).join(''), TEXT_SCALE, 'red');
 
     this.radar.draw(text, this.camera, state.shots, dt);
   }
