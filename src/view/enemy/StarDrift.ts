@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 
 /**
- * Live-tunable from the sandbox panel.
- * TODO (later effort, player settings): let players turn moving stars off, since the motion can
- * cause dizziness. `speed = 0` already freezes them; the setting should also override any juice
- * effect that drives the speed.
+ * TODO (later effort, player settings): expose `motion` as a player setting, since the moving
+ * stars can cause dizziness.
  */
 export const STAR_DRIFT = {
-  /** World units / s toward the camera. The juice tickets may drive this from game signals. */
-  speed: 6,
-  /** The future player setting: false = stars stay still (dizziness), whatever drives the speed. */
+  /** World units / s toward the camera (negative = away). Driven by the Paces (PaceMotion). */
+  speed: 0,
+  /** The player setting: false = stars stay still, whatever drives the speed. */
   motion: true,
 };
 

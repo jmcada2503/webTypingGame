@@ -14,8 +14,7 @@ import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
-import { mountPrototypeSwitcher } from '../prototypes/PrototypeSwitcher';
-import { PACE_PROTO, PACE_VARIANTS, PaceMotion, type PaceKind } from './juice/pacePrototype';
+import { PaceMotion } from './juice/PaceMotion';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -48,7 +47,6 @@ export class AsciiGameView implements GameView {
   private readonly sparks = new SparkBursts();
   /** Big yellow 3D sparks from behind the Cockpit when the Attack word is fired. */
   private readonly attackSparks: AttackSparks;
-  /** PROTOTYPE ("Juice: Pace-driven motion"). */
   private readonly paceMotion: PaceMotion;
   /** Typed word last frame, to spot correct / wrong keys. */
   private prevTyped = '';
@@ -78,7 +76,6 @@ export class AsciiGameView implements GameView {
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
     this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.paceMotion = new PaceMotion(this.enemy);
-    PACE_PROTO.kind = mountPrototypeSwitcher(PACE_VARIANTS) as PaceKind; // PROTOTYPE
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
