@@ -1,0 +1,130 @@
+{
+ "en": {
+  "total": 11595,
+  "min_zipf": 3.5,
+  "tiers": {
+   "short": 1395,
+   "medium": 5218,
+   "long": 4982
+  },
+  "filter_stats": {
+   "candidates": 15090,
+   "length": 26,
+   "mostly_other_language": 34,
+   "not_typeable(punct/digits/other-script)": 266,
+   "abbrev/junk": 187,
+   "not_in_dictionary(proper/typo/slang/foreign)": 2156,
+   "also_proper_noun(john, china, march...)": 725,
+   "profanity/sexual": 100
+  },
+  "by_min_zipf": {
+   "5.0": {
+    "total": 917,
+    "short": 352,
+    "medium": 443,
+    "long": 122
+   },
+   "4.5": {
+    "total": 2543,
+    "short": 585,
+    "medium": 1323,
+    "long": 635
+   },
+   "4.0": {
+    "total": 5830,
+    "short": 911,
+    "medium": 2863,
+    "long": 2056
+   },
+   "3.5": {
+    "total": 11595,
+    "short": 1395,
+    "medium": 5218,
+    "long": 4982
+   },
+   "3.0": {
+    "total": 11595,
+    "short": 1395,
+    "medium": 5218,
+    "long": 4982
+   }
+  }
+ },
+ "es": {
+  "total": 14188,
+  "min_zipf": 3.5,
+  "tiers": {
+   "short": 939,
+   "medium": 6062,
+   "long": 7187
+  },
+  "filter_stats": {
+   "candidates": 16741,
+   "length": 28,
+   "not_typeable(punct/digits/other-script)": 61,
+   "mostly_other_language": 66,
+   "not_in_dictionary(proper/typo/slang/foreign)": 2024,
+   "abbrev/junk": 109,
+   "also_proper_noun(john, china, march...)": 141,
+   "profanity/sexual": 123
+  },
+  "accented": {
+   "words": 2605,
+   "pct": 18.4,
+   "with_n_tilde": 172,
+   "with_u_diaeresis": 7,
+   "by_tier": {
+    "short": 148,
+    "medium": 1122,
+    "long": 1335
+   },
+   "by_letter": {
+    "á": 398,
+    "é": 259,
+    "í": 620,
+    "ó": 1090,
+    "ú": 73,
+    "ü": 7,
+    "ñ": 172
+   },
+   "freq_mass_pct": 9.1
+  },
+  "by_min_zipf": {
+   "5.0": {
+    "total": 810,
+    "short": 224,
+    "medium": 439,
+    "long": 147
+   },
+   "4.5": {
+    "total": 2473,
+    "short": 382,
+    "medium": 1318,
+    "long": 773
+   },
+   "4.0": {
+    "total": 6472,
+    "short": 614,
+    "medium": 3115,
+    "long": 2743
+   },
+   "3.5": {
+    "total": 14188,
+    "short": 939,
+    "medium": 6062,
+    "long": 7187
+   },
+   "3.0": {
+    "total": 14188,
+    "short": 939,
+    "medium": 6062,
+    "long": 7187
+   }
+  },
+  "tiers_without_accents": {
+   "short": 791,
+   "medium": 4940,
+   "long": 5852
+  }
+ }
+}
