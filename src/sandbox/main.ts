@@ -13,6 +13,7 @@ import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
 import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
+import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -81,6 +82,12 @@ const dmg = gui.addFolder('Enemy damage effect');
 dmg.add(DAMAGE_LOOK, 'smoke', 0, 6, 0.1).name('smoke amount');
 dmg.add(DAMAGE_LOOK, 'wingTipAt', 0, 1, 0.05).name('wing tip lost at');
 dmg.add(DAMAGE_LOOK, 'engineAt', 0, 1, 0.05).name('engine lost at');
+
+const ask = gui.addFolder('Attack sparks');
+ask.add(ATTACK_SPARKS_LOOK, 'count', 1, 40, 1);
+ask.add(ATTACK_SPARKS_LOOK, 'seconds', 0.1, 3, 0.05).name('sparks time (s)');
+ask.add(ATTACK_SPARKS_LOOK, 'reach', 0.05, 1, 0.01);
+ask.add(ATTACK_SPARKS_LOOK, 'size', 0.005, 0.08, 0.001);
 
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');

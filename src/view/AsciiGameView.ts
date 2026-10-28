@@ -13,6 +13,7 @@ import { HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
+import { AttackSparks } from './juice/AttackSparks';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -43,6 +44,8 @@ export class AsciiGameView implements GameView {
   private readonly damageFx: EnemyDamageFx;
   /** Yellow firing sparks (Enemy ship fires, Attack word fired). */
   private readonly sparks = new SparkBursts();
+  /** Big yellow 3D sparks from behind the Cockpit when the Attack word is fired. */
+  private readonly attackSparks: AttackSparks;
   /** Typed word last frame, to spot correct / wrong keys. */
   private prevTyped = '';
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
@@ -69,6 +72,7 @@ export class AsciiGameView implements GameView {
     this.hitFx = new HitFx(this.scene, this.camera);
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
+    this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -91,6 +95,7 @@ export class AsciiGameView implements GameView {
     this.shotHitFx.update(dt, text);
     this.damageFx.update(state.enemyDamage, dt, text);
     this.sparks.update(dt, text);
+    this.attackSparks.update(dt);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -135,9 +140,8 @@ export class AsciiGameView implements GameView {
       this.sparks.burst(g.col, g.row, { count: 10, reach: 2.5 });
     }
     if (event.type === 'attackFired') {
-      // Big yellow sparks burst up from the Cockpit's center (the Typed word screen).
-      const c = this.cockpit.centerCell;
-      this.sparks.burst(c.col, c.row, { count: 16, reach: 6, life: 0.45, aim: Math.PI / 2, spread: 1.2, big: true });
+      // Big yellow sparks burst from behind the Cockpit's center toward the Enemy ship.
+      this.attackSparks.fire(this.enemy.root.position);
     }
     const detail = 'id' in event ? ` ${event.id}` : 'word' in event ? ` ${event.word}` : '';
     this.lastEvent = { label: `${event.type}${detail}`, age: 0 };
@@ -160,6 +164,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.dispose();
     this.shotHitFx.dispose();
     this.damageFx.dispose();
+    this.attackSparks.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();
