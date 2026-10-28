@@ -12,6 +12,7 @@ import { WORD_LOOK } from '../view/words/WordBulletSprites';
 import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
 import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
+import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 
 const session = new SandboxSession();
@@ -76,6 +77,11 @@ shx.add(SHOT_HIT_LOOK, 'seconds', 0.3, 3, 0.05).name('time (s)');
 shx.add(SHOT_HIT_LOOK, 'dip', 0, 4, 0.05).name('ship sag');
 shx.add(SHOT_HIT_LOOK, 'boomSize', 0.5, 8, 0.1).name('explosion size');
 
+const dmg = gui.addFolder('Enemy damage effect');
+dmg.add(DAMAGE_LOOK, 'smoke', 0, 6, 0.1).name('smoke amount');
+dmg.add(DAMAGE_LOOK, 'wingTipAt', 0, 1, 0.05).name('wing tip lost at');
+dmg.add(DAMAGE_LOOK, 'engineAt', 0, 1, 0.05).name('engine lost at');
+
 const ev = gui.addFolder('Events');
 ev.add(session, 'submitDestroys').name('typing destroys match');
 ev.add({ destroy: () => session.destroyOldest() }, 'destroy').name('destroy oldest');
@@ -89,6 +95,9 @@ const sh = gui.addFolder('Shots (Radar)');
 sh.add({ fire: () => session.fireAttack() }, 'fire').name('fire Attack word');
 sh.add({ defend: () => session.defendOldestShot() }, 'defend').name('enemy defends oldest');
 sh.add({ hit: () => session.hitOldestShot() }, 'hit').name('shot hits enemy now');
+sh.add(session, 'enemyDamage', 0, 1, 0.01).name('enemy damage').listen();
+sh.add(session, 'damagePerHit', 0, 0.5, 0.05).name('damage per hit');
+sh.add({ repair: () => (session.enemyDamage = 0) }, 'repair').name('repair enemy');
 sh.add(session, 'shotFlightSeconds', 1, 20, 0.5).name('shot flight time (s)');
 sh.add(session, 'newAttackWordOnFire').name('new Attack word on fire');
 sh.add(live, 'shots').name('in flight').disable().listen();
@@ -98,6 +107,9 @@ time.add(session, 'paused').name('pause');
 time.add({ step: () => session.step() }, 'step').name('step 1 frame');
 
 gui.add({ fs: () => void shell.toggleFullscreen() }, 'fs').name('⛶ fullscreen');
+
+// Every folder starts collapsed; open only what you need.
+gui.foldersRecursive().forEach((f) => f.close());
 
 const stats = new Stats();
 stats.dom.style.left = '72px'; // next to the fullscreen button

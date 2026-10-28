@@ -11,6 +11,7 @@ import { Cockpit } from './cockpit/Cockpit';
 import { WordDestroyFx } from './juice/WordDestroyFx';
 import { HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
+import { EnemyDamageFx } from './juice/EnemyDamageFx';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -35,6 +36,8 @@ export class AsciiGameView implements GameView {
   private readonly hitFx: HitFx;
   /** Shot hit: Radar HIT!! + big green explosion on the Enemy ship, which sags. */
   private readonly shotHitFx: ShotHitFx;
+  /** Enemy ship damage: smoke + missing pieces from enemyDamage. */
+  private readonly damageFx: EnemyDamageFx;
   /** Drawn after the ASCII pass, untouched: Word bullets + real-font Cockpit labels. */
   private readonly overlay = new THREE.Scene();
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
@@ -58,6 +61,7 @@ export class AsciiGameView implements GameView {
     this.destroyFx = new WordDestroyFx(this.overlay, this.camera);
     this.hitFx = new HitFx(this.scene, this.camera);
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
+    this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
@@ -77,6 +81,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.update(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
+    this.damageFx.update(state.enemyDamage, dt, text);
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
@@ -115,6 +120,7 @@ export class AsciiGameView implements GameView {
     this.destroyFx.dispose();
     this.hitFx.dispose();
     this.shotHitFx.dispose();
+    this.damageFx.dispose();
     this.enemy.dispose();
     this.stars.dispose();
     this.ascii.dispose();
