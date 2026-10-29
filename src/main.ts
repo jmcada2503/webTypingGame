@@ -10,6 +10,7 @@ import { MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
 import { ShotVerifier } from './match/ShotVerifier';
 import { createApi } from './net/api';
+import { checkFreshness } from './net/freshness';
 import { listVersion, playerId } from './net/identity';
 import { OnlineNetwork } from './net/OnlineNetwork';
 import { createServerStatus } from './net/serverStatus';
@@ -40,6 +41,14 @@ const online = backend
       inviteLink: (matchId) => `${location.origin}${location.pathname}#/m/${matchId}`,
       onRecord: (record) => logMetric({ event: 'p2p_connection', ...record }),
       log: logMetric,
+      // A tab left open across a deploy may hold old word lists: reload onto the new build before joining.
+      beforeJoin: async (code) => {
+        if ((await checkFreshness(versions)) !== 'stale') return true;
+        logMetric({ event: 'stale_build_reload' });
+        if (code) history.replaceState(null, '', `${location.pathname}${location.search}#/m/${code}`); // keep the link
+        location.reload();
+        return false;
+      },
     });
 const flow = new ScreenFlow(online ?? backend!.connect());
 const view = await AsciiGameView.create();

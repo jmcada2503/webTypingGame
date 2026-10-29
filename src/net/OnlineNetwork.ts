@@ -30,6 +30,11 @@ export interface OnlineNetworkOptions {
   /** Every connection attempt, success or failure, for the metrics. */
   onRecord?: (record: ConnectionRecord) => void;
   log?: (entry: Record<string, unknown>) => void;
+  /**
+   * Runs right before each search or join; resolving false stops it quietly (e.g. the page is reloading
+   * onto a newer build). `code` is the Invite code when joining a link.
+   */
+  beforeJoin?: (code?: string) => Promise<boolean>;
   /** Poll cadence while waiting for an opponent, and during the handshake. */
   pollWaitingMs?: number;
   pollHandshakeMs?: number;
@@ -95,6 +100,7 @@ export class OnlineNetwork implements FlowNetwork {
 
   joinQueue(language: Language) {
     this.begin(async (a) => {
+      if (!(await this.ready(a))) return;
       const view = await this.retryIfBusy(() => this.api.queue(language, this.config.listVersion(language)));
       this.enter(a, view);
     });
@@ -102,6 +108,7 @@ export class OnlineNetwork implements FlowNetwork {
 
   createPrivate(language: Language) {
     this.begin(async (a) => {
+      if (!(await this.ready(a))) return;
       const view = await this.api.createMatch(language, this.config.listVersion(language));
       if (a.cancelled) return;
       this.emit({ type: 'inviteCreated', link: this.config.inviteLink(view.matchId) });
@@ -111,6 +118,7 @@ export class OnlineNetwork implements FlowNetwork {
 
   joinPrivate(code: string) {
     this.begin(async (a) => {
+      if (!(await this.ready(a, code))) return;
       let view: MatchView;
       try {
         view = await this.api.join(code);
@@ -173,6 +181,12 @@ export class OnlineNetwork implements FlowNetwork {
       this.log({ event: 'online_error', error: error instanceof ApiError ? error.code : String(error) });
       this.emit({ type: 'connectFailed' });
     });
+  }
+
+  /** The pre-join check; false also when the search was left while it ran. */
+  private async ready(a: Attempt, code?: string) {
+    const ok = this.config.beforeJoin ? await this.config.beforeJoin(code) : true;
+    return ok && !a.cancelled;
   }
 
   private async retryIfBusy<T>(call: () => Promise<T>): Promise<T> {

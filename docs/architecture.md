@@ -170,7 +170,10 @@ clock; guest converts via a ping-pong clock offset so both Countdowns end togeth
 Client: `src/net/OnlineNetwork.ts` (the `FlowNetwork` the screens use) polls ~2 s while waiting and 0.7 s
 during the handshake, and the guest refuses a host whose `listVersion` (word-list hash + `ATTACK_PICKER_VERSION`)
 differs from its own. Match *k* on one connection (0, then each Rematch) starts its Attack-word indices at
-`k × REMATCH_INDEX_STRIDE`, so both sides agree without sending indices. `npm run dev` serves `/api` from the
+`k × REMATCH_INDEX_STRIDE`, so both sides agree without sending indices. The word lists ship inside the code
+bundle (they change only with a deploy); the build writes `/version.json` (each language's `listVersion`, served
+no-cache) and the client fetches it right before every queue or link join, reloading onto the new build if it is
+behind (an Invite link survives the reload). `npm run dev` serves `/api` from the
 real matchmaking code over the in-memory store (`vite.devApi.ts`); `?fake` uses the in-memory flow fake instead.
 
 **In-Match (hot path, no AWS).** Events flow Browser↔Browser over the reliable+ordered DataChannel, each

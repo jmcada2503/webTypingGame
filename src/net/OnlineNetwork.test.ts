@@ -388,3 +388,34 @@ describe('leaving while waiting', () => {
     expect([...server.matches.values()].map((m) => m.kind)).toEqual(['public']);
   });
 });
+
+describe('the check before joining', () => {
+  it('runs before every search and join, and a false stops it quietly', async () => {
+    const timers = new FakeTimers();
+    const server = new FakeServer();
+    const asked: Array<string | undefined> = [];
+    let allow = false;
+    const network = new OnlineNetwork({
+      api: server.api('player-a'),
+      timers,
+      listVersion: () => 'v1',
+      inviteLink: (id) => id,
+      beforeJoin: async (code) => (asked.push(code), allow),
+    });
+    const events: string[] = [];
+    network.onEvent((e) => events.push(e.type));
+
+    network.joinQueue('en');
+    network.createPrivate('en');
+    network.joinPrivate('m9');
+    await timers.advanceAsync(100);
+    expect(asked).toEqual([undefined, undefined, 'm9']);
+    expect(server.matches.size).toBe(0);
+    expect(events).toEqual([]);
+
+    allow = true;
+    network.joinQueue('en');
+    await timers.advanceAsync(100);
+    expect(server.queue.get('en')).toBeDefined();
+  });
+});
