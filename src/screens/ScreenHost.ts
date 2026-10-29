@@ -8,12 +8,20 @@ import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { GO_SECONDS, goFlash } from './content';
 import { bigNumber } from './countdownScreen';
-import { ENDINGS, endingFrame, endingMoments, type EndingResult } from './endings';
+import { ENDINGS, endingFrame, endingMoments, type EndingFrame, type EndingPlan, type EndingResult } from './endings';
 import type { ScreenSet } from './Screen';
 import { ScreenTransition, type ScreenId, transitionFor, visualOf } from './ScreenTransition';
 
 /** What the game scene shows when no Match is feeding it (the TV gap before the Match). */
 const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 }, idle: NOT_IDLE };
+
+/** PROTOTYPE hook (Prototype: Practice game over screen, throwaway): an ending scene for Practice. */
+export interface CustomEnding {
+  plan: EndingPlan;
+  frame(t: number): EndingFrame;
+  overlay?(text: TextGrid, t: number): void;
+}
+export const PRACTICE_ENDING: { make: (() => CustomEnding) | null } = { make: null };
 
 /** Creates the session that plays one Match (or Practice). Online play and Practice each bring their own. */
 export type CreateMatch = (mode: PlayMode) => GameSession;
@@ -39,7 +47,7 @@ export class ScreenHost implements GameSession {
   /** The GO flash is showing over the Match scene. */
   private goOn = false;
   /** An online Match just ended: its ending scene plays (`t` seconds in) before the screen changes. */
-  private ending: { result: EndingResult; t: number; started: boolean } | null = null;
+  private ending: { result: EndingResult; t: number; started: boolean; custom?: CustomEnding } | null = null;
 
   constructor(
     private readonly view: GameView,
@@ -89,7 +97,7 @@ export class ScreenHost implements GameSession {
     const base = this.displayed === 'match' && this.match ? this.match.state() : IDLE_STATE;
     if (!this.ending) return base;
     // The ending's effect on what the view is told: Peace keeps the Idle nudge's PEACE!! label up and the stars race, Lose slows the stars.
-    const f = endingFrame(this.ending.result, this.ending.t);
+    const f = this.ending.custom ? this.ending.custom.frame(this.ending.t) : endingFrame(this.ending.result, this.ending.t);
     const pace = f.pace ?? base.pace.player * f.paceScale;
     const idle = this.ending.result === 'peace' ? { nudging: false, opponentIdle: false, peaceIn: 0 } : base.idle;
     return { ...base, idle, pace: { player: pace, enemy: f.pace ?? base.pace.enemy * f.paceScale } };
@@ -101,12 +109,12 @@ export class ScreenHost implements GameSession {
     if (!ending) return [];
     const from = ending.t;
     ending.t += dt;
-    const events: ViewEvent[] = endingMoments(ending.result, from, ending.t).map(() => ({ type: 'enemyDestroyed' }));
-    const plan = ENDINGS[ending.result];
+    const events: ViewEvent[] = ending.custom ? [] : endingMoments(ending.result, from, ending.t).map(() => ({ type: 'enemyDestroyed' }));
+    const plan = ending.custom?.plan ?? ENDINGS[ending.result];
     if (ending.t >= plan.sceneSeconds && !ending.started && !this.transition.active) {
       ending.started = true;
       this.transition.start(plan.effect, plan.hold, () => this.swap());
-    } else if (!ending.started) this.view.setEnding(endingFrame(ending.result, ending.t));
+    } else if (!ending.started) this.view.setEnding(ending.custom ? ending.custom.frame(ending.t) : endingFrame(ending.result, ending.t));
     return events;
   }
 
@@ -143,6 +151,12 @@ export class ScreenHost implements GameSession {
     if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus') {
       this.ending = { result, t: 0, started: false };
       this.view.setEnding(endingFrame(result, 0));
+    } else if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'practice' && PRACTICE_ENDING.make) {
+      const custom = PRACTICE_ENDING.make();
+      const ending = { result, t: 0, started: false, custom };
+      this.ending = ending;
+      this.view.setEnding(custom.frame(0));
+      if (custom.overlay) this.view.setOverlay((text) => custom.overlay!(text, ending.t));
     }
   }
 

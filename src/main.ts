@@ -15,7 +15,8 @@ import { listVersion, playerId } from './net/identity';
 import { OnlineNetwork } from './net/OnlineNetwork';
 import { createServerStatus } from './net/serverStatus';
 import { PracticeSession } from './practice/PracticeSession';
-import { ScreenHost } from './screens/ScreenHost';
+import { PRACTICE_ENDING, ScreenHost } from './screens/ScreenHost';
+import { practiceEndScreen, practiceEnding, sampleRun } from './prototype/practiceGameOver/variants';
 import { howtoScreen } from './screens/howtoScreen';
 import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
@@ -97,6 +98,15 @@ const createMatch = (mode: 'versus' | 'practice') => {
   });
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
+// PROTOTYPE (Prototype: Practice game over screen, throwaway): a Practice ending scene + four game over variants.
+screens.end = practiceEndScreen(screens.end, flow, () => practice?.result() ?? null);
+PRACTICE_ENDING.make = practiceEnding;
+if (import.meta.env.DEV) Object.defineProperty(window, 'practiceRun', { get: () => practice });
+setInterval(() => {
+  const s = flow.state();
+  if (s.screen === 'match' && s.mode === 'practice') sampleRun(practice?.result() ?? null);
+}, 100);
+
 const host = new ScreenHost(view, flow, screens, createMatch);
 new AppShell(view, host, input).start();
 
