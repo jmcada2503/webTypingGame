@@ -38,7 +38,7 @@ const ANIMS = [
   { key: 'D', name: 'Radar search (ship vanishes, rings sweep out)' },
 ];
 const WHERES: Where[] = ['waiting', 'countdown', 'match'];
-let phase: Phase = params.get('phase') === 'left' ? 'left' : 'match';
+let phase: Phase = params.get('phase') === 'left' ? 'left' : params.get('phase') === 'back' ? 'back' : 'match';
 let anim = Math.max(0, 'ABCD'.indexOf(params.get('anim') ?? 'A'));
 let layout = Math.min(2, Math.max(0, Number(params.get('layout') ?? 1) - 1));
 let where: Where = (WHERES.find((w) => w === params.get('where')) ?? 'match') as Where;
@@ -168,19 +168,26 @@ function renderTextOnTop(scene: THREE.Scene, camera: THREE.Camera, overlay?: { s
   if (filtered) priv.filters.apply(gl);
 }
 /**
- * Effect behind the back-countdown so it and its labels do not blend into the game: a dark soft-edged panel
- * plus a clock ring that sweeps once per second (with 12 ticks and a bright tip). It is drawn on a 2D canvas
- * laid over the frame, above the held words and below the countdown text.
+ * Four minimal looks for the back-countdown (V cycles them). Each keeps the text to the digit and "ENEMY BACK",
+ * and puts something dark behind it so the held words and the game do not compete with it. Drawn on a 2D canvas
+ * laid over the frame: above the held words, below the countdown text.
  */
+const BACK_LOOKS = [
+  { name: 'Digit with a dark glow', labelRow: 17.4 },
+  { name: 'Dark band', labelRow: 18.4 },
+  { name: 'Digit and 5 dots', labelRow: 17.4 },
+  { name: 'Box', labelRow: 18.0 },
+];
+let backLook = Math.min(3, Math.max(0, Number(params.get('back') ?? 1) - 1));
 const backFx = (() => {
   const canvas = document.createElement('canvas');
   const material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   const scene = new THREE.Scene();
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
-  return { canvas, material, scene, texture: null as THREE.CanvasTexture | null, mode: 'off' as 'off' | 'beat' | 'count', frac: 0, urgent: false };
+  return { canvas, material, scene, texture: null as THREE.CanvasTexture | null, mode: 'off' as 'off' | 'beat' | 'count', frac: 0, urgent: false, n: BACK_COUNT };
 })();
 
-/** Draws the effect for this frame; false when there is nothing to draw. */
+/** Draws the look for this frame; false when there is nothing to draw. */
 function paintBackFx(): boolean {
   const fit = priv.fit;
   if (backFx.mode === 'off' || !fit) return false;
@@ -200,60 +207,66 @@ function paintBackFx(): boolean {
   const Y = (row: number) => top + row * cellH;
   const pal = ASCII_STYLE.palette;
   const accent = backFx.urgent ? pal.red : pal.yellow;
+  const cx = X(COLS / 2);
+  const cy = Y(24.4);
   ctx.clearRect(0, 0, cv.width, cv.height);
 
-  // Dark panel with a soft shadowed edge: the countdown area reads as its own layer.
-  const box = backFx.mode === 'count' ? { c0: 30, c1: 98, r0: 15.8, r1: 33.7 } : { c0: 44, c1: 84, r0: 15.8, r1: 20.6 };
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.95)';
-  ctx.shadowBlur = cellH * 2.5;
-  ctx.fillStyle = 'rgba(0,0,0,0.82)';
-  ctx.beginPath();
-  ctx.roundRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0), cellH * 1.2);
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = Math.max(1, cellH * 0.08);
-  ctx.beginPath();
-  ctx.roundRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0), cellH * 1.2);
-  ctx.stroke();
-
-  if (backFx.mode === 'count') {
-    // Clock ring round the number: a dim track, 12 ticks, and a bright arc that sweeps once per second.
-    const cx = X(COLS / 2);
-    const cy = Y(24.4);
-    const R = cellH * 4.6;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = cellH * 0.22;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.stroke();
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
-      const long = i % 3 === 0;
-      ctx.lineWidth = cellH * (long ? 0.2 : 0.12);
-      ctx.strokeStyle = long ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)';
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (R + cellH * 0.35), cy + Math.sin(a) * (R + cellH * 0.35));
-      ctx.lineTo(cx + Math.cos(a) * (R + cellH * (long ? 1.0 : 0.8)), cy + Math.sin(a) * (R + cellH * (long ? 1.0 : 0.8)));
-      ctx.stroke();
-    }
-    const start = -Math.PI / 2;
-    const end = start + backFx.frac * Math.PI * 2;
+  /** A wide dark oval, soft at the edge. */
+  const glow = (radius: number, alpha: number) => {
     ctx.save();
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = cellH * 1.2;
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = cellH * 0.4;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, start, end);
-    ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cx + Math.cos(end) * R, cy + Math.sin(end) * R, cellH * 0.45, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.translate(cx, cy);
+    ctx.scale(2, 1);
+    const g = ctx.createRadialGradient(0, 0, radius * 0.2, 0, 0, radius);
+    g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    g.addColorStop(0.65, `rgba(0,0,0,${alpha * 0.9})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
     ctx.restore();
+  };
+
+  if (backLook === 0) {
+    glow(cellH * 10.5, 0.92);
+  } else if (backLook === 1) {
+    const g = ctx.createLinearGradient(0, Y(16.4), 0, Y(32));
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.1, 'rgba(0,0,0,0.88)');
+    g.addColorStop(0.9, 'rgba(0,0,0,0.88)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, Y(16.4), cv.width, Y(32) - Y(16.4));
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(0, Y(17.5), cv.width, Math.max(1, cellH * 0.08));
+    ctx.fillRect(0, Y(30.9), cv.width, Math.max(1, cellH * 0.08));
+  } else if (backLook === 2) {
+    glow(cellH * 11, 0.92);
+    for (let i = 0; i < BACK_COUNT; i++) {
+      const x = X(COLS / 2 + (i - (BACK_COUNT - 1) / 2) * 4);
+      const y = Y(30.4);
+      const lit = backFx.mode === 'beat' || i < backFx.n;
+      ctx.beginPath();
+      ctx.arc(x, y, cellH * 0.5, 0, Math.PI * 2);
+      if (lit) {
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = backFx.mode === 'count' && i === backFx.n - 1 ? 1 - backFx.frac * 0.85 : 1; // the dot about to go out fades
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+        ctx.lineWidth = Math.max(1, cellH * 0.1);
+        ctx.stroke();
+      }
+    }
+  } else {
+    const x0 = X(50);
+    const y0 = Y(16.2);
+    const w = X(78) - X(50);
+    const h = Y(31.6) - Y(16.2);
+    ctx.fillStyle = 'rgba(0,0,0,0.95)';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = Math.max(1.5, cellH * 0.14);
+    ctx.strokeRect(x0, y0, w, h);
   }
   backFx.texture.needsUpdate = true;
   return true;
@@ -417,23 +430,21 @@ function animRadar(t: number, left: number) {
 
 /**
  * The opponent is back. Their held Word bullets are on screen again at once (the player sees where they stand),
- * and after a short beat a 5 s countdown runs over the game. The "enemy is back" message lives with the countdown
- * (the words can cover anything drawn elsewhere). The Match resumes when it ends.
+ * and after a short beat a 5 s countdown runs over the game. Minimal: "ENEMY BACK" and the digit, over a dark
+ * look (see BACK_LOOKS). The Match resumes when it ends.
  */
 function drawBack(t: number) {
   backFx.mode = t < BACK_BEAT ? 'beat' : 'count';
   staticField(SHIP.c, SHIP.r, SHIP.w, SHIP.h, Math.max(0, 0.45 - t * 1.2), t);
-  if (blink(t, 4)) frontCentered(16.9, 'ENEMY IS BACK', 'green');
-  if (t < BACK_BEAT) return frontCentered(19, 'CHECK YOUR WORDS', 'dim');
+  frontCentered(BACK_LOOKS[backLook].labelRow, 'ENEMY BACK', 'green');
+  if (t < BACK_BEAT) return;
   const c = t - BACK_BEAT;
   const n = Math.max(1, Math.ceil(BACK_COUNT - c));
   const frac = c % 1;
   backFx.frac = frac;
+  backFx.n = n;
   backFx.urgent = n <= 2;
-  text.fill(0, 19, COLS, 12, ' ');
-  frontCentered(18.1, 'THE MATCH RESUMES IN', 'fg');
-  bigNumber(String(n), 9 - 1.4 * frac, 21, n <= 2 ? 'red' : 'yellow', frac);
-  frontCentered(32, 'THEIR WORDS ARE STILL HELD. NOTHING MOVES UNTIL THE COUNTDOWN ENDS.', 'dim');
+  bigNumber(String(n), 8 - 1.2 * frac, 21.2, n <= 2 ? 'red' : 'yellow', frac);
 }
 
 /** Placeholder: the real win animation is designed in its own prototype ticket. It also plays after a disconnect. */
@@ -563,7 +574,7 @@ function layoutLog(t: number) {
 
 function hint() {
   if (phase === 'left') return;
-  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop (${drops}/${MAX_DROPS})  X opponent back  R reset  1-4 anim  O left screen  W words`, 'dim');
+  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop (${drops}/${MAX_DROPS})  X opponent back  B replay countdown  V look ${backLook + 1}/4  R reset  1-4 anim  O left screen  W words`, 'dim');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -587,6 +598,11 @@ window.addEventListener('keydown', (e) => {
     return say(kind.toUpperCase());
   }
   if (k === 'o' || k === 'O') return setPhase('left');
+  if (k === 'v' || k === 'V') {
+    backLook = (backLook + 1) % BACK_LOOKS.length;
+    return say(`BACK-COUNTDOWN LOOK ${backLook + 1}: ${BACK_LOOKS[backLook].name.toUpperCase()}`);
+  }
+  if ((k === 'b' || k === 'B') && phase !== 'left') return setPhase('back');
   if (k === 'w' || k === 'W') {
     hideWords = !hideWords;
     return say(hideWords ? 'HELD WORDS HIDDEN' : 'HELD WORDS SHOWN');
