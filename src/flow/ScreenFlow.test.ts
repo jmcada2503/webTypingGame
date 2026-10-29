@@ -274,11 +274,11 @@ describe('The opponent leaves', () => {
     expect(b.flow.state()).toMatchObject({ screen: 'opponentLeft', during: 'countdown', youWin: false });
   });
 
-  test('during the Match, a dropped connection gets 5 seconds to come back, then the player wins', () => {
+  test('during the Match, a dropped connection gets 10 seconds to come back, then the player wins', () => {
     const { flow, network } = playing();
 
     network.emit({ type: 'opponentDisconnected' });
-    flow.update(4.9);
+    flow.update(9.9);
     expect(screen(flow)).toBe('match');
 
     flow.update(0.2);
