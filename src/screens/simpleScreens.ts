@@ -3,7 +3,7 @@ import type { TextGrid } from '../render/AsciiRenderer';
 import type { PracticeResult } from '../practice/PracticeSession';
 import { practiceResultLines, practiceScore } from './content';
 import { blink, centered, formatClock, twoTone } from './draw';
-import { drawOnlineEnd, type OnlineStats } from './endScreens';
+import { onlineEndScreen, type OnlineStats } from './endScreens';
 import type { Screen, ScreenSet } from './Screen';
 
 /**
@@ -70,6 +70,7 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
 
   const match: Screen = { draw() {} }; // the Match is the game scene itself
 
+  const onlineEnd = onlineEndScreen(flow, onlineStats);
   const end: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'end') return;
@@ -87,19 +88,14 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
         lines(text, 25, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
         return;
       }
-      drawOnlineEnd(text, t, s, onlineStats());
+      onlineEnd.draw(text, t, s);
     },
     onKey(e, s) {
       if (s.screen !== 'end') return;
       const k = e.key.toLowerCase();
       if (s.mode === 'practice') {
         if (k === 'enter') flow.playAgain();
-      } else {
-        if (k === 'r') flow.proposeRematch();
-        if (k === 'd') flow.declineRematch();
-        if (k === 'c') flow.cancelRematch();
-        if (k === 's') flow.searchAgain();
-      }
+      } else return onlineEnd.onKey(e, s);
       if (k === 'q') flow.backToMenu();
     },
   };
