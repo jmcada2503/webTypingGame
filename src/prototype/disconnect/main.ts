@@ -14,6 +14,7 @@ import type { GameSession, SessionStatus } from '../../app/GameSession';
 import { KeyboardTypingInput } from '../../input/KeyboardTypingInput';
 import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import type { GpuAsciiRenderer } from '../../render/GpuAsciiRenderer';
+import { ASCII_STYLE } from '../../render/asciiStyle';
 import { anyFilterOn } from '../../render/ScreenFilters';
 import { AsciiGameView } from '../../view/AsciiGameView';
 import type { GameViewState, ViewEvent } from '../../view/GameViewState';
@@ -108,6 +109,7 @@ const hidden = view as unknown as { ascii: GpuAsciiRenderer; scene: THREE.Scene;
 const text: TextGrid = hidden.ascii.textGrid;
 const asciiRender = hidden.ascii.render.bind(hidden.ascii);
 hidden.ascii.render = (scene, camera, overlay) => {
+  backFx.mode = 'off'; // drawBack turns it on
   const world = phase !== 'left';
   hidden.scene.visible = world;
   hidden.overlay.visible = world && !((phase === 'lost' && hideWords) || phase === 'win');
@@ -145,6 +147,7 @@ const priv = hidden.ascii as unknown as {
   runScene: THREE.Scene;
   filters: { frameRT: THREE.WebGLRenderTarget; apply(gl: THREE.WebGLRenderer): void };
   paintRuns(): void;
+  fit: { canvasW: number; canvasH: number; cellW: number; cellH: number } | null;
 };
 function renderTextOnTop(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera }) {
   const gl = priv.gl;
@@ -159,10 +162,103 @@ function renderTextOnTop(scene: THREE.Scene, camera: THREE.Camera, overlay?: { s
   priv.paintRuns();
   gl.autoClear = false;
   if (overlay) gl.render(overlay.scene, overlay.camera); // the words first...
-  gl.render(priv.runScene, priv.ortho); // ...then the scaled text over them
+  if (paintBackFx()) gl.render(backFx.scene, priv.ortho); // ...then the dark panel + clock ring...
+  gl.render(priv.runScene, priv.ortho); // ...then the scaled text over all of it
   gl.autoClear = true;
   if (filtered) priv.filters.apply(gl);
 }
+/**
+ * Effect behind the back-countdown so it and its labels do not blend into the game: a dark soft-edged panel
+ * plus a clock ring that sweeps once per second (with 12 ticks and a bright tip). It is drawn on a 2D canvas
+ * laid over the frame, above the held words and below the countdown text.
+ */
+const backFx = (() => {
+  const canvas = document.createElement('canvas');
+  const material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
+  const scene = new THREE.Scene();
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+  return { canvas, material, scene, texture: null as THREE.CanvasTexture | null, mode: 'off' as 'off' | 'beat' | 'count', frac: 0, urgent: false };
+})();
+
+/** Draws the effect for this frame; false when there is nothing to draw. */
+function paintBackFx(): boolean {
+  const fit = priv.fit;
+  if (backFx.mode === 'off' || !fit) return false;
+  const cv = backFx.canvas;
+  if (cv.width !== fit.canvasW || cv.height !== fit.canvasH || !backFx.texture) {
+    cv.width = fit.canvasW;
+    cv.height = fit.canvasH;
+    backFx.texture?.dispose();
+    backFx.texture = new THREE.CanvasTexture(cv);
+    backFx.material.map = backFx.texture;
+    backFx.material.needsUpdate = true;
+  }
+  const ctx = cv.getContext('2d')!;
+  const { cellW, cellH } = fit;
+  const top = cv.height - ASCII_STYLE.grid.rows * cellH; // the grid sits at the bottom-left, like the text runs
+  const X = (col: number) => col * cellW;
+  const Y = (row: number) => top + row * cellH;
+  const pal = ASCII_STYLE.palette;
+  const accent = backFx.urgent ? pal.red : pal.yellow;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  // Dark panel with a soft shadowed edge: the countdown area reads as its own layer.
+  const box = backFx.mode === 'count' ? { c0: 30, c1: 98, r0: 15.8, r1: 33.7 } : { c0: 44, c1: 84, r0: 15.8, r1: 20.6 };
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.95)';
+  ctx.shadowBlur = cellH * 2.5;
+  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.beginPath();
+  ctx.roundRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0), cellH * 1.2);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = Math.max(1, cellH * 0.08);
+  ctx.beginPath();
+  ctx.roundRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0), cellH * 1.2);
+  ctx.stroke();
+
+  if (backFx.mode === 'count') {
+    // Clock ring round the number: a dim track, 12 ticks, and a bright arc that sweeps once per second.
+    const cx = X(COLS / 2);
+    const cy = Y(24.4);
+    const R = cellH * 4.6;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = cellH * 0.22;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+      const long = i % 3 === 0;
+      ctx.lineWidth = cellH * (long ? 0.2 : 0.12);
+      ctx.strokeStyle = long ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (R + cellH * 0.35), cy + Math.sin(a) * (R + cellH * 0.35));
+      ctx.lineTo(cx + Math.cos(a) * (R + cellH * (long ? 1.0 : 0.8)), cy + Math.sin(a) * (R + cellH * (long ? 1.0 : 0.8)));
+      ctx.stroke();
+    }
+    const start = -Math.PI / 2;
+    const end = start + backFx.frac * Math.PI * 2;
+    ctx.save();
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = cellH * 1.2;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = cellH * 0.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, start, end);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(end) * R, cy + Math.sin(end) * R, cellH * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  backFx.texture.needsUpdate = true;
+  return true;
+}
+
 /** Text drawn as a scaled run, so it is in front of the words in the back-countdown. */
 const front = (c: number, r: number, s: string, color: PaletteColor) => text.writeScaled(c, r, s, 1, color);
 const frontCentered = (r: number, s: string, color: PaletteColor) => front((COLS - [...s].length) / 2, r, s, color);
@@ -325,14 +421,17 @@ function animRadar(t: number, left: number) {
  * (the words can cover anything drawn elsewhere). The Match resumes when it ends.
  */
 function drawBack(t: number) {
+  backFx.mode = t < BACK_BEAT ? 'beat' : 'count';
   staticField(SHIP.c, SHIP.r, SHIP.w, SHIP.h, Math.max(0, 0.45 - t * 1.2), t);
-  if (blink(t, 4)) frontCentered(17.2, 'ENEMY IS BACK', 'green');
+  if (blink(t, 4)) frontCentered(16.9, 'ENEMY IS BACK', 'green');
   if (t < BACK_BEAT) return frontCentered(19, 'CHECK YOUR WORDS', 'dim');
   const c = t - BACK_BEAT;
   const n = Math.max(1, Math.ceil(BACK_COUNT - c));
   const frac = c % 1;
+  backFx.frac = frac;
+  backFx.urgent = n <= 2;
   text.fill(0, 19, COLS, 12, ' ');
-  frontCentered(19.2, 'THE MATCH RESUMES IN', 'fg');
+  frontCentered(18.1, 'THE MATCH RESUMES IN', 'fg');
   bigNumber(String(n), 9 - 1.4 * frac, 21, n <= 2 ? 'red' : 'yellow', frac);
   frontCentered(32, 'THEIR WORDS ARE STILL HELD. NOTHING MOVES UNTIL THE COUNTDOWN ENDS.', 'dim');
 }
