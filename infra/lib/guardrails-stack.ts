@@ -10,7 +10,7 @@ import { Architecture, Runtime, type IFunction } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Bucket } from "aws-cdk-lib/aws-s3";
-import { Topic } from "aws-cdk-lib/aws-sns";
+import { SubscriptionFilter, Topic } from "aws-cdk-lib/aws-sns";
 import { EmailSubscription, LambdaSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
@@ -85,10 +85,16 @@ export class GuardrailsStack extends Stack {
       targets: [new LambdaFunction(guardrails, { event: RuleTargetInput.fromObject({ action: "lift" }) })],
     });
 
-    // Budgets at 100% and the billing alarm both force a trip through this topic.
+    // Budgets at 100% and the billing alarm both force a trip through this topic. The guardrails
+    // also post their own state changes here for the email; those carry a `source` attribute,
+    // and the filter keeps them from looping back into the function as a forced trip.
     const trip = new Topic(this, "Trip");
-    trip.addSubscription(new LambdaSubscription(guardrails));
+    trip.addSubscription(
+      new LambdaSubscription(guardrails, { filterPolicy: { source: SubscriptionFilter.notExistsFilter() } }),
+    );
     trip.addSubscription(new EmailSubscription(budgetEmail));
+    trip.grantPublish(guardrails);
+    guardrails.addEnvironment("TRIP_TOPIC_ARN", trip.topicArn);
     trip.addToResourcePolicy(
       new PolicyStatement({
         actions: ["sns:Publish"],

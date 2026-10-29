@@ -2,9 +2,10 @@ import { CloudFrontClient, CreateInvalidationCommand } from "@aws-sdk/client-clo
 import { CloudWatchClient, GetMetricStatisticsCommand, type Dimension } from "@aws-sdk/client-cloudwatch";
 import { LambdaClient, PutFunctionConcurrencyCommand } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PublishCommand, SNSClient } from "@aws-sdk/client-sns";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { SNSEvent } from "aws-lambda";
-import { estimateUsd, monthStart, shouldTrip, type Usage } from "./estimate";
+import { estimateUsd, monthStart, shouldTrip, TRIP_FRACTION, type Usage } from "./estimate";
 
 // One function, several triggers: the schedule checks the estimate, Budgets and the billing
 // alarm (via SNS) force a trip, the 1st of the month and the resume script lift it.
@@ -20,16 +21,20 @@ const DISTRIBUTION_ID = env("DISTRIBUTION_ID");
 const API_FUNCTION = env("API_FUNCTION");
 const API_CONCURRENCY = Number(env("API_CONCURRENCY"));
 const LIMIT_PARAM = env("LIMIT_PARAM");
+const TRIP_TOPIC_ARN = env("TRIP_TOPIC_ARN");
 /** Account-wide Lambda Duration has no memory size: price it at the largest function's. */
 const LAMBDA_GB = Number(env("LAMBDA_GB"));
 
 const STATUS_KEY = "status.json";
+/** Marks our own notices on the trip topic, so they never count as a forced trip. */
+export const NOTICE_SOURCE = "guardrails";
 
 const s3 = new S3Client({});
 const cloudfront = new CloudFrontClient({});
 const cloudwatch = new CloudWatchClient({});
 const lambda = new LambdaClient({});
 const ssm = new SSMClient({});
+const sns = new SNSClient({});
 
 export interface ServerStatus {
   resting: boolean;
@@ -42,8 +47,13 @@ type ScheduledEvent = { "detail-type": "Scheduled Event" };
 type GuardrailsEvent = ManualEvent | ScheduledEvent | SNSEvent;
 
 export const handler = async (event: GuardrailsEvent) => {
-  // CloudWatch alarms publish JSON with an AlarmName; Budgets publishes plain text.
-  if ("Records" in event) return trip(event.Records[0]?.Sns.Message.includes('"AlarmName"') ? "billing-alarm" : "budget");
+  if ("Records" in event) {
+    const message = event.Records[0]?.Sns;
+    // Second guard behind the subscription filter: never trip on our own notice.
+    if (!message || message.MessageAttributes?.source?.Value === NOTICE_SOURCE) return { ignored: true };
+    // CloudWatch alarms publish JSON with an AlarmName; Budgets publishes plain text.
+    return trip(message.Message.includes('"AlarmName"') ? "billing-alarm" : "budget");
+  }
   if ("action" in event && event.action !== "check") return resume(event.action);
   return check();
 };
@@ -53,16 +63,27 @@ async function check() {
   const { estimate, limit, usage } = await currentEstimate();
   log("check", { estimate, limit, usage, resting: status.resting });
   // Re-applied while resting too, in case a deploy restored the api's concurrency.
-  if (status.resting || shouldTrip(estimate, limit)) return trip(status.reason ?? "estimate");
+  if (status.resting || shouldTrip(estimate, limit)) return trip(status.reason ?? "estimate", { estimate, limit });
   return { resting: status.resting, estimate, limit };
 }
 
-async function trip(reason: string) {
+async function trip(reason: string, cost?: { estimate: number; limit: number }) {
   // Concurrency first: it stops the spend even if the status write fails.
   await lambda.send(new PutFunctionConcurrencyCommand({ FunctionName: API_FUNCTION, ReservedConcurrentExecutions: 0 }));
   const status = await readStatus();
-  if (!status?.resting) await writeStatus(true, reason);
   log("trip", { reason, wasResting: status?.resting ?? false });
+  if (status?.resting) return { resting: true, reason };
+
+  await writeStatus(true, reason);
+  // Budgets and the billing alarm already email the owner through the topic; the estimator doesn't.
+  if (cost) {
+    await notify(
+      "Typing game: servers resting",
+      `Online play is off: the month-to-date estimate is $${cost.estimate.toFixed(2)} against a $${cost.limit} limit ` +
+        `(trips at ${Math.round(TRIP_FRACTION * 100)}%). Practice still works. It lifts on the 1st, or run ` +
+        "`npm run guardrails:limit -- <usd> --resume` in infra/.",
+    );
+  }
   return { resting: true, reason };
 }
 
@@ -78,6 +99,13 @@ async function resume(action: "resume" | "lift") {
   );
   const status = await readStatus();
   if (status?.resting !== false) await writeStatus(false, null);
+  if (status?.resting) {
+    await notify(
+      "Typing game: servers open again",
+      `Online play is back on (${action === "lift" ? "new month" : "resumed by hand"}): ` +
+        `estimate $${estimate.toFixed(2)} against a $${limit} limit.`,
+    );
+  }
   log("resume", { action, estimate, limit });
   return { resting: false, estimate, limit };
 }
@@ -161,6 +189,17 @@ async function writeStatus(resting: boolean, reason: string | null): Promise<Ser
     }),
   );
   return status;
+}
+
+async function notify(subject: string, message: string) {
+  await sns.send(
+    new PublishCommand({
+      TopicArn: TRIP_TOPIC_ARN,
+      Subject: subject,
+      Message: message,
+      MessageAttributes: { source: { DataType: "String", StringValue: NOTICE_SOURCE } },
+    }),
+  );
 }
 
 const log = (action: string, fields: Record<string, unknown>) =>
