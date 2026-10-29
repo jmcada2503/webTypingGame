@@ -51,7 +51,7 @@ The only thing crossing the wire. Each engine produces them with `drainOutgoing(
 | `shot {i, t, word}` | I fired my `i`-th Attack word, picked at Match time `t`. It flies at you as a Word bullet (`e<i>`). |
 | `defended {i}` | I destroyed your Shot `i`. |
 | `hit {i, lives}` | Your Shot `i` reached me; I have `lives` left. |
-| `presence {idleFor, pace}` | Sent every 2 s: seconds since I last typed, and my Pace. Peace needs both sides' Idle time. |
+| `presence {idleFor, pace}` | Sent every 2 s: seconds since I last typed, and my Pace. Peace needs both sides' Idle time. The receiver adds the time since the report, which is right while I stay Idle; so I also send one **at once with `idleFor: 0` when I type after a pause of 2 s or more** (otherwise their estimate could wrongly pass 5 s before my next tick). Shorter pauses send nothing extra. |
 | `peace` | Both of us were Idle too long: the Match is over. |
 
 Each client judges its own defense; the opponent trusts these reports. A `MatchTransport` (`send(event)` and `onEvent(cb)`) carries them: P2P WebRTC implements it, and a relay could replace it without touching the rules.

@@ -14,6 +14,12 @@ const PACE_WINDOW = 10;
 const PACE_EASE = 1;
 /** How often (seconds) a versus Match reports Idle time and Pace to the opponent. */
 const PRESENCE_EVERY = 2;
+/**
+ * Typing after a pause at least this long (s) is reported to the opponent at once, not on the next tick. Their estimate
+ * of my Idle time can only wrongly reach NUDGE_AFTER if the pause was NUDGE_AFTER - PRESENCE_EVERY (3 s) or more;
+ * 1 s less leaves room for network delay. Shorter pauses send nothing extra.
+ */
+const ACTIVE_REPORT_AFTER = NUDGE_AFTER - PRESENCE_EVERY - 1;
 
 /** True when `typed` is exactly `word` (same rule as the Targets: case-insensitive, NFC, exact letters). */
 const isWord = (typed: string, word: string) => matchPrefix(typed, word) === [...word].length && [...typed].length === [...word].length;
@@ -209,8 +215,15 @@ export class MatchEngine {
   }
 
   private activity() {
+    const pause = this.time - this.lastActivityAt;
     this.lastActivityAt = this.time;
     this.nudged = false;
+    // The opponent works out my Idle time from my last report plus the time since, which is right while I stay Idle.
+    // Once I type it overshoots until my next report: after a long enough pause it could wrongly pass 5 s (nudge,
+    // PEACE IN, even Peace), so tell them now that I'm back.
+    if (this.config.mode === 'versus' && pause >= ACTIVE_REPORT_AFTER) {
+      this.outbox.push({ type: 'presence', idleFor: 0, pace: this.pace });
+    }
   }
 
   private addBullet(id: string, word: string, shot?: number, flightSeconds?: number) {
