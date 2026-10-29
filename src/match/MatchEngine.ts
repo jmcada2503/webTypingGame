@@ -18,8 +18,11 @@ const PRESENCE_EVERY = 2;
 /** True when `typed` is exactly `word` (same rule as the Targets: case-insensitive, NFC, exact letters). */
 const isWord = (typed: string, word: string) => matchPrefix(typed, word) === [...word].length && [...typed].length === [...word].length;
 
-/** A Word bullet in my game; `shot` is the opponent's Shot index when it came from them (Practice bullets have none). */
-type Bullet = WordBulletState & { shot?: number };
+/**
+ * A Word bullet in my game; `shot` is the opponent's Shot index when it came from them (Practice bullets have none).
+ * `flightSeconds` overrides how long it takes to reach the Cockpit (Practice speeds up this way).
+ */
+type Bullet = WordBulletState & { shot?: number; flightSeconds?: number };
 
 /**
  * The rules of one Match, with no DOM and no network. Time moves only through `update(dt)`.
@@ -74,10 +77,10 @@ export class MatchEngine {
     if (config.mode === 'versus') this.attackWord = config.attackWords.wordAt(this.attackIndex, 0);
   }
 
-  /** Practice: the game fires a Word bullet at the player. */
-  spawnBullet(word: string) {
+  /** Practice: the game fires a Word bullet at the player; `flightSeconds` defaults to the config's. */
+  spawnBullet(word: string, flightSeconds?: number) {
     if (this.status !== 'running') return;
-    this.addBullet(`p${this.nextBulletId++}`, word);
+    this.addBullet(`p${this.nextBulletId++}`, word, undefined, flightSeconds);
   }
 
   /** The Typed word changed (a letter or Backspace): the player is active. */
@@ -131,7 +134,7 @@ export class MatchEngine {
       this.outbox.push({ type: 'presence', idleFor: this.time - this.lastActivityAt, pace: this.pace });
       this.nextPresenceAt += PRESENCE_EVERY;
     }
-    for (const b of this.bullets) b.flight += dt / this.config.bulletFlightSeconds;
+    for (const b of this.bullets) b.flight += dt / (b.flightSeconds ?? this.config.bulletFlightSeconds);
     for (const b of this.bullets.filter((b) => b.flight >= 1)) this.arrive(b);
     if (this.config.mode === 'versus' && this.status === 'running' && this.bothIdle()) this.endInPeace(true);
     if (!this.nudged && this.time - this.lastActivityAt >= NUDGE_AFTER) {
@@ -197,8 +200,8 @@ export class MatchEngine {
     this.nudged = false;
   }
 
-  private addBullet(id: string, word: string, shot?: number) {
-    this.bullets.push({ id, word, flight: 0, shot });
+  private addBullet(id: string, word: string, shot?: number, flightSeconds?: number) {
+    this.bullets.push({ id, word, flight: 0, shot, flightSeconds });
     this.pending.push({ type: 'enemyFired', id });
   }
 
