@@ -113,7 +113,7 @@ export class ScreenHost implements GameSession {
     match.start();
     this.match = match;
     this.matchTime = 0;
-    this.goOn = true;
+    this.goOn = mode === 'versus'; // GO ends a Countdown; Practice has none
     this.applyView();
   }
 

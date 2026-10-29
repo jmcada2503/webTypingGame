@@ -101,19 +101,19 @@ const setup = () => {
 /** Practice, from the menu to the first frame of the running Match. */
 const intoPracticeMatch = (ctx: ReturnType<typeof setup>) => {
   ctx.flow.choose('practice');
-  ctx.run(5 + 1.8 + 0.3);
+  ctx.run(1.8 + 0.3);
 };
 
 describe('The Match screen', () => {
-  test('a Match session is created only when the Match begins, not during the Countdown or the TV gap', () => {
+  test('a Match session is created only when the Match begins, not during the TV gap', () => {
     const ctx = setup();
-    ctx.flow.choose('practice');
+    ctx.flow.choose('practice'); // Practice has no Countdown: straight to the TV gap
 
-    ctx.run(5.5); // Countdown, then the starting gap
+    ctx.run(1.5);
     expect(ctx.flow.state().screen).toBe('starting');
     expect(ctx.made).toHaveLength(0);
 
-    ctx.run(1.5);
+    ctx.run(0.5);
     expect(ctx.flow.state().screen).toBe('match');
     expect(ctx.made).toHaveLength(1);
     expect(ctx.made[0].mode).toBe('practice');
@@ -186,7 +186,7 @@ describe('The Match screen', () => {
     ctx.run(1); // glitch to the end screen
 
     ctx.flow.playAgain();
-    ctx.run(5 + 1.8 + 0.5);
+    ctx.run(1.8 + 0.5);
 
     expect(ctx.made).toHaveLength(2);
     expect(ctx.made[0].disposed).toBe(true);
@@ -200,10 +200,10 @@ describe('Input and the GO flash', () => {
     expect(ctx.input.enabled.at(-1)).toBe(false);
 
     ctx.flow.choose('practice');
-    ctx.run(5.5);
+    ctx.run(1.5);
     expect(ctx.input.enabled.at(-1)).toBe(false); // still in the TV gap
 
-    ctx.run(1.5);
+    ctx.run(0.5);
     expect(ctx.input.enabled.at(-1)).toBe(true);
 
     ctx.made[0].status = 'lost';
@@ -211,13 +211,25 @@ describe('Input and the GO flash', () => {
     expect(ctx.input.enabled.at(-1)).toBe(false);
   });
 
-  test('the GO flash is drawn over the Match scene right after it begins, and removed afterwards', () => {
+  test('the GO flash is drawn over an online Match right after it begins, and removed afterwards', () => {
     const ctx = setup();
-    ctx.flow.choose('practice');
+    const other = new ScreenFlow(ctx.backend.connect());
+    other.choose('public');
+    other.confirm();
+    ctx.flow.choose('public');
+    ctx.flow.confirm();
     ctx.run(5 + 1.8 + 0.05);
     expect(ctx.view.overlayDraw).not.toBeNull();
 
     ctx.run(1.5);
+    expect(ctx.view.overlayDraw).toBeNull();
+  });
+
+  test('Practice has no Countdown, so no GO flash either', () => {
+    const ctx = setup();
+    ctx.flow.choose('practice');
+    ctx.run(1.8 + 0.05);
+    expect(ctx.made).toHaveLength(1);
     expect(ctx.view.overlayDraw).toBeNull();
   });
 });
