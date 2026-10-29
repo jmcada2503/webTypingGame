@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countdownDisplay, practiceResultLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, practiceResultLines, matchStatsLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -174,5 +174,29 @@ describe('Practice score (the difficulty level reached)', () => {
   test('stops at the top of the ramp (4200), where the difficulty stops rising', () => {
     expect(practiceScore({ currentLevel: 420 })).toBe(4200);
     expect(practiceScore({ currentLevel: 9999 })).toBe(4200);
+  });
+});
+
+describe('matchStatsLines (the stats block of the online end screens)', () => {
+  const stats = { elapsed: 125, correctWords: 18, correctLetters: 100, wrongSubmits: 2, bulletsDestroyed: 12, bulletsArrived: 3, shotsFired: 6, shotsHit: 4, shotsDefended: 2 };
+
+  test('shows time, pace, accuracy, words destroyed and shots hit', () => {
+    expect(matchStatsLines(stats)).toEqual([
+      'TIME              02:05',
+      'PACE              0.8 LETTERS/S (10 WPM)',
+      'ACCURACY          90%',
+      'WORDS DESTROYED   12',
+      'SHOTS HIT         4 OF 6',
+    ]);
+  });
+
+  test('a Lose also shows how damaged the Enemy ship was', () => {
+    expect(matchStatsLines(stats, 0.8).at(-1)).toBe('ENEMY DAMAGE      80%');
+  });
+
+  test('an empty Match shows dashes, not NaN', () => {
+    const lines = matchStatsLines({ ...stats, elapsed: 0, correctWords: 0, correctLetters: 0, wrongSubmits: 0, bulletsDestroyed: 0, shotsFired: 0, shotsHit: 0 });
+    expect(lines[1]).toBe('PACE              0.0 LETTERS/S (0 WPM)');
+    expect(lines[2]).toBe('ACCURACY          -');
   });
 });

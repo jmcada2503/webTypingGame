@@ -36,6 +36,8 @@ export class ShotHitFx {
   private age = Infinity;
   private puffs: Puff[] = [];
   private seed = 0;
+  /** Size of the explosion being drawn (SHOT_HIT_LOOK.boomSize unless a bigger one was asked for). */
+  private size = SHOT_HIT_LOOK.boomSize;
   private readonly center = new THREE.Vector3();
 
   constructor(
@@ -47,11 +49,13 @@ export class ShotHitFx {
   }
 
   /** A Shot reached the Enemy ship. */
-  hit() {
+  /** `boomSize` makes this one bigger than a normal hit (the Enemy ship's destruction). */
+  hit(boomSize = SHOT_HIT_LOOK.boomSize) {
+    this.size = boomSize;
     this.age = 0;
     this.seed = Math.random() * 100;
     this.center.copy(this.enemy.root.position);
-    const R = SHOT_HIT_LOOK.boomSize * 2.6;
+    const R = this.size * 2.6;
     const rnd = () => Math.random();
     this.puffs = [{ dx: 0, dy: 0, radius: R, delay: 0, p1: rnd() * 6.3, p2: rnd() * 6.3, drift: 0 }];
     const extra = 4 + Math.floor(rnd() * 3);
@@ -90,7 +94,7 @@ export class ShotHitFx {
     tmp.copy(this.center).project(this.camera);
     const col = ((tmp.x + 1) / 2) * cols;
     const row = ((1 - tmp.y) / 2) * rows;
-    const maxR = SHOT_HIT_LOOK.boomSize * 2.6 * 1.9;
+    const maxR = this.size * 2.6 * 1.9;
 
     for (let r = Math.floor(row - maxR); r <= row + maxR; r++) {
       for (let c = Math.floor(col - maxR * CELL_ASPECT); c <= col + maxR * CELL_ASPECT; c++) {

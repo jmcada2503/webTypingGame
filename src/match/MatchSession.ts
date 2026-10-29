@@ -25,6 +25,11 @@ export class MatchSession implements GameSession {
     return this.started ? this.engine.status : 'idle';
   }
 
+  /** How the Match went (for the end screens). */
+  stats() {
+    return this.engine.stats();
+  }
+
   start() {
     this.started = true;
   }

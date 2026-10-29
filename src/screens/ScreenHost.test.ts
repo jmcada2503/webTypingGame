@@ -7,6 +7,7 @@ import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
+import type { EndingFrame } from './endings';
 import type { Screen, ScreenSet } from './Screen';
 import { ScreenHost } from './ScreenHost';
 
@@ -24,9 +25,13 @@ class FakeView implements GameView {
   setOverlay(draw: ((text: TextGrid, dt: number) => void) | null) {
     this.overlayDraw = draw;
   }
+  ending: EndingFrame | null = null;
+  setEnding(frame: EndingFrame | null) {
+    this.ending = frame;
+  }
 }
 
-const state = (lives: number): GameViewState => ({ lives, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 }, idle: NOT_IDLE });
+const state = (lives: number, pace = 0): GameViewState => ({ lives, typedWord: '', attackWord: 'rocket', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: pace, enemy: pace }, idle: NOT_IDLE });
 
 /** A Match session the tests drive by hand. */
 class FakeMatch implements GameSession {
@@ -37,6 +42,7 @@ class FakeMatch implements GameSession {
   updates = 0;
   next: ViewEvent[] = [];
   lives = 3;
+  paceNow = 0;
   constructor(readonly mode: PlayMode) {}
   start() {
     this.started = true;
@@ -55,7 +61,7 @@ class FakeMatch implements GameSession {
     return events;
   }
   state() {
-    return state(this.lives);
+    return state(this.lives, this.paceNow);
   }
 }
 
@@ -80,7 +86,8 @@ const screens = (): ScreenSet => ({ menu: blankScreen, howto: blankScreen, waiti
 
 const setup = () => {
   const backend = new FakeBackend();
-  const flow = new ScreenFlow(backend.connect());
+  const endpoint = backend.connect();
+  const flow = new ScreenFlow(endpoint);
   const view = new FakeView();
   const made: FakeMatch[] = [];
   const host = new ScreenHost(view, flow, screens(), (mode) => {
@@ -96,7 +103,7 @@ const setup = () => {
     for (let t = 0; t < seconds - 1e-9; t += 0.05) events.push(...host.update(0.05));
     return events;
   };
-  return { flow, view, host, made, input, run, backend };
+  return { flow, view, host, made, input, run, backend, endpoint };
 };
 /** Practice, from the menu to the first frame of the running Match. */
 const intoPracticeMatch = (ctx: ReturnType<typeof setup>) => {
@@ -231,5 +238,123 @@ describe('Input and the GO flash', () => {
     ctx.run(1.8 + 0.05);
     expect(ctx.made).toHaveLength(1);
     expect(ctx.view.overlayDraw).toBeNull();
+  });
+});
+
+describe('Online endings', () => {
+  /** An online Match that is running (the opponent is the fake backend's other player). */
+  const intoOnlineMatch = () => {
+    const ctx = setup();
+    const otherEndpoint = ctx.backend.connect();
+    const other = new ScreenFlow(otherEndpoint);
+    other.choose('public');
+    other.confirm();
+    ctx.flow.choose('public');
+    ctx.flow.confirm();
+    ctx.run(5 + 1.8 + 0.3);
+    expect(ctx.made[0].mode).toBe('versus');
+    return { ...ctx, otherEndpoint };
+  };
+  const sceneIsShown = (ctx: ReturnType<typeof setup>) => ctx.view.screenDraw === null;
+
+  test('a Win keeps the Match scene for 1.6 s with the ending applied, then changes to the end screen', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'won';
+
+    ctx.run(0.1);
+    expect(ctx.flow.state()).toMatchObject({ screen: 'end', result: 'won' }); // the flow already knows
+    expect(sceneIsShown(ctx)).toBe(true); // but the scene is still on screen
+    expect(ctx.view.ending).not.toBeNull();
+
+    ctx.run(1.3);
+    expect(sceneIsShown(ctx)).toBe(true);
+
+    ctx.run(0.5); // 1.6 s have passed: the glitch (0.3 s) swaps the screen
+    expect(sceneIsShown(ctx)).toBe(false);
+    expect(ctx.view.ending).toBeNull();
+  });
+
+  test('the Win destroys the Enemy ship once, with its explosion event', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'won';
+
+    const events = ctx.run(3);
+
+    expect(events.filter((e) => e.type === 'enemyDestroyed')).toHaveLength(1);
+  });
+
+  test('a Lose waits 3.8 s, then the TV goes off, stays black for 1 s, and comes on at the end screen', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'lost';
+
+    ctx.run(3.7);
+    expect(sceneIsShown(ctx)).toBe(true);
+
+    ctx.run(0.5 + 0.9); // TV off has swapped the screen, it is black for the 1 s hold
+    expect(ctx.view.ending).toBeNull();
+
+    ctx.run(1.5);
+    expect(ctx.flow.state()).toMatchObject({ screen: 'end', result: 'lost' });
+    expect(sceneIsShown(ctx)).toBe(false);
+  });
+
+  test('a Peace holds the scene for 4.6 s while the ending moves the ship away', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'peace';
+
+    ctx.run(2);
+    expect(ctx.view.ending?.enemyOffset.x).toBeGreaterThan(0);
+    expect(sceneIsShown(ctx)).toBe(true);
+
+    ctx.run(3);
+    expect(sceneIsShown(ctx)).toBe(false);
+  });
+
+  test('typing stays off during the ending, and the Match session is not updated any more', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'lost';
+    ctx.run(0.1);
+    const updates = ctx.made[0].updates;
+
+    ctx.run(2);
+
+    expect(ctx.input.enabled.at(-1)).toBe(false);
+    expect(ctx.made[0].updates).toBe(updates);
+  });
+
+  test('during a Peace the Idle nudge hands over to its PEACE!! label, and during a Lose the Pace slows to a stop', () => {
+    const peace = intoOnlineMatch();
+    peace.made[0].status = 'peace';
+    peace.run(1);
+    expect(peace.host.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: 0 });
+
+    const lose = intoOnlineMatch();
+    lose.made[0].paceNow = 4;
+    lose.made[0].status = 'lost';
+    lose.run(0.9);
+    expect(lose.host.state().pace.player).toBeCloseTo(2, 0);
+    lose.run(1);
+    expect(lose.host.state().pace.player).toBeCloseTo(0, 5);
+  });
+
+  test('Practice has no ending: it goes straight to its results with just the glitch', () => {
+    const ctx = setup();
+    intoPracticeMatch(ctx);
+    ctx.made[0].status = 'lost';
+
+    ctx.run(0.5);
+
+    expect(ctx.view.ending).toBeNull();
+    expect(sceneIsShown(ctx)).toBe(false);
+  });
+
+  test('an opponent who leaves ends the Match at once, with no ending scene', () => {
+    const ctx = intoOnlineMatch();
+    ctx.backend.drop(ctx.otherEndpoint); // the opponent's connection drops; after the grace they are gone
+    ctx.run(10.5 + 0.5);
+
+    expect(ctx.flow.state()).toMatchObject({ screen: 'opponentLeft' });
+    expect(ctx.view.ending).toBeNull();
+    expect(sceneIsShown(ctx)).toBe(false);
   });
 });

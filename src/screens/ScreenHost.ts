@@ -8,6 +8,7 @@ import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { GO_SECONDS, goFlash } from './content';
 import { bigNumber } from './countdownScreen';
+import { ENDINGS, endingFrame, endingMoments, type EndingResult } from './endings';
 import type { ScreenSet } from './Screen';
 import { ScreenTransition, type ScreenId, transitionFor, visualOf } from './ScreenTransition';
 
@@ -37,6 +38,8 @@ export class ScreenHost implements GameSession {
   private matchTime = 0;
   /** The GO flash is showing over the Match scene. */
   private goOn = false;
+  /** An online Match just ended: its ending scene plays (`t` seconds in) before the screen changes. */
+  private ending: { result: EndingResult; t: number; started: boolean } | null = null;
 
   constructor(
     private readonly view: GameView,
@@ -70,20 +73,41 @@ export class ScreenHost implements GameSession {
     this.transition.update(dt);
     this.screenTime += dt;
     const next = this.flow.state();
-    if (!this.transition.active) {
+    if (!this.transition.active && !this.ending) {
       const change = transitionFor(this.shown, next);
       if (change) this.transition.start(change.effect, change.hold, () => this.swap());
       else this.shown = next;
     }
     SCREEN_TRANSITION.mode = this.transition.mode;
     SCREEN_TRANSITION.level = this.transition.level;
-    const events = this.runMatch(dt);
+    const events = [...this.runMatch(dt), ...this.tickEnding(dt)];
     this.syncInput();
     return events;
   }
 
   state(): GameViewState {
-    return this.displayed === 'match' && this.match ? this.match.state() : IDLE_STATE;
+    const base = this.displayed === 'match' && this.match ? this.match.state() : IDLE_STATE;
+    if (!this.ending) return base;
+    // The ending's effect on what the view is told: Peace keeps the Idle nudge's PEACE!! label up and the stars race, Lose slows the stars.
+    const f = endingFrame(this.ending.result, this.ending.t);
+    const pace = f.pace ?? base.pace.player * f.paceScale;
+    const idle = this.ending.result === 'peace' ? { nudging: false, opponentIdle: false, peaceIn: 0 } : base.idle;
+    return { ...base, idle, pace: { player: pace, enemy: f.pace ?? base.pace.enemy * f.paceScale } };
+  }
+
+  /** The ending scene of a Win / Lose / Peace: apply it, play its one-off moments, then change screen. */
+  private tickEnding(dt: number): ViewEvent[] {
+    const ending = this.ending;
+    if (!ending) return [];
+    const from = ending.t;
+    ending.t += dt;
+    const events: ViewEvent[] = endingMoments(ending.result, from, ending.t).map(() => ({ type: 'enemyDestroyed' }));
+    const plan = ENDINGS[ending.result];
+    if (ending.t >= plan.sceneSeconds && !ending.started && !this.transition.active) {
+      ending.started = true;
+      this.transition.start(plan.effect, plan.hold, () => this.swap());
+    } else if (!ending.started) this.view.setEnding(endingFrame(ending.result, ending.t));
+    return events;
   }
 
   /** The Match: create its session when the flow enters the Match, feed it, and report when it ends. */
@@ -103,8 +127,23 @@ export class ScreenHost implements GameSession {
     }
     // Re-read: the session may have ended during that update. The flow ignores a result it already has.
     const status: SessionStatus = match.status;
-    if (status === 'won' || status === 'lost' || status === 'peace') this.flow.matchEnded(status);
+    if (status === 'won' || status === 'lost' || status === 'peace') this.finishMatch(status);
     return events;
+  }
+
+  /** Dev keys: end the running Match with this result, as if the session had. */
+  endMatch(result: EndingResult) {
+    this.finishMatch(result);
+  }
+
+  private finishMatch(result: EndingResult) {
+    if (this.ending) return;
+    this.flow.matchEnded(result);
+    // Online Matches play their ending first; Practice (no opponent, no result) goes straight to its screen.
+    if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus') {
+      this.ending = { result, t: 0, started: false };
+      this.view.setEnding(endingFrame(result, 0));
+    }
   }
 
   private beginMatch(mode: PlayMode) {
@@ -128,6 +167,8 @@ export class ScreenHost implements GameSession {
     this.shown = this.flow.state();
     this.displayed = visualOf(this.shown);
     this.screenTime = 0;
+    this.ending = null;
+    this.view.setEnding(null);
     if (this.displayed !== 'match') this.endSession();
     this.screens[this.displayed].enter?.(this.shown);
     this.applyView();

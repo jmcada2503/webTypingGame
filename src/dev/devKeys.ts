@@ -1,16 +1,17 @@
 import type { FakeBackend, FakeEndpoint } from '../flow/FakeNetwork';
 import type { ScreenFlow } from '../flow/ScreenFlow';
+import type { ScreenHost } from '../screens/ScreenHost';
 
-export const DEV_KEYS_HINT = 'DEV  CTRL+F OPPONENT FOUND  CTRL+E LOSE  CTRL+V WIN  CTRL+D OPPONENT LEAVES  CTRL+M / CTRL+A / CTRL+X REMATCH PROPOSE / ACCEPT / DECLINE  CTRL+R SERVERS RESTING';
+export const DEV_KEYS_HINT = 'DEV  CTRL+F OPPONENT FOUND  CTRL+E LOSE  CTRL+V WIN  CTRL+P PEACE  CTRL+D OPPONENT LEAVES  CTRL+M / CTRL+A / CTRL+X REMATCH PROPOSE / ACCEPT / DECLINE  CTRL+R SERVERS RESTING';
 
 /**
  * Developer-only stand-ins for the things a real opponent and the real network would do, so the whole flow can
  * be walked alone with the fake network. Held on Ctrl so they never clash with the game's own keys; the browser's
  * own meaning for these (find, reload, bookmark...) is blocked while they are handled.
  */
-const DEV_CODES = new Set(['KeyF', 'KeyE', 'KeyV', 'KeyD', 'KeyM', 'KeyA', 'KeyX', 'KeyR']);
+const DEV_CODES = new Set(['KeyF', 'KeyE', 'KeyV', 'KeyP', 'KeyD', 'KeyM', 'KeyA', 'KeyX', 'KeyR']);
 
-export function installDevKeys(flow: ScreenFlow, backend: FakeBackend) {
+export function installDevKeys(flow: ScreenFlow, backend: FakeBackend, host: ScreenHost) {
   let bot: FakeEndpoint | null = null;
   let resting = false;
   window.addEventListener('keydown', (e) => {
@@ -26,10 +27,13 @@ export function installDevKeys(flow: ScreenFlow, backend: FakeBackend) {
         else if (s.inviteLink) bot.joinPrivate(s.inviteLink.split('/m/')[1]);
         break;
       case 'KeyE':
-        flow.matchEnded('lost');
+        host.endMatch('lost');
         break;
       case 'KeyV':
-        flow.matchEnded('won');
+        host.endMatch('won');
+        break;
+      case 'KeyP':
+        host.endMatch('peace');
         break;
       case 'KeyD':
         bot?.leave();

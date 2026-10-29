@@ -55,12 +55,14 @@ const view = await AsciiGameView.create();
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null), menu: menuScreen(flow, copyText), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText), countdown: countdownScreen() };
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText), countdown: countdownScreen() };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
 /** How many Matches each connection has started (the first, then Rematches): picks the Attack-word indices. */
 const matchesPlayed = new Map<string, number>();
+/** The online Match being played (or the last one), so its end screen can show the stats. */
+let lastMatch: MatchSession | null = null;
 
 /**
  * What runs on the Match screen. Practice: the real `PracticeSession`. Online: the Match engine with my seeded
@@ -72,7 +74,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
   const opponent = online?.currentMatch();
   if (!opponent) {
     const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
-    return new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 }));
+    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 })));
   }
   const list = wordLists[opponent.lang];
   const played = matchesPlayed.get(opponent.matchId) ?? 0;
@@ -93,7 +95,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
     bulletFlightSeconds: 8,
     shotFlightSeconds: 8,
   });
-  return new MatchSession(engine, opponent.transport);
+  return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 new AppShell(view, host, input).start();
@@ -116,5 +118,5 @@ if (online) {
 if (import.meta.env.DEV) {
   // For end-to-end checks and the console: drive the real flow without key presses.
   Object.assign(window, { flow, online, host });
-  if (backend) installDevKeys(flow, backend);
+  if (backend) installDevKeys(flow, backend, host);
 }

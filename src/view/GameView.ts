@@ -1,4 +1,5 @@
 import type { TextGrid } from '../render/AsciiRenderer';
+import type { EndingFrame } from '../screens/endings';
 import type { GameViewState, ViewEvent } from './GameViewState';
 
 /**
@@ -27,6 +28,10 @@ export interface GameView {
    * before the ASCII pass. Pass null to remove it.
    */
   setOverlay(draw: ((text: TextGrid, dt: number) => void) | null): void;
+  /**
+   * The scene's ending (Win / Lose / Peace): hides or moves the Enemy ship, dims the picture,. Applied every frame while set; pass null to go back to normal.
+   */
+  setEnding(frame: EndingFrame | null): void;
   /**
    * Re-fit to the viewport (CSS px + devicePixelRatio): fixed 128×45 grid, cells via
    * fitToViewport(), camera aspect = real canvas aspect. Rebuilds glyph atlas and render targets.
