@@ -32,6 +32,11 @@ const LAMP_FLICKER_HZ = 14;
  * following their panel's tilt and perspective.
  */
 export class Cockpit {
+  /** The label at the left end of the Attack row (Peace changes it to PEACE!!, in white). */
+  attackLabel = 'ATTACK';
+  attackLabelColor: 'dim' | 'fg' = 'dim';
+  /** Draw the whole Attack word as typed (white), e.g. PEACE!! at the end of a Match in Peace. */
+  attackWordWhite = false;
   /** Real-font console labels; add to the overlay scene drawn after the ASCII pass. */
   readonly overlay = new THREE.Group();
 
@@ -172,13 +177,13 @@ export class Cockpit {
     const row = edge.r0 - 2;
     text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' '); // two rows, so the larger text sits on blank
     const textRow = row + 1 - TEXT_SCALE / 2; // centered on the blank rows
-    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, 'dim');
+    text.writeScaled(edge.c0 + 1, textRow, this.attackLabel, TEXT_SCALE, this.attackLabelColor);
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
     const len = [...state.typedWord].length;
     const targetingBullet = len > 0 && state.wordBullets.some((b) => matchPrefix(state.typedWord, b.word) === len);
-    const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
+    const typed = this.attackWordWhite ? letters.length : targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
     const at = edge.c1 - letters.length * TEXT_SCALE - 1;
     text.writeScaled(at, textRow, letters.slice(0, typed).join(''), TEXT_SCALE, 'fg');
     text.writeScaled(at + typed * TEXT_SCALE, textRow, letters.slice(typed).join(''), TEXT_SCALE, 'red');
