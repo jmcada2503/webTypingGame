@@ -1,5 +1,6 @@
 import type { Plugin } from 'vite';
 import { MemoryStore } from './infra/lambda/api/memoryStore';
+import { MemoryPresenceStore, Presence } from './infra/lambda/api/presence';
 import { createRouter } from './infra/lambda/api/routes';
 import { Matchmaker } from './infra/lambda/api/service';
 
@@ -8,7 +9,7 @@ import { Matchmaker } from './infra/lambda/api/service';
  * tabs can find each other and play online with no AWS. `/status.json` is absent (servers open).
  */
 export function devApi(): Plugin {
-  const route = createRouter(new Matchmaker(new MemoryStore()));
+  const route = createRouter(new Matchmaker(new MemoryStore()), new Presence(new MemoryPresenceStore(), { log: () => {} }));
   return {
     name: 'dev-api',
     apply: 'serve',
@@ -32,6 +33,7 @@ export function devApi(): Plugin {
         const out = await route({ method: req.method ?? 'GET', path: url.pathname, query: Object.fromEntries(url.searchParams), body });
         res.statusCode = out.status;
         res.setHeader('content-type', 'application/json');
+        for (const [name, value] of Object.entries(out.headers ?? {})) res.setHeader(name, value);
         res.end(JSON.stringify(out.body));
       });
     },

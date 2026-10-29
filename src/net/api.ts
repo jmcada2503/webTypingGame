@@ -44,22 +44,34 @@ export async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
- * The HTTP client for `/api/*` (same origin, behind CloudFront). Every POST carries the SHA-256 of its body:
- * CloudFront signs requests to the Lambda Function URL, and AWS rejects a signed POST without it.
+ * One call to `/api/*` (same origin, behind CloudFront). Every POST carries the SHA-256 of its body: CloudFront
+ * signs requests to the Lambda Function URL, and AWS rejects a signed POST without it.
  */
-export function createApi(pid: string, fetchFn: typeof fetch = (...args) => fetch(...args), base = ''): MatchApi {
-  async function call<T>(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>): Promise<T> {
-    const text = body === undefined ? undefined : JSON.stringify({ pid, ...body });
-    const headers: Record<string, string> = {};
-    if (text !== undefined) {
-      headers['content-type'] = 'application/json';
-      headers['x-amz-content-sha256'] = await sha256Hex(text);
-    }
-    const res = await fetchFn(base + path, { method, body: text, headers, cache: 'no-store' });
-    const json = (await res.json().catch(() => null)) as { error?: string } | null;
-    if (!res.ok) throw new ApiError(res.status, json?.error ?? 'http_error');
-    return json as T;
+async function request<T>(
+  fetchFn: typeof fetch,
+  method: 'GET' | 'POST',
+  path: string,
+  body?: Record<string, unknown>,
+  cache: RequestCache = 'no-store',
+): Promise<T> {
+  const text = body === undefined ? undefined : JSON.stringify(body);
+  const headers: Record<string, string> = {};
+  if (text !== undefined) {
+    headers['content-type'] = 'application/json';
+    headers['x-amz-content-sha256'] = await sha256Hex(text);
   }
+  const res = await fetchFn(path, { method, body: text, headers, cache });
+  const json = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) throw new ApiError(res.status, json?.error ?? 'http_error');
+  return json as T;
+}
+
+const browserFetch: typeof fetch = (...args) => fetch(...args);
+
+/** The matchmaking and signaling client, as player `pid`. */
+export function createApi(pid: string, fetchFn: typeof fetch = browserFetch, base = ''): MatchApi {
+  const call = <T>(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>) =>
+    request<T>(fetchFn, method, base + path, body && { pid, ...body });
   const match = (id: string) => `/api/match/${encodeURIComponent(id)}`;
   return {
     queue: (lang, listVersion) => call('POST', '/api/queue', { lang, listVersion }),
@@ -69,5 +81,13 @@ export function createApi(pid: string, fetchFn: typeof fetch = (...args) => fetc
     signal: async (id, type, sdp) => void (await call('POST', `${match(id)}/signal`, { type, sdp })),
     connected: (id) => call('POST', `${match(id)}/connected`, {}),
     leave: async (id) => void (await call('POST', `${match(id)}/leave`, {})),
+  };
+}
+
+/** The online count: a heartbeat for this tab, and the count (cached for 30 s, so the HTTP cache may answer). */
+export function createPresenceApi(pid: string, fetchFn: typeof fetch = browserFetch, base = '') {
+  return {
+    beat: async (lang: Language) => void (await request(fetchFn, 'POST', `${base}/api/presence`, { pid, lang })),
+    online: () => request<{ en: number; es: number; total: number }>(fetchFn, 'GET', `${base}/api/online`, undefined, 'default'),
   };
 }

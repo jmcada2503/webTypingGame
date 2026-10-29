@@ -137,7 +137,10 @@ for 10 s is gone (polls write liveness at most every 4 s). Errors are `{error}` 
 
 **DynamoDB** (provisioned 25/25 in total, always-free, shared per region; `matches` has 10/10):
 - `matches` — `Q#<lang>` single pointer (≤1 waiter/language) + `M#<id>` match items (seeds, SDP, status, `*Seen`).
-- `presence` — `P#<lang>#<30s bucket>` counters; online = last complete bucket.
+- `presence` — `P#<lang>#<30s bucket>` counters (2 R / 10 W); online = last complete bucket. Every open tab
+  (`src/net/presence.ts`) beats once per wall-clock window at a fixed random offset (2–27 s in), which also keeps
+  `api` warm; `GET online` returns both languages with `Cache-Control: max-age=30` (CloudFront caches it) and
+  logs `online_count` for the peak-players query. A throttled heartbeat is dropped, never billed.
 - `match_details` — one item per player per Match (incl. Practice), keyed `pid` / `endedAt#matchId`; accounts-ready.
 
 TTL is cleanup only (deletes can lag ~48 h); liveness is checked in code via `lastSeen`/`*Seen`.
@@ -198,7 +201,7 @@ Rematch reuses the open channel and the same seeds (`i` continues) — it works 
 | Analytics | CloudWatch Logs (5 GB/mo free) | mostly |
 | Overrun | estimator trips ~$4; Budgets backup | overage ~$0.1–0.5 (estimator) |
 
-Scaling notes: presence writes cap ~25/s ≈ ~750 tabs at 30 s; ~1,000 concurrent exceeds the $5 cap
+Scaling notes: presence writes cap at 10/s ≈ ~300 tabs at 30 s (the rest of the free 25 goes to the other tables); ~1,000 concurrent exceeds the $5 cap
 (resting triggers). The project account is a legacy Paid account: no Free-plan hard stop, so the
 guardrails are the only cap.
 
