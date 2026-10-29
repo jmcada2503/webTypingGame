@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countdownDisplay, practiceResultLines, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, practiceResultLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -140,13 +140,39 @@ describe('GO flash', () => {
 });
 
 describe('Practice results', () => {
-  const run = { survivedSeconds: 83.4, wordsTyped: 12, wrongSubmits: 1, accuracy: 12 / 13, averagePace: 3.14, peakPace: 4.5, wpm: 37.7 };
+  const run = { survivedSeconds: 83.4, wordsTyped: 12, wrongSubmits: 1, accuracy: 12 / 13, averagePace: 3.14, peakPace: 4.5, wpm: 37.7, currentLevel: 210 };
 
-  test('show the time survived, words, accuracy and pace', () => {
-    expect(practiceResultLines(run)).toEqual(['TIME SURVIVED   01:23', 'WORDS TYPED     12', 'ACCURACY        92%', 'PACE            3.1 LETTERS/S (38 WPM)', 'BEST PACE       4.5 LETTERS/S']);
+  test('show the time survived, words, accuracy, difficulty and pace', () => {
+    expect(practiceResultLines(run)).toEqual([
+      'TIME SURVIVED   01:23',
+      'DIFFICULTY      50%',
+      'WORDS TYPED     12',
+      'ACCURACY        92%',
+      'PACE            3.1 LETTERS/S (38 WPM)',
+      'BEST PACE       4.5 LETTERS/S',
+    ]);
   });
 
-  test('show a dash for accuracy when nothing was submitted', () => {
-    expect(practiceResultLines({ ...run, accuracy: null, wordsTyped: 0 })[2]).toBe('ACCURACY        -');
+  test('show a dash for accuracy when nothing was submitted, and for difficulty before the run was placed', () => {
+    const lines = practiceResultLines({ ...run, accuracy: null, wordsTyped: 0, currentLevel: null });
+    expect(lines).toContain('ACCURACY        -');
+    expect(lines).toContain('DIFFICULTY      -');
+  });
+});
+
+describe('Practice score (the difficulty level reached)', () => {
+  test('is 10 points for each second of the difficulty ramp the run reached', () => {
+    expect(practiceScore({ currentLevel: 0 })).toBe(0);
+    expect(practiceScore({ currentLevel: 100 })).toBe(1000);
+    expect(practiceScore({ currentLevel: 123.46 })).toBe(1235);
+  });
+
+  test('is 0 when the run never got past the speed measurement', () => {
+    expect(practiceScore({ currentLevel: null })).toBe(0);
+  });
+
+  test('stops at the top of the ramp (4200), where the difficulty stops rising', () => {
+    expect(practiceScore({ currentLevel: 420 })).toBe(4200);
+    expect(practiceScore({ currentLevel: 9999 })).toBe(4200);
   });
 });

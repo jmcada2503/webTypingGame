@@ -1,7 +1,7 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { PracticeResult } from '../practice/PracticeSession';
-import { practiceResultLines } from './content';
+import { practiceResultLines, practiceScore } from './content';
 import { blink, centered, formatClock, twoTone } from './draw';
 import type { Screen, ScreenSet } from './Screen';
 
@@ -77,11 +77,13 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
         const result = practiceResult();
         if (result) {
           // One left-aligned block, centered as a whole, so the numbers line up.
+          const score = `SCORE ${practiceScore(result)}`;
+          text.writeScaled((128 - score.length * 3) / 2, 11.5, score, 3, 'yellow');
           const rows = practiceResultLines(result);
           const col = (128 - Math.max(...rows.map((l) => l.length))) / 2;
-          rows.forEach((l, i) => text.write(Math.round(col), 13 + i, l, 'fg'));
+          rows.forEach((l, i) => text.write(Math.round(col), 17 + i, l, 'fg'));
         }
-        lines(text, 21, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
+        lines(text, 25, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
         return;
       }
       const title = { won: 'YOU WIN', lost: 'YOU LOSE', peace: 'PEACE' }[s.result];
