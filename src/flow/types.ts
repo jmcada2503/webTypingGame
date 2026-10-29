@@ -25,15 +25,20 @@ export type FlowState =
 
 /**
  * The Rematch offer on an online end screen.
- * `available`: I can propose (`secondsLeft` runs out on Public; `null` = Private, always on).
- * `waiting`: I proposed. `incoming`: they proposed, I can accept or decline. `declined`: they said no.
- * `closed`: the window passed or I said no. `opponentLeft`: they are gone.
+ * - `available`: I can propose. `secondsLeft` is the window (10 s, Public only; `null` = Private, no timer).
+ * - `waiting`: I proposed; the opponent has `answerSecondsLeft` to answer. `incoming`: they proposed; I have
+ *   `answerSecondsLeft` to accept or deny. The answer time is always the full 10 s, even if the window ran out
+ *   meanwhile; `secondsLeft` keeps counting the window in the background (it decides what comes after).
+ * - `notice`: a short message (`noAnswer` my request expired, `tooLate` theirs did, `declined` it was denied) for
+ *   `noticeSecondsLeft`, after which the options come back (or Rematch is `closed`: after a decline in Public, or
+ *   when the window is gone).
+ * - `closed`: no Rematch any more. `opponentLeft`: they are gone.
  */
 export type RematchState =
   | { status: 'available'; secondsLeft: number | null }
-  | { status: 'waiting' }
-  | { status: 'incoming' }
-  | { status: 'declined' }
+  | { status: 'waiting'; answerSecondsLeft: number; secondsLeft: number | null }
+  | { status: 'incoming'; answerSecondsLeft: number; secondsLeft: number | null }
+  | { status: 'notice'; notice: 'noAnswer' | 'tooLate' | 'declined'; noticeSecondsLeft: number; secondsLeft: number | null; closes: boolean }
   | { status: 'closed' }
   | { status: 'opponentLeft' };
 
@@ -47,15 +52,17 @@ export type NetworkEvent =
   | { type: 'inviteInvalid'; reason: 'full' | 'expired' }
   /** An opponent was found; the two clients now connect to each other. */
   | { type: 'matched' }
-  /** Both connections are confirmed. */
+  /** Both connections are confirmed (sent at the same moment on both sides: the Countdown starts together). */
   | { type: 'connected' }
+  /** The connection can't be made (no network path, the backend refused or is unreachable). */
+  | { type: 'connectFailed' }
   /** The opponent's connection dropped; in a Match they get a short grace to come back. */
   | { type: 'opponentDisconnected' }
   | { type: 'opponentReconnected' }
   /** The opponent is gone for good (closed the tab, left). */
   | { type: 'opponentLeft' }
   /** The opponent's answer to, or offer of, a Rematch. */
-  | { type: 'rematch'; message: 'propose' | 'accept' | 'decline' };
+  | { type: 'rematch'; message: 'propose' | 'accept' | 'decline' | 'cancel' };
 
 /** The line to matchmaking and to the opponent. The real one is Lambda + WebRTC; tests use fakes. */
 export interface FlowNetwork {
@@ -64,7 +71,7 @@ export interface FlowNetwork {
   joinPrivate(code: string): void;
   /** Leave the queue or the Private match quietly. */
   leave(): void;
-  sendRematch(message: 'propose' | 'accept' | 'decline'): void;
+  sendRematch(message: 'propose' | 'accept' | 'decline' | 'cancel'): void;
   onEvent(cb: (event: NetworkEvent) => void): () => void;
 }
 
@@ -76,7 +83,12 @@ export interface FlowConfig {
   startingSeconds: number;
   connectTimeoutSeconds: number;
   disconnectGraceSeconds: number;
+  /** How long after a Public match a Rematch can be proposed (Private: no limit). */
   rematchWindowSeconds: number;
+  /** How long the other side has to answer a request, always in full (even after the window). */
+  rematchAnswerSeconds: number;
+  /** How long NO ANSWER / TOO LATE / DECLINED stay on screen before the options come back. */
+  rematchNoticeSeconds: number;
 }
 
 export const DEFAULT_FLOW_CONFIG: FlowConfig = {
@@ -86,4 +98,6 @@ export const DEFAULT_FLOW_CONFIG: FlowConfig = {
   connectTimeoutSeconds: 10,
   disconnectGraceSeconds: 10,
   rematchWindowSeconds: 10,
+  rematchAnswerSeconds: 10,
+  rematchNoticeSeconds: 2.4,
 };

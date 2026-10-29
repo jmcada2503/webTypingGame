@@ -113,11 +113,19 @@ export class ScreenFlow {
 
   /** On an online end screen: propose a Rematch (or accept, if the opponent already proposed). */
   proposeRematch() {
-    const status = this.rematch()?.status;
-    if (status === 'available') {
+    const r = this.rematch();
+    if (r?.status === 'available') {
       this.network.sendRematch('propose');
-      this.setRematch({ status: 'waiting' });
-    } else if (status === 'incoming') this.acceptRematch();
+      this.setRematch({ status: 'waiting', answerSecondsLeft: this.config.rematchAnswerSeconds, secondsLeft: r.secondsLeft });
+    } else if (r?.status === 'incoming') this.acceptRematch();
+  }
+
+  /** Take back my request while the opponent has not answered. */
+  cancelRematch() {
+    const r = this.rematch();
+    if (r?.status !== 'waiting') return;
+    this.network.sendRematch('cancel');
+    this.setRematch(this.options(r.secondsLeft));
   }
 
   acceptRematch() {
@@ -126,10 +134,12 @@ export class ScreenFlow {
     this.startCountdown('versus');
   }
 
+  /** Deny the opponent's request: DECLINED for a moment, and in Public Rematch is then closed. */
   declineRematch() {
-    if (this.rematch()?.status !== 'incoming') return;
+    const r = this.rematch();
+    if (r?.status !== 'incoming') return;
     this.network.sendRematch('decline');
-    this.setRematch({ status: 'closed' });
+    this.setRematch(this.notice('declined', r.secondsLeft));
   }
 
   /** Q on the waiting screen. */
@@ -159,9 +169,8 @@ export class ScreenFlow {
     } else if (this.s.screen === 'starting') {
       this.timer -= dt;
       if (this.timer <= EPS) this.s = { screen: 'match', mode: this.s.mode };
-    } else if (this.s.screen === 'end' && this.s.mode === 'versus' && this.s.rematch.status === 'available' && this.s.rematch.secondsLeft !== null) {
-      const secondsLeft = this.s.rematch.secondsLeft - dt;
-      this.setRematch(secondsLeft <= EPS ? { status: 'closed' } : { status: 'available', secondsLeft });
+    } else if (this.s.screen === 'end' && this.s.mode === 'versus') {
+      this.tickRematch(dt, this.s.rematch);
     } else if (this.s.screen === 'match' && this.grace !== null) {
       this.grace -= dt;
       if (this.grace <= EPS) this.opponentGone();
@@ -173,6 +182,31 @@ export class ScreenFlow {
   /** The Rematch offer of the online end screen being shown, if any. */
   private rematch(): RematchState | undefined {
     return this.s.screen === 'end' && this.s.mode === 'versus' ? this.s.rematch : undefined;
+  }
+
+  /** The options after a Rematch moment: still available while the window lasts (or in Private), else closed. */
+  private options(windowLeft: number | null): RematchState {
+    return windowLeft !== null && windowLeft <= EPS ? { status: 'closed' } : { status: 'available', secondsLeft: windowLeft };
+  }
+
+  private notice(notice: 'noAnswer' | 'tooLate' | 'declined', windowLeft: number | null): RematchState {
+    // In Public a deny closes Rematch for good; in Private it stays offered.
+    return { status: 'notice', notice, noticeSecondsLeft: this.config.rematchNoticeSeconds, secondsLeft: windowLeft, closes: notice === 'declined' && this.kind === 'public' };
+  }
+
+  /** Time passes on the Rematch menu: the window counts down in the background, the answer time and notices too. */
+  private tickRematch(dt: number, r: RematchState) {
+    if (r.status === 'closed' || r.status === 'opponentLeft') return;
+    const windowLeft = r.secondsLeft === null ? null : Math.max(0, r.secondsLeft - dt);
+    if (r.status === 'available') return this.setRematch(this.options(windowLeft));
+    if (r.status === 'notice') {
+      const left = r.noticeSecondsLeft - dt;
+      if (left > EPS) return this.setRematch({ ...r, noticeSecondsLeft: left, secondsLeft: windowLeft });
+      return this.setRematch(r.closes ? { status: 'closed' } : this.options(windowLeft));
+    }
+    const answer = r.answerSecondsLeft - dt;
+    if (answer > EPS) return this.setRematch({ ...r, answerSecondsLeft: answer, secondsLeft: windowLeft });
+    this.setRematch(this.notice(r.status === 'waiting' ? 'noAnswer' : 'tooLate', windowLeft));
   }
 
   private setRematch(rematch: RematchState) {
@@ -219,10 +253,12 @@ export class ScreenFlow {
         return this.setRematch({ status: 'opponentLeft' });
       }
       if (event.type === 'rematch') {
-        if (event.message === 'propose' && status === 'waiting') return this.startCountdown('versus');
-        if (event.message === 'propose' && status === 'available') return this.setRematch({ status: 'incoming' });
-        if (event.message === 'accept' && status === 'waiting') return this.startCountdown('versus');
-        if (event.message === 'decline' && status === 'waiting') return this.setRematch({ status: 'declined' });
+        const r = this.rematch()!;
+        if (event.message === 'propose' && r.status === 'waiting') return this.startCountdown('versus');
+        if (event.message === 'propose' && r.status === 'available') return this.setRematch({ status: 'incoming', answerSecondsLeft: this.config.rematchAnswerSeconds, secondsLeft: r.secondsLeft });
+        if (event.message === 'accept' && r.status === 'waiting') return this.startCountdown('versus');
+        if (event.message === 'decline' && r.status === 'waiting') return this.setRematch(this.notice('declined', r.secondsLeft));
+        if (event.message === 'cancel' && r.status === 'incoming') return this.setRematch(this.options(r.secondsLeft));
       }
       return;
     }
@@ -243,6 +279,10 @@ export class ScreenFlow {
         this.timer = this.config.connectTimeoutSeconds;
       }
       if (event.type === 'connected') this.startCountdown('versus');
+      if (event.type === 'connectFailed') {
+        this.network.leave();
+        this.s = { screen: 'error', reason: 'connectFailed', kind: this.s.kind };
+      }
     }
   }
 }

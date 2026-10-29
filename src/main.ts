@@ -5,9 +5,15 @@ import { installDevKeys } from './dev/devKeys';
 import { FakeBackend } from './flow/FakeNetwork';
 import { ScreenFlow } from './flow/ScreenFlow';
 import { KeyboardTypingInput } from './input/KeyboardTypingInput';
-import { createAttackWordSource } from './match/attackWords';
+import { REMATCH_INDEX_STRIDE, createAttackWordSource } from './match/attackWords';
 import { MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
+import { ShotVerifier } from './match/ShotVerifier';
+import { createApi } from './net/api';
+import { checkFreshness } from './net/freshness';
+import { listVersion, playerId } from './net/identity';
+import { OnlineNetwork } from './net/OnlineNetwork';
+import { createServerStatus } from './net/serverStatus';
 import { PracticeSession } from './practice/PracticeSession';
 import { ScreenHost } from './screens/ScreenHost';
 import { howtoScreen } from './screens/howtoScreen';
@@ -18,32 +24,97 @@ import { waitingScreen } from './screens/waitingScreen';
 import { AsciiGameView } from './view/AsciiGameView';
 import { loadWordList } from './words/wordLists';
 
-// Until the real network exists, matchmaking and the opponent are the in-memory fake.
-const backend = new FakeBackend();
-const flow = new ScreenFlow(backend.connect());
+/** Until the metrics pipeline exists, metric records go to the console as one JSON line each. */
+const logMetric = (entry: Record<string, unknown>) => console.info(JSON.stringify(entry));
+
+// Word lists are small (about 50 KB each, compressed): load both before the first screen.
+const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
+const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
+
+// `?fake` plays against the in-memory stand-in (with the dev keys) instead of the real backend and WebRTC.
+const backend = new URLSearchParams(location.search).has('fake') ? new FakeBackend() : null;
+const online = backend
+  ? null
+  : new OnlineNetwork({
+      api: createApi(playerId()),
+      listVersion: (lang) => versions[lang],
+      inviteLink: (matchId) => `${location.origin}${location.pathname}#/m/${matchId}`,
+      onRecord: (record) => logMetric({ event: 'p2p_connection', ...record }),
+      log: logMetric,
+      // A tab left open across a deploy may hold old word lists: reload onto the new build before joining.
+      beforeJoin: async (code) => {
+        if ((await checkFreshness(versions)) !== 'stale') return true;
+        logMetric({ event: 'stale_build_reload' });
+        if (code) history.replaceState(null, '', `${location.pathname}${location.search}#/m/${code}`); // keep the link
+        location.reload();
+        return false;
+      },
+    });
+const flow = new ScreenFlow(online ?? backend!.connect());
 const view = await AsciiGameView.create();
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
 const screens = { ...simpleScreens(flow, () => practice?.result() ?? null), menu: menuScreen(flow, copyText), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText), countdown: countdownScreen() };
 
-// Word lists are small (about 50 KB each, compressed): load both before the first screen.
-const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
-
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
+/** How many Matches each connection has started (the first, then Rematches): picks the Attack-word indices. */
+const matchesPlayed = new Map<string, number>();
 
 /**
- * What runs on the Match screen. Practice: the real `PracticeSession` (words from the game on a ramp, it measures
- * your speed first). Online: the Match engine with seeded Attack words (the seed comes from the server once the
- * real network exists; for now a local one) and no transport yet, so the opponent never answers.
+ * What runs on the Match screen. Practice: the real `PracticeSession`. Online: the Match engine with my seeded
+ * Attack words, the opponent's Shots checked against their seed, and the P2P channel to them. With `?fake` there
+ * is no opponent channel: a local seed and no transport.
  */
 const createMatch = (mode: 'versus' | 'practice') => {
-  const list = wordLists[flow.language()];
-  if (mode === 'practice') return (practice = new PracticeSession({ list }));
-  const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), list);
-  return new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 }));
+  if (mode === 'practice') return (practice = new PracticeSession({ list: wordLists[flow.language()] }));
+  const opponent = online?.currentMatch();
+  if (!opponent) {
+    const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
+    return new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 }));
+  }
+  const list = wordLists[opponent.lang];
+  const played = matchesPlayed.get(opponent.matchId) ?? 0;
+  matchesPlayed.set(opponent.matchId, played + 1);
+  const startIndex = played * REMATCH_INDEX_STRIDE;
+  const verifier = new ShotVerifier({
+    seed: opponent.seeds.theirs,
+    list,
+    startIndex,
+    oneWayLatency: opponent.oneWaySeconds,
+    report: (audit) => logMetric({ event: audit.kind, matchId: opponent.matchId, ...audit }),
+  });
+  const engine = new MatchEngine({
+    mode,
+    attackWords: createAttackWordSource(opponent.seeds.mine, list),
+    startIndex,
+    verifyShot: (shot, arrivedAt) => verifier.verify(shot, arrivedAt).ok,
+    bulletFlightSeconds: 8,
+    shotFlightSeconds: 8,
+  });
+  return new MatchSession(engine, opponent.transport);
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 new AppShell(view, host, input).start();
-if (import.meta.env.DEV) installDevKeys(flow, backend);
+
+// An Invite link (`#/m/<id>`) skips the menu. Clear it so a reload doesn't try to join again.
+const invite = /^#\/m\/([a-z0-9]{3,32})$/.exec(location.hash);
+if (invite) {
+  history.replaceState(null, '', location.pathname + location.search);
+  flow.joinInvite(invite[1]);
+}
+
+// The cost guardrails publish whether online play is resting; check on load and every 30 s.
+if (online) {
+  const servers = createServerStatus();
+  const checkServers = async () => flow.setServersResting((await servers.check()) === 'resting');
+  void checkServers();
+  setInterval(() => void checkServers(), 30_000);
+}
+
+if (import.meta.env.DEV) {
+  // For end-to-end checks and the console: drive the real flow without key presses.
+  Object.assign(window, { flow, online, host });
+  if (backend) installDevKeys(flow, backend);
+}
