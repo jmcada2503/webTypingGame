@@ -10,7 +10,7 @@ How the app is put together: the flow decides *which* screen, the screens *draw*
 | `src/screens/Screen`, `ScreenSet` | A screen = `draw(text, t, state)` + optional `enter` and `onKey`. One per flow screen. |
 | `src/screens/draw.ts` | Helpers every screen shares: the 128×45 grid size, `wrap`, `formatClock`, `centered`, `twoTone`, `box`. |
 | `src/screens/simpleScreens.ts` | Plain versions of every screen. The ones with an approved design are replaced by the real ones; end, Opponent-left and error stay plain until their prototypes are done. |
-| `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Alt keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
+| `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Ctrl keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
 
 ## Screen-change effects
 
@@ -27,4 +27,4 @@ Input is locked while an effect runs (`ScreenTransition.active`), and typing is 
 
 ## Running it
 
-`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Alt+F plays "opponent found", Alt+E / Alt+V ends the Match as lost / won, Alt+D makes the opponent leave, Alt+M / Alt+A / Alt+X make them propose, accept or decline a Rematch, Alt+R toggles "servers resting".
+`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Ctrl+F plays "opponent found", Ctrl+E / Ctrl+V ends the Match as lost / won, Ctrl+D makes the opponent leave, Ctrl+M / Ctrl+A / Ctrl+X make them propose, accept or decline a Rematch, Ctrl+R toggles "servers resting".

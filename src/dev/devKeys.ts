@@ -1,17 +1,22 @@
 import type { FakeBackend, FakeEndpoint } from '../flow/FakeNetwork';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 
-export const DEV_KEYS_HINT = 'DEV  ALT+F OPPONENT FOUND  ALT+E LOSE  ALT+V WIN  ALT+D OPPONENT LEAVES  ALT+M / ALT+A / ALT+X REMATCH PROPOSE / ACCEPT / DECLINE  ALT+R SERVERS RESTING';
+export const DEV_KEYS_HINT = 'DEV  CTRL+F OPPONENT FOUND  CTRL+E LOSE  CTRL+V WIN  CTRL+D OPPONENT LEAVES  CTRL+M / CTRL+A / CTRL+X REMATCH PROPOSE / ACCEPT / DECLINE  CTRL+R SERVERS RESTING';
 
 /**
  * Developer-only stand-ins for the things a real opponent and the real network would do, so the whole flow can
- * be walked alone with the fake network. Held on Alt so they never clash with the game's own keys.
+ * be walked alone with the fake network. Held on Ctrl so they never clash with the game's own keys; the browser's
+ * own meaning for these (find, reload, bookmark...) is blocked while they are handled.
  */
+const DEV_CODES = new Set(['KeyF', 'KeyE', 'KeyV', 'KeyD', 'KeyM', 'KeyA', 'KeyX', 'KeyR']);
+
 export function installDevKeys(flow: ScreenFlow, backend: FakeBackend) {
   let bot: FakeEndpoint | null = null;
   let resting = false;
   window.addEventListener('keydown', (e) => {
-    if (!e.altKey) return;
+    if (!e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!DEV_CODES.has(e.code)) return;
+    e.preventDefault();
     const s = flow.state();
     switch (e.code) {
       case 'KeyF': // an opponent shows up
