@@ -29,11 +29,17 @@ let variant: Variant = (VARIANTS.find((v) => v.key === params.get('variant'))?.k
 /** Placeholder Match numbers (the loser's side). */
 const STATS = { time: 134, pace: 2.6, accuracy: 0.84, words: 17, shotsFired: 9, shotsHit: 1, enemyDamage: 40 };
 
+// ?t=2 freezes the scene at that second (for reviewing a moment, e.g. ?variant=A&t=2).
+const frozenAt = params.get('t') !== null ? Number(params.get('t')) : null;
 const view = await AsciiGameView.create();
 
 // ---------------------------------------------------------------- the scripted ending
 
-const SCENE_END = 4.6;
+/** The last Word bullet is fired at BULLET_FROM, flies for BULLET_FLIGHT s and reaches the Cockpit at HIT_AT. */
+const BULLET_FROM = 0.3;
+const HIT_AT = 3.0;
+const BULLET_WORD = 'comet';
+const SCENE_END = HIT_AT + 3.8;
 
 class LoseSession implements GameSession {
   status: SessionStatus = 'running';
@@ -72,23 +78,26 @@ class LoseSession implements GameSession {
   }
 
   update(dt: number): ViewEvent[] {
-    this.t += dt;
+    if (frozenAt !== null) {
+      this.t = frozenAt;
+      dt = 0;
+    } else this.t += dt;
     this.screenT += dt;
     if (this.phase === 'scene') {
-      // A last Word bullet reaches the Cockpit at 0.8 s: the final Life goes.
-      this.at(0.1, () => this.pending.push({ type: 'enemyFired', id: 'w0' }));
-      this.at(0.8, () => {
+      // A last Word bullet flies in; when it reaches the Cockpit the final Life goes.
+      this.at(BULLET_FROM, () => this.pending.push({ type: 'enemyFired', id: 'w0' }));
+      this.at(HIT_AT, () => {
         this.pending.push({ type: 'wordBulletArrived', id: 'w0' }, { type: 'lifeLost' });
         this.lives = 0;
       });
-      if (variant === 'A' && this.t > 1.2) this.pace = Math.max(0, this.pace - dt * 2); // the stars slow to a stop
-      if (variant === 'C' && this.t > 1.2) this.pace = Math.max(0.3, this.pace - dt * 1.5);
+      if (variant === 'A' && this.t > HIT_AT + 0.4) this.pace = Math.max(0, this.pace - dt * 2); // the stars slow to a stop
+      if (variant === 'C' && this.t > HIT_AT + 0.4) this.pace = Math.max(0.3, this.pace - dt * 1.5);
     }
     this.transition.update(dt);
     SCREEN_TRANSITION.mode = this.transition.mode;
     SCREEN_TRANSITION.level = this.transition.level;
     // A: the lights dim slowly after the last Life goes.
-    if (variant === 'A' && this.phase === 'scene' && this.t > 1.4) SCREEN_HIT.level = Math.max(SCREEN_HIT.level, Math.min(0.85, (this.t - 1.4) * 0.45));
+    if (variant === 'A' && this.phase === 'scene' && this.t > HIT_AT + 0.6) SCREEN_HIT.level = Math.max(SCREEN_HIT.level, Math.min(0.85, (this.t - HIT_AT - 0.6) * 0.45));
     if (this.phase === 'scene' && this.t >= SCENE_END && !this.transition.active) this.leaveScene();
     const ev = this.pending;
     this.pending = [];
@@ -96,7 +105,9 @@ class LoseSession implements GameSession {
   }
 
   state(): GameViewState {
-    return { lives: this.lives, typedWord: '', attackWord: 'rocket', wordBullets: [], shots: [], enemyDamage: 0.4, pace: { player: this.pace, enemy: 3 } };
+    const flying = this.phase === 'scene' && this.t >= BULLET_FROM && this.t < HIT_AT;
+    const bullets = flying ? [{ id: 'w0', word: BULLET_WORD, flight: (this.t - BULLET_FROM) / (HIT_AT - BULLET_FROM) }] : [];
+    return { lives: this.lives, typedWord: '', attackWord: 'rocket', wordBullets: bullets, shots: [], enemyDamage: 0.4, pace: { player: this.pace, enemy: 3 } };
   }
 
   private leaveScene() {
