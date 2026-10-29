@@ -117,11 +117,11 @@ export function practiceScore(r: Pick<PracticeResult, 'currentLevel'>): number {
 
 /** The lines of the Practice results screen. */
 export function practiceResultLines(r: Pick<PracticeResult, 'survivedSeconds' | 'wordsTyped' | 'accuracy' | 'averagePace' | 'peakPace' | 'wpm' | 'currentLevel'>): string[] {
-  const pad = (label: string) => label.padEnd(16);
+  const pad = (label: string) => label.padEnd(20);
   const difficulty = r.currentLevel === null ? '-' : `${Math.round((Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) / PRACTICE_RAMP.rampSeconds) * 100)}%`;
   return [
     `${pad('TIME SURVIVED')}${formatClock(r.survivedSeconds)}`,
-    `${pad('DIFFICULTY')}${difficulty}`,
+    `${pad('DIFFICULTY REACHED')}${difficulty}`,
     `${pad('WORDS TYPED')}${r.wordsTyped}`,
     `${pad('ACCURACY')}${r.accuracy === null ? '-' : `${Math.round(r.accuracy * 100)}%`}`,
     `${pad('PACE')}${r.averagePace.toFixed(1)} LETTERS/S (${Math.round(r.wpm)} WPM)`,

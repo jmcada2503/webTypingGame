@@ -144,19 +144,19 @@ describe('Practice results', () => {
 
   test('show the time survived, words, accuracy, difficulty and pace', () => {
     expect(practiceResultLines(run)).toEqual([
-      'TIME SURVIVED   01:23',
-      'DIFFICULTY      50%',
-      'WORDS TYPED     12',
-      'ACCURACY        92%',
-      'PACE            3.1 LETTERS/S (38 WPM)',
-      'BEST PACE       4.5 LETTERS/S',
+      'TIME SURVIVED       01:23',
+      'DIFFICULTY REACHED  50%',
+      'WORDS TYPED         12',
+      'ACCURACY            92%',
+      'PACE                3.1 LETTERS/S (38 WPM)',
+      'BEST PACE           4.5 LETTERS/S',
     ]);
   });
 
   test('show a dash for accuracy when nothing was submitted, and for difficulty before the run was placed', () => {
     const lines = practiceResultLines({ ...run, accuracy: null, wordsTyped: 0, currentLevel: null });
-    expect(lines).toContain('ACCURACY        -');
-    expect(lines).toContain('DIFFICULTY      -');
+    expect(lines).toContain('ACCURACY            -');
+    expect(lines).toContain('DIFFICULTY REACHED  -');
   });
 });
 

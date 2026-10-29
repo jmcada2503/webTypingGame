@@ -113,7 +113,7 @@ export class AsciiGameView implements GameView {
     this.typingFeedback(state);
     this.words.update(state, this.camera, dt);
     this.hitFx.update(dt);
-    SCREEN_HIT.level = Math.max(0, SCREEN_HIT.level - dt / HIT_LOOK.flashSeconds);
+    this.fadeHitFlash(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
     this.paceMotion.update(state.pace, dt);
@@ -127,7 +127,13 @@ export class AsciiGameView implements GameView {
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
   }
 
+  /** The black flash from losing a Life fades with time, on the game scene and on text screens alike. */
+  private fadeHitFlash(dt: number) {
+    SCREEN_HIT.level = Math.max(0, SCREEN_HIT.level - dt / HIT_LOOK.flashSeconds);
+  }
+
   private renderScreen(draw: (text: TextGrid, dt: number) => void, dt: number) {
+    this.fadeHitFlash(dt); // the last Life lost starts a flash; it must not outlast the Match and dim the next screens
     this.scene.visible = false;
     this.overlay.visible = false;
     const text = this.ascii.textGrid;
