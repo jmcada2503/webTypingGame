@@ -92,3 +92,7 @@ _Avoid_: AFK, inactive
 **Peace**:
 A Match that ends with no winner because both players stayed Idle too long.
 _Avoid_: Draw, tie, stalemate
+
+**Resting**:
+Online play switched off because this month's budget is used up; Practice still works and Matches already running finish normally.
+_Avoid_: Offline, down, maintenance
