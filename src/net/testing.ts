@@ -147,7 +147,7 @@ export interface FakeRtcOptions {
   pairType?: 'host' | 'srflx' | 'relay';
 }
 
-/** Hands out the two ends of one fake WebRTC connection; the first caller is the host's. */
+/** Hands out the two ends of one fake WebRTC connection; the end that creates the data channel is the host's. */
 export class FakeRtc {
   private ends: FakeRtcEnd[] = [];
   readonly options: Required<FakeRtcOptions>;
@@ -171,7 +171,8 @@ export class FakeRtc {
   ready() {
     if (this.ends.length < 2 || !this.ends.every((e) => e.local && e.remote)) return;
     const { net, options } = this;
-    const [host, guest] = this.ends;
+    const host = this.ends.find((e) => e.channel)!;
+    const guest = this.ends.find((e) => e !== host)!;
     net.timers.after(options.connectMs, () => {
       if (options.outcome === 'never') return;
       for (const end of this.ends) end.setIce(options.outcome === 'failed' ? 'failed' : 'connected');
@@ -215,7 +216,7 @@ class FakeRtcEnd implements RtcConnection {
 
   async setLocalDescription() {
     this.local = true;
-    this.localDescription = { type: this.index === 0 ? 'offer' : 'answer', sdp: `sdp-${this.index}` };
+    this.localDescription = { type: this.channel ? 'offer' : 'answer', sdp: `sdp-${this.index}` };
     this.iceGatheringState = 'gathering';
     this.onicegatheringstatechange?.();
     const { gatherMs } = this.rtc.options;
