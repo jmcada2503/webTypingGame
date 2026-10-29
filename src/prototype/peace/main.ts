@@ -164,27 +164,27 @@ function drawA(text: TextGrid, t: number) {
   const a = Math.min(1, t / 1.5);
   if (a > 0.2) text.writeScaled((COLS - 'PEACE'.length * 8) / 2, 3.5, 'PEACE', 8, 'fg');
   centered(text, 15, 'NOBODY WON. NOBODY LOST.', 'fg');
-  centered(text, 17, 'BOTH SHIPS WENT QUIET AND FLEW AWAY', 'dim');
-  statsBlock(text, 20);
 
-  // Reminder: the way out of Peace is to attack. "RED WORD" is red, like the Attack word in the Cockpit.
-  if (t > 0.8) {
-    const parts: [string, 'fg' | 'red' | 'yellow'][] = [['NEXT TIME: TYPE YOUR ', 'fg'], ['RED WORD', 'red'], [' AND PRESS ENTER TO ATTACK', 'fg']];
-    const len = parts.reduce((n, [s]) => n + s.length, 0);
-    let col = (COLS - len) / 2;
-    parts.forEach(([s, c]) => {
-      put(text, col, 27.5, s, c);
-      col += s.length;
-    });
-  }
+  // Why it ended this way, as a gentle note (not an order). "RED WORD" is red, like the Attack word in the Cockpit.
+  const parts: [string, 'dim' | 'red'][] = [
+    ['BOTH SHIPS WENT QUIET AND FLEW AWAY, BECAUSE NEITHER PILOT CHOSE TO ATTACK WITH THE ', 'dim'],
+    ['RED WORD', 'red'],
+  ];
+  let col = (COLS - parts.reduce((n, [s]) => n + s.length, 0)) / 2;
+  parts.forEach(([s, c]) => {
+    put(text, col, 17, s, c);
+    col += s.length;
+  });
 
-  // A well-known line about peace (Albert Einstein).
+  statsBlock(text, 21);
+
+  // A well-known line about peace (Albert Einstein); the quote is still to be chosen with the user.
   if (t > 1.4) {
-    centered(text, 31, '"PEACE CANNOT BE KEPT BY FORCE;', 'dim');
-    centered(text, 32.4, 'IT CAN ONLY BE ACHIEVED BY UNDERSTANDING."', 'dim');
-    centered(text, 34, '- ALBERT EINSTEIN', 'dim');
+    centered(text, 29, '"PEACE CANNOT BE KEPT BY FORCE;', 'dim');
+    centered(text, 30.4, 'IT CAN ONLY BE ACHIEVED BY UNDERSTANDING."', 'dim');
+    centered(text, 32, '- ALBERT EINSTEIN', 'dim');
   }
-  if (t > 1) rematchSlot(text, 37);
+  if (t > 1) rematchSlot(text, 36);
 }
 
 // ---------------------------------------------------------------- B: two ships fly into the sunset
