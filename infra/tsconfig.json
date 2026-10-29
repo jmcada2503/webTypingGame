@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["bin", "lib", "lambda"]
+  "include": ["bin", "lib", "lambda", "scripts"]
 }

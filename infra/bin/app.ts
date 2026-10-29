@@ -1,5 +1,6 @@
 import { App } from "aws-cdk-lib";
 import { BackendStack } from "../lib/backend-stack";
+import { GuardrailsStack } from "../lib/guardrails-stack";
 import { StaticStack } from "../lib/static-stack";
 
 const app = new App();
@@ -9,6 +10,14 @@ if (!budgetEmail) throw new Error("BUDGET_EMAIL is required: budget alerts go to
 
 const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: "us-east-1" };
 
-// Static depends on Backend (CloudFront routes /api/* to the Function URL), never the reverse.
-const backend = new BackendStack(app, "Backend", { env, budgetEmail });
-new StaticStack(app, "Static", { env, apiUrl: backend.apiUrl });
+// Dependencies only point down this list: Static routes /api/* to Backend, and Guardrails
+// watches both (writes /status.json, throttles the api).
+const backend = new BackendStack(app, "Backend", { env });
+const site = new StaticStack(app, "Static", { env, apiUrl: backend.apiUrl });
+new GuardrailsStack(app, "Guardrails", {
+  env,
+  api: backend.api,
+  bucket: site.bucket,
+  distribution: site.distribution,
+  budgetEmail,
+});
