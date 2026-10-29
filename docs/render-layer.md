@@ -93,6 +93,8 @@ One-off moments that start an animation. They are not state: send each once, at 
 | `{ type: 'shotHit', id }` | A Shot reached the Enemy ship | `HIT!!` on the Radar, a big green explosion on the ship, which sags. |
 | `{ type: 'shotDefended', id }` | The opponent destroyed a Shot | A dim `x` stays on the Radar where the Shot was for 0.5 s. |
 | `{ type: 'enemyFired', id }` | The Enemy ship launches a Word bullet | The ship flashes and throws a ring of yellow grid sparks. |
+| `{ type: 'idleNudge' }` | The player has typed nothing for 5 s | Nothing yet: the animation is designed in its own prototype ticket. |
+| `{ type: 'peace' }` | Both players stayed Idle too long: the Match ended in Peace | Nothing yet: the animation is designed in its own prototype ticket. |
 
 Ordering rules:
 
@@ -168,4 +170,4 @@ To see an effect: spawn a Word bullet and destroy / arrive it, set Lives, fire t
 
 ## What the game must still decide (not in this layer)
 
-Hit / damage rules, word selection and spawn rules, how long a Match lasts and how it ends, networking, menus and win / game-over screens, sound, and the player settings screen. The two rules the user already set: **defending comes first** (above) and **Pace counts only the letters of correct words**.
+Menus and win / game-over screens, sound, and the player settings screen. The hit / damage rules and how a Match ends are decided and live in the [Match rules engine](match-engine.md); word selection, networking and Practice's word spawning are separate tickets. The two rules the user already set: **defending comes first** (above) and **Pace counts only the letters of correct words**.

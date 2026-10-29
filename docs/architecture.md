@@ -140,11 +140,15 @@ TTL is cleanup only (deletes can lag ~48 h); liveness is checked in code via `la
 **CloudWatch Logs.** `POST report` writes the `match_details` item *and* emits one JSON log line;
 Logs Insights saved queries (CDK `CfnQueryDefinition`) serve time-range analytics DynamoDB can't do cheaply.
 
-**Cost guardrails.** `guardrails` Lambda, two triggers: EventBridge (15 min) estimates month spend from
-usage metrics and trips "resting" at 80% of the limit; SNS from AWS Budgets is the slow backup. Shutdown =
-write `/status.json {resting:true}`, set `api` concurrency 0, invalidate cache. Auto-lift on the 1st.
-The limit lives in one SSM parameter (read by the Lambda and CDK). Scripts: `guardrails:limit <usd>`,
-`guardrails:resume`.
+**Cost guardrails** (own CDK stack `Guardrails`, after `Backend` and `Static`). `guardrails` Lambda,
+three triggers: EventBridge (15 min) sums month-to-date CloudWatch usage (CloudFront requests/bytes,
+account-wide Lambda invocations/duration, log ingestion), prices it **net of always-free allowances** at
+worst-region CloudFront prices, and trips "resting" at 80% of the limit; an SNS topic fed by AWS Budgets
+(100%) and the `EstimatedCharges` billing alarm forces a trip as the slow backup. Shutdown = `api`
+concurrency 0, then `/status.json {resting:true}` (`max-age=30`) + invalidation. Auto-lift on the 1st.
+The limit lives in one SSM parameter; `guardrails:limit <usd> [--resume]` updates it plus the budget and
+alarm, `guardrails:resume` lifts (refused while the estimate is still over the trip point). The client
+treats a missing flag as open and two failed reads in a row as resting.
 
 **External STUN.** Cloudflare + Google, both free. TURN is deliberately omitted; if connection metrics
 show frequent P2P failures, add TURN or a WebSocket fallback later (fog on the map).
@@ -182,8 +186,8 @@ Rematch reuses the open channel and the same seeds (`i` continues) — it works 
 | Overrun | estimator trips ~$4; Budgets backup | overage ~$0.1–0.5 (estimator) |
 
 Scaling notes: presence writes cap ~25/s ≈ ~750 tabs at 30 s; ~1,000 concurrent exceeds the $5 cap
-(resting triggers). New AWS accounts start on the Free plan (credits, closes after 6 months) — upgrade to
-Paid before launch (Release fog).
+(resting triggers). The project account is a legacy Paid account: no Free-plan hard stop, so the
+guardrails are the only cap.
 
 ## Out of scope
 
