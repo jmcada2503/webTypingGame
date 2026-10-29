@@ -9,7 +9,9 @@ How the app is put together: the flow decides *which* screen, the screens *draw*
 | `src/screens/ScreenTransition` | The timeline of one effect (ramp up, swap the screen while the picture is hidden, optional hold, ramp down) and `transitionFor(prev, next)`, the rule for which effect plays. |
 | `src/screens/Screen`, `ScreenSet` | A screen = `draw(text, t, state)` + optional `enter` and `onKey`. One per flow screen. |
 | `src/screens/draw.ts` | Helpers every screen shares: the 128×45 grid size, `wrap`, `formatClock`, `centered`, `twoTone`, `box`. |
-| `src/screens/simpleScreens.ts` | Plain versions of every screen. The ones with an approved design are replaced by the real ones; end, Opponent-left and error stay plain until their prototypes are done. |
+| `src/screens/menuScreen.ts`, `howtoScreen.ts`, `waitingScreen.ts` | The approved designs: main menu (layout B), how-to (layout B), waiting (terminal style C3). Specs: the closed prototype tickets. |
+| `src/screens/content.ts` | The screens' pure logic, tested: menu selection rules, online-count placeholder, the waiting log and tips, the how-to demo timeline, and the placeholder name and sponsor link. |
+| `src/screens/simpleScreens.ts` | Plain versions of every screen. `main.ts` overrides the ones that have an approved design; end, Opponent-left and error stay plain until their prototypes are done. |
 | `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Alt keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
 
 ## Screen-change effects

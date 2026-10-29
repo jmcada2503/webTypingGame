@@ -38,6 +38,16 @@ const setup = () => {
 const screen = (flow: ScreenFlow) => flow.state().screen;
 
 describe('Menu, how-to and waiting', () => {
+  test('knows the chosen language on every screen, not only on the menu', () => {
+    const { flow } = setup();
+    expect(flow.language()).toBe('en');
+    flow.setLanguage('es');
+    flow.choose('public');
+    flow.confirm();
+    expect(screen(flow)).toBe('waiting');
+    expect(flow.language()).toBe('es');
+  });
+
   test('starts on the menu', () => {
     const { flow } = setup();
     expect(flow.state()).toMatchObject({ screen: 'menu', serversResting: false, language: 'en' });

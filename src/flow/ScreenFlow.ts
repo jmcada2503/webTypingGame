@@ -10,7 +10,7 @@ const EPS = 1e-9;
  */
 export class ScreenFlow {
   private readonly config: FlowConfig;
-  private language: Language = 'en';
+  private chosenLanguage: Language = 'en';
   private s: FlowState = { screen: 'menu', serversResting: false, language: 'en' };
   /** Seconds left in the current timed phase (connecting, starting gap). */
   private timer = 0;
@@ -35,8 +35,13 @@ export class ScreenFlow {
     return { ...this.s };
   }
 
+  /** The language the player chose (it drives the word list and who they are matched with). */
+  language(): Language {
+    return this.chosenLanguage;
+  }
+
   setLanguage(language: Language) {
-    this.language = language;
+    this.chosenLanguage = language;
     if (this.s.screen === 'menu') this.s = { ...this.s, language };
   }
 
@@ -180,14 +185,14 @@ export class ScreenFlow {
 
   private startWaiting(kind: MatchKind) {
     this.s = { screen: 'waiting', kind, phase: 'searching' };
-    if (kind === 'public') this.network.joinQueue(this.language);
+    if (kind === 'public') this.network.joinQueue(this.chosenLanguage);
     else if (this.joinCode) this.network.joinPrivate(this.joinCode);
-    else this.network.createPrivate(this.language);
+    else this.network.createPrivate(this.chosenLanguage);
   }
 
   private toMenu() {
     this.joinCode = null;
-    this.s = { screen: 'menu', serversResting: this.resting, language: this.language };
+    this.s = { screen: 'menu', serversResting: this.resting, language: this.chosenLanguage };
   }
 
   /** The opponent is gone: where it happened decides the screen; leaving the Match is a win. */

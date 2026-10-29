@@ -10,7 +10,7 @@ import type { Screen, ScreenSet } from './Screen';
  */
 const lines = (text: TextGrid, start: number, rows: string[], color: 'fg' | 'dim' = 'fg') => rows.forEach((r, i) => centered(text, start + i, r, color));
 
-export function simpleScreens(flow: ScreenFlow): ScreenSet {
+export function simpleScreens(flow: ScreenFlow, copyText: (s: string) => void = () => {}): ScreenSet {
   const menu: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'menu') return;
@@ -131,6 +131,7 @@ export function simpleScreens(flow: ScreenFlow): ScreenSet {
     },
   };
 
+  void copyText;
   return { menu, howto, waiting, countdown, match, end, opponentLeft, error };
 }
 
