@@ -12,7 +12,7 @@ import { KeyboardTypingInput } from '../../input/KeyboardTypingInput';
 import type { TextGrid } from '../../render/AsciiRenderer';
 import { SCREEN_TRANSITION } from '../../render/ScreenFilters';
 import { GLITCH, ScreenTransition, TV_OFF_ON, type TransitionEffect } from '../../screens/ScreenTransition';
-import { COLS, blink, box, centered, formatClock, put, twoTone } from '../../screens/draw';
+import { COLS, blink, box, centered, formatClock, put, twoTone, wrap } from '../../screens/draw';
 import { AsciiGameView } from '../../view/AsciiGameView';
 import { ENEMY_LOOK } from '../../view/enemy/EnemyShip';
 import type { GameViewState, ViewEvent } from '../../view/GameViewState';
@@ -178,11 +178,10 @@ function drawA(text: TextGrid, t: number) {
 
   statsBlock(text, 21);
 
-  // A well-known line about peace (Albert Einstein); the quote is still to be chosen with the user.
+  // The line about peace chosen by the user (Spinoza; a loose English translation).
   if (t > 1.4) {
-    centered(text, 29, '"PEACE CANNOT BE KEPT BY FORCE;', 'dim');
-    centered(text, 30.4, 'IT CAN ONLY BE ACHIEVED BY UNDERSTANDING."', 'dim');
-    centered(text, 32, '- ALBERT EINSTEIN', 'dim');
+    wrap('"PEACE IS NOT AN ABSENCE OF WAR, IT IS A VIRTUE, A STATE OF MIND, A DISPOSITION FOR BENEVOLENCE, CONFIDENCE, JUSTICE."', 62).forEach((l, i) => centered(text, 28.5 + i * 1.6, l, 'dim'));
+    centered(text, 32, '- SPINOZA', 'dim');
   }
   if (t > 1) rematchSlot(text, 36);
 }
