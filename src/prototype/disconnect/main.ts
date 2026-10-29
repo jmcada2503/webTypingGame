@@ -15,7 +15,7 @@ import { KeyboardTypingInput } from '../../input/KeyboardTypingInput';
 import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import type { GpuAsciiRenderer } from '../../render/GpuAsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
-import { anyFilterOn } from '../../render/ScreenFilters';
+import { SCREEN_TRANSITION, anyFilterOn } from '../../render/ScreenFilters';
 import { AsciiGameView } from '../../view/AsciiGameView';
 import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 
@@ -44,6 +44,7 @@ let layout = Math.min(2, Math.max(0, Number(params.get('layout') ?? 1) - 1));
 let where: Where = (WHERES.find((w) => w === params.get('where')) ?? 'match') as Where;
 let kind: 'public' | 'private' = params.get('kind') === 'private' ? 'private' : 'public';
 let sel = 0;
+let trans: { phase: 'out' | 'in'; t: number; to: Phase } | null = null; // the glitch into another phase
 let hideWords = true; // the opponent's held Word bullets are hidden while they are away (W toggles)
 let toast: { msg: string; at: number } | null = null;
 
@@ -108,14 +109,52 @@ const view = await AsciiGameView.create();
 const hidden = view as unknown as { ascii: GpuAsciiRenderer; scene: THREE.Scene; overlay: THREE.Scene; enemy: { root: THREE.Group } };
 const text: TextGrid = hidden.ascii.textGrid;
 const asciiRender = hidden.ascii.render.bind(hidden.ascii);
+/** The shared glitch (0.3 s: 0.13 out, 0.17 in): the picture breaks up, the next phase appears, it settles. */
+const GLITCH = { out: 0.13, in: 0.17 };
+function glitchTo(to: Phase) {
+  if (trans) return;
+  trans = { phase: 'out', t: 0, to };
+  SCREEN_TRANSITION.mode = 4;
+}
+function tickTransition(dt: number) {
+  if (!trans) {
+    SCREEN_TRANSITION.level = 0;
+    return;
+  }
+  trans.t += dt;
+  const u = Math.min(1, trans.t / (trans.phase === 'out' ? GLITCH.out : GLITCH.in));
+  if (trans.phase === 'out') {
+    SCREEN_TRANSITION.level = u * u; // accelerates into the glitch
+    if (u >= 1) {
+      setPhase(trans.to); // swapped while the picture is broken up
+      trans = { ...trans, phase: 'in', t: 0 };
+    }
+  } else {
+    SCREEN_TRANSITION.level = (1 - u) * (1 - u); // settles quickly
+    if (u >= 1) trans = null;
+  }
+}
+/** The signal drops: a short glitch burst, and the held words flicker out instead of vanishing. */
+const LOST_INTRO = 1.0; // seconds of lead-in before the full "reconnecting" animation
+const WORDS_GONE_AT = 0.8;
+const wordsHiddenWhenLost = (t: number) => t >= WORDS_GONE_AT || hash(Math.floor(t * 22)) >= 1 - t / WORDS_GONE_AT;
+
+let lastFrame = performance.now();
 hidden.ascii.render = (scene, camera, overlay) => {
+  const nowMs = performance.now();
+  tickTransition(Math.min((nowMs - lastFrame) / 1000, 0.1));
+  lastFrame = nowMs;
   backFx.mode = 'off'; // drawBack turns it on
+  const t = phaseT();
   const world = phase !== 'left';
   hidden.scene.visible = world;
-  hidden.overlay.visible = world && !((phase === 'lost' && hideWords) || phase === 'win');
+  hidden.overlay.visible = world && !((phase === 'lost' && hideWords && wordsHiddenWhenLost(t)) || phase === 'win');
   if (!world) text.clear();
   else text.fill(7, 1, 30, 3, ' '); // hide the game view's dim debug event label
-  const t = phaseT();
+  if (phase === 'lost' && !trans && t < 0.5) {
+    SCREEN_TRANSITION.mode = 4;
+    SCREEN_TRANSITION.level = 0.55 * (1 - t / 0.5) ** 2; // a quick glitch burst when the signal drops
+  }
   hidden.enemy.root.visible = true;
   session.pace = { player: 1, enemy: 1 };
   if (phase === 'lost') drawLost(t);
@@ -124,7 +163,7 @@ hidden.ascii.render = (scene, camera, overlay) => {
   else if (phase === 'left') drawLeft(t);
   if (phase === 'lost' && t >= GRACE) endMatch('timeout');
   if (phase === 'back' && t >= BACK_BEAT + BACK_COUNT) setPhase('match'); // the Match resumes
-  if (phase === 'win' && t >= WIN_STUB) setPhase('left');
+  if (phase === 'win' && t >= WIN_STUB) glitchTo('left');
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   hint();
   if (phase === 'back') renderTextOnTop(scene, camera, overlay);
@@ -329,10 +368,10 @@ function bigNumber(s: string, scale: number, row: number, color: PaletteColor, f
 const SHIP = { c: 40, r: 3, w: 48, h: 14 };
 const STATIC = '.:;\'`*#%@+=~';
 
-function staticField(c0: number, r0: number, w: number, h: number, density: number, t: number, color: PaletteColor = 'fg') {
+function staticField(c0: number, r0: number, w: number, h: number, density: number, t: number, color: PaletteColor = 'fg', slipChance = 0.07, slipAmp = 10) {
   const frame = Math.floor(t * 18);
   for (let r = r0; r < r0 + h; r++) {
-    const slip = hash(r * 7 + frame) > 0.93 ? Math.round((hash(r + frame * 3) - 0.5) * 10) : 0; // jumping rows
+    const slip = hash(r * 7 + frame) > 1 - slipChance ? Math.round((hash(r + frame * 3) - 0.5) * slipAmp) : 0; // jumping rows
     for (let c = c0; c < c0 + w; c++) {
       if (hash(c * 131 + r * 17 + frame * 7) < density) {
         put(c + slip, r, STATIC[Math.floor(hash(c * 3 + r * 5 + frame) * STATIC.length)], hash(c + r * 9 + frame * 2) > 0.8 ? 'dim' : color);
@@ -358,13 +397,18 @@ function drawLost(t: number) {
 /** A: the ship's picture falls apart into static that spreads until it cuts out. */
 function animBreakup(t: number, left: number) {
   const k = clamp01(t / GRACE);
+  const intro = clamp01(t / LOST_INTRO); // 0 -> 1 over the lead-in: weak signal first, then the full animation
   hidden.enemy.root.visible = hash(Math.floor(t * 14)) > k * 0.55 && t < GRACE - 0.2; // flickers more and more, then gone
-  staticField(SHIP.c - 4, SHIP.r - 1, SHIP.w + 8, SHIP.h + 2, 0.05 + 0.55 * k ** 1.3, t);
-  centered(1.2, blink(t, 3) ? '!!  ENEMY SIGNAL LOST  !!' : '    ENEMY SIGNAL LOST    ', 'red');
-  put(44, 17, 'RECONNECTING', 'yellow');
-  bar(58, 17, 24, left / GRACE, 'yellow');
-  put(84, 17, `${left.toFixed(1)} s`, 'fg');
-  centered(18.5, 'THEIR WORD BULLETS ARE HELD IN FLIGHT. NOTHING CAN HIT YOU.', 'dim');
+  // The rows jump hard at the start and settle into the normal breakup.
+  staticField(SHIP.c - 4, SHIP.r - 1, SHIP.w + 8, SHIP.h + 2, 0.02 + 0.55 * k ** 1.3, t, 'fg', 0.07 + 0.4 * (1 - intro) ** 2, 10 + 14 * (1 - intro));
+  if (t < 0.45) centered(1.2, blink(t, 8) ? 'WEAK SIGNAL' : '', 'yellow');
+  else centered(1.2, blink(t, 3) ? '!!  ENEMY SIGNAL LOST  !!' : '    ENEMY SIGNAL LOST    ', 'red');
+  if (t > 0.7) {
+    put(44, 17, 'RECONNECTING', 'yellow');
+    bar(58, 17, 24, left / GRACE, 'yellow');
+    put(84, 17, `${left.toFixed(1)} s`, 'fg');
+  }
+  if (t > 1.1) centered(18.5, 'THEIR WORD BULLETS ARE HELD IN FLIGHT. NOTHING CAN HIT YOU.', 'dim');
 }
 
 /** B: the ship is replaced by a dead monitor showing a "no signal" test pattern. */
@@ -597,7 +641,7 @@ window.addEventListener('keydown', (e) => {
     sel = 0;
     return say(kind.toUpperCase());
   }
-  if (k === 'o' || k === 'O') return setPhase('left');
+  if (k === 'o' || k === 'O') return glitchTo('left');
   if (k === 'v' || k === 'V') {
     backLook = (backLook + 1) % BACK_LOOKS.length;
     return say(`BACK-COUNTDOWN LOOK ${backLook + 1}: ${BACK_LOOKS[backLook].name.toUpperCase()}`);
