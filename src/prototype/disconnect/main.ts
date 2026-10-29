@@ -14,6 +14,7 @@ import type { GameSession, SessionStatus } from '../../app/GameSession';
 import { KeyboardTypingInput } from '../../input/KeyboardTypingInput';
 import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import type { GpuAsciiRenderer } from '../../render/GpuAsciiRenderer';
+import { anyFilterOn } from '../../render/ScreenFilters';
 import { AsciiGameView } from '../../view/AsciiGameView';
 import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 
@@ -124,9 +125,47 @@ hidden.ascii.render = (scene, camera, overlay) => {
   if (phase === 'win' && t >= WIN_STUB) setPhase('left');
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   hint();
-  asciiRender(scene, camera, overlay);
+  if (phase === 'back') renderTextOnTop(scene, camera, overlay);
+  else asciiRender(scene, camera, overlay);
 };
 new AppShell(view, session, input).start();
+
+/**
+ * The renderer draws: scene, text grid, scaled text runs, THEN the word overlay, so words always cover text.
+ * For the back-countdown this draws the overlay first and the scaled text runs on top of it, so nothing can
+ * cover the countdown. (The real build needs a proper "text in front of the words" layer in the renderer.)
+ */
+const priv = hidden.ascii as unknown as {
+  gl: THREE.WebGLRenderer;
+  sceneRT: THREE.WebGLRenderTarget;
+  cellRT: THREE.WebGLRenderTarget;
+  cellPass: { scene: THREE.Scene };
+  compositePass: { scene: THREE.Scene };
+  ortho: THREE.Camera;
+  runScene: THREE.Scene;
+  filters: { frameRT: THREE.WebGLRenderTarget; apply(gl: THREE.WebGLRenderer): void };
+  paintRuns(): void;
+};
+function renderTextOnTop(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera }) {
+  const gl = priv.gl;
+  gl.setClearColor(0x000000, 1);
+  gl.setRenderTarget(priv.sceneRT);
+  gl.render(scene, camera);
+  gl.setRenderTarget(priv.cellRT);
+  gl.render(priv.cellPass.scene, priv.ortho);
+  const filtered = anyFilterOn();
+  gl.setRenderTarget(filtered ? priv.filters.frameRT : null);
+  gl.render(priv.compositePass.scene, priv.ortho);
+  priv.paintRuns();
+  gl.autoClear = false;
+  if (overlay) gl.render(overlay.scene, overlay.camera); // the words first...
+  gl.render(priv.runScene, priv.ortho); // ...then the scaled text over them
+  gl.autoClear = true;
+  if (filtered) priv.filters.apply(gl);
+}
+/** Text drawn as a scaled run, so it is in front of the words in the back-countdown. */
+const front = (c: number, r: number, s: string, color: PaletteColor) => text.writeScaled(c, r, s, 1, color);
+const frontCentered = (r: number, s: string, color: PaletteColor) => front((COLS - [...s].length) / 2, r, s, color);
 
 // ---------------------------------------------------------------- helpers
 
@@ -287,15 +326,15 @@ function animRadar(t: number, left: number) {
  */
 function drawBack(t: number) {
   staticField(SHIP.c, SHIP.r, SHIP.w, SHIP.h, Math.max(0, 0.45 - t * 1.2), t);
-  centered(17.2, blink(t, 4) ? 'ENEMY IS BACK' : '', 'green');
-  if (t < BACK_BEAT) return centered(19, 'CHECK YOUR WORDS', 'dim');
+  if (blink(t, 4)) frontCentered(17.2, 'ENEMY IS BACK', 'green');
+  if (t < BACK_BEAT) return frontCentered(19, 'CHECK YOUR WORDS', 'dim');
   const c = t - BACK_BEAT;
   const n = Math.max(1, Math.ceil(BACK_COUNT - c));
   const frac = c % 1;
   text.fill(0, 19, COLS, 12, ' ');
-  centered(19.2, 'THE MATCH RESUMES IN', 'fg');
+  frontCentered(19.2, 'THE MATCH RESUMES IN', 'fg');
   bigNumber(String(n), 9 - 1.4 * frac, 21, n <= 2 ? 'red' : 'yellow', frac);
-  centered(32, 'THEIR WORDS ARE STILL HELD. NOTHING MOVES UNTIL THE COUNTDOWN ENDS.', 'dim');
+  frontCentered(32, 'THEIR WORDS ARE STILL HELD. NOTHING MOVES UNTIL THE COUNTDOWN ENDS.', 'dim');
 }
 
 /** Placeholder: the real win animation is designed in its own prototype ticket. It also plays after a disconnect. */
