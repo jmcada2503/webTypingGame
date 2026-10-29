@@ -35,6 +35,11 @@ export interface MatchConfig {
   bulletFlightSeconds: number;
   /** Seconds a Shot takes to reach the Enemy ship on the Radar (display only). */
   shotFlightSeconds: number;
+  /**
+   * Checks an incoming Shot against the opponent's seed (`ShotVerifier`); `arrivedAt` is the Match time in
+   * seconds. Return false to ignore it: it never becomes a Word bullet. No check when omitted.
+   */
+  verifyShot?: (shot: { i: number; t: number; word: string }, arrivedAt: number) => boolean;
 }
 
 /**
