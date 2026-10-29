@@ -1,0 +1,35 @@
+# English denylist: words the build drops after all automatic filters.
+# One word per line; `#` starts a comment. Found in the skim pass (issue #62).
+
+# apostrophe-less contractions
+cant
+wont
+shes
+whats
+
+# abbreviations / fragments / letters
+esp
+org
+yrs
+comp
+phi
+cis
+pas
+sup
+tor
+lite
+vita
+ling
+non
+
+# names
+gaga
+
+# slang, drugs, crude or slurs
+homo
+meth
+dope
+coca
+dong
+fart
+poop
