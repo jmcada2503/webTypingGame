@@ -243,6 +243,10 @@ export class ScreenFlow {
         this.timer = this.config.connectTimeoutSeconds;
       }
       if (event.type === 'connected') this.startCountdown('versus');
+      if (event.type === 'connectFailed') {
+        this.network.leave();
+        this.s = { screen: 'error', reason: 'connectFailed', kind: this.s.kind };
+      }
     }
   }
 }

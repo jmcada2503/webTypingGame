@@ -1,7 +1,10 @@
 import { defineConfig } from "vitest/config";
+import { devApi } from "./vite.devApi";
 
 // Two pages: the game at / and the visual sandbox (tweak panel) at /sandbox/.
 export default defineConfig({
+  // `npm run dev`: /api served by the real matchmaking code over the in-memory store (no AWS).
+  plugins: [devApi()],
   build: {
     rollupOptions: { input: { main: "index.html", sandbox: "sandbox/index.html" } },
   },

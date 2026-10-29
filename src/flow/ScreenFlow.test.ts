@@ -165,6 +165,28 @@ describe('From the opponent to the Match', () => {
     expect(network.calls).toContain('leave');
   });
 
+  test('a connection that fails early (no network path, server error) shows the error at once', () => {
+    const { flow, network } = searching();
+    network.emit({ type: 'matched' });
+    network.emit({ type: 'connectFailed' });
+    expect(flow.state()).toMatchObject({ screen: 'error', reason: 'connectFailed', kind: 'public' });
+    expect(network.calls).toContain('leave');
+  });
+
+  test('a failure while still searching shows the error too', () => {
+    const { flow, network } = searching();
+    network.emit({ type: 'connectFailed' });
+    expect(flow.state()).toMatchObject({ screen: 'error', reason: 'connectFailed' });
+  });
+
+  test('a late connectFailed after the Countdown started changes nothing', () => {
+    const { flow, network } = searching();
+    network.emit({ type: 'matched' });
+    network.emit({ type: 'connected' });
+    network.emit({ type: 'connectFailed' });
+    expect(screen(flow)).toBe('countdown');
+  });
+
   test('after a connection error, Search again joins the queue again and Menu goes back', () => {
     const { flow, network } = searching();
     network.emit({ type: 'matched' });

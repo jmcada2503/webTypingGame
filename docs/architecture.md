@@ -167,6 +167,11 @@ wait. Races: loser retries ≤3. A Public match is a Private match whose host al
 **Handshake.** After pairing the waiter (host) makes the WebRTC offer (ICE ≤1.5 s, no trickle);
 offer/answer exchanged through the `M#` item, polled 0.5–1 s. On `connected`, host sends `startAt` in its
 clock; guest converts via a ping-pong clock offset so both Countdowns end together. ~3–5 s total.
+Client: `src/net/OnlineNetwork.ts` (the `FlowNetwork` the screens use) polls ~2 s while waiting and 0.7 s
+during the handshake, and the guest refuses a host whose `listVersion` (word-list hash + `ATTACK_PICKER_VERSION`)
+differs from its own. Match *k* on one connection (0, then each Rematch) starts its Attack-word indices at
+`k × REMATCH_INDEX_STRIDE`, so both sides agree without sending indices. `npm run dev` serves `/api` from the
+real matchmaking code over the in-memory store (`vite.devApi.ts`); `?fake` uses the in-memory flow fake instead.
 
 **In-Match (hot path, no AWS).** Events flow Browser↔Browser over the reliable+ordered DataChannel, each
 with seq+id (ignore dupes); a 2 s heartbeat carries a cumulative ack, and silence past the 5 s grace = disconnect.
