@@ -21,7 +21,7 @@ export const PRACTICE_RAMP = {
  * run is moved on to the player's level.
  */
 export const PRACTICE_CALIBRATION = {
-  words: 5,
+  words: 3,
   /** Seconds of empty screen before the next calibration word (the first one waits `PRACTICE_RAMP.firstSpawnAt`). */
   gap: 0.8,
   flightSeconds: 10,

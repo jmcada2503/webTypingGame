@@ -168,6 +168,17 @@ describe('placing the player from their first words', () => {
     expect(session.result().startLevel).toBe(0);
   });
 
+  test('the player is placed exactly when the last calibration word has been typed', () => {
+    const { session, typist } = practice();
+    const play = typist(3);
+    let wordsAtPlacement = -1;
+    for (let k = 0; k < 1200 && wordsAtPlacement < 0; k++) {
+      play(1 / 16);
+      if (session.result().startLevel !== null) wordsAtPlacement = session.result().wordsTyped;
+    }
+    expect(wordsAtPlacement).toBe(PRACTICE_CALIBRATION.words);
+  });
+
   test('the first words never pile up: only one is on screen at a time', () => {
     const { session, typist } = practice();
     const play = typist(1.25);
