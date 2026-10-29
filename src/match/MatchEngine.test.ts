@@ -185,6 +185,19 @@ describe('Practice', () => {
     expect(m.state().shots).toEqual([]);
     expect(sent(m)).toEqual([]);
   });
+
+  test('a Word bullet can fly faster than the default', () => {
+    const m = engine({ mode: 'practice' }); // default flight: 8 s
+    m.spawnBullet('slow');
+    m.spawnBullet('quick', 2);
+
+    advance(m, 1);
+    expect(m.state().wordBullets.map((b) => [b.word, b.flight])).toEqual([['slow', 0.125], ['quick', 0.5]]);
+
+    advance(m, 1);
+    expect(m.state().wordBullets.map((b) => b.word)).toEqual(['slow']); // "quick" arrived and cost a Life
+    expect(m.state().lives).toBe(2);
+  });
 });
 
 describe("The opponent's Shots", () => {
