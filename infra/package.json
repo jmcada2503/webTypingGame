@@ -7,9 +7,19 @@
     "synth": "cdk synth",
     "diff": "cdk diff --all",
     "deploy": "cdk deploy --all --require-approval never",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "guardrails:limit": "tsx scripts/guardrails.ts limit",
+    "guardrails:resume": "tsx scripts/guardrails.ts resume"
   },
   "devDependencies": {
+    "@aws-sdk/client-budgets": "^3.1159.0",
+    "@aws-sdk/client-cloudfront": "^3.1159.0",
+    "@aws-sdk/client-cloudwatch": "^3.1159.0",
+    "@aws-sdk/client-lambda": "^3.1159.0",
+    "@aws-sdk/client-s3": "^3.1159.0",
+    "@aws-sdk/client-ssm": "^3.1159.0",
+    "@aws-sdk/client-sts": "^3.1159.0",
     "@types/aws-lambda": "^8.10.164",
     "@types/node": "^26.6.6",
     "aws-cdk": "^2.1146.1",
@@ -17,6 +27,7 @@
     "constructs": "^10.8.1",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   }
 }

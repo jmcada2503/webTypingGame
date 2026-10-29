@@ -20,6 +20,9 @@ interface StaticStackProps extends StackProps {
 }
 
 export class StaticStack extends Stack {
+  readonly bucket: Bucket;
+  readonly distribution: Distribution;
+
   constructor(scope: Construct, id: string, props: StaticStackProps) {
     super(scope, id, props);
 
@@ -29,6 +32,7 @@ export class StaticStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
+    this.bucket = bucket;
 
     const api = FunctionUrlOrigin.withOriginAccessControl(props.apiUrl);
 
@@ -69,6 +73,7 @@ export class StaticStack extends Stack {
         },
       },
     });
+    this.distribution = distribution;
 
     // Vite hashes everything under assets/, so those never change: cache them for a year.
     const hashedAssets = new BucketDeployment(this, "HashedAssets", {
