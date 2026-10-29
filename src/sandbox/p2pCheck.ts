@@ -14,26 +14,43 @@ let pending: PendingConnection | null = null;
 let connection: PeerConnection | null = null;
 let shots = 0;
 
-/** Signaling over the BroadcastChannel: the other tab's messages in, ours out. */
+/**
+ * Signaling over the BroadcastChannel: the other tab's messages in, ours out. A BroadcastChannel keeps
+ * nothing, so a joining tab says hello and the hosting tab sends its offer again (the real signaling is
+ * stored on the backend, so it has no such gap).
+ */
 function signaling() {
   const handlers = new Set<(message: SignalMessage) => void>();
-  bus.onmessage = (event: MessageEvent<{ from: string; message: SignalMessage }>) => {
-    if (event.data.from !== tabId) handlers.forEach((h) => h(event.data.message));
+  let lastOffer: SignalMessage | null = null;
+  bus.onmessage = (event: MessageEvent<{ from: string; hello?: true; message?: SignalMessage }>) => {
+    if (event.data.from === tabId) return;
+    if (event.data.hello) {
+      if (lastOffer) bus.postMessage({ from: tabId, message: lastOffer });
+    } else if (event.data.message) {
+      handlers.forEach((h) => h(event.data.message!));
+    }
   };
   return {
-    send: (message: SignalMessage) => bus.postMessage({ from: tabId, message }),
+    send: (message: SignalMessage) => {
+      if (message.type === 'offer') lastOffer = message;
+      bus.postMessage({ from: tabId, message });
+    },
     onMessage(cb: (message: SignalMessage) => void) {
       handlers.add(cb);
       return () => void handlers.delete(cb);
     },
     onLost: () => () => {},
+    hello: () => bus.postMessage({ from: tabId, hello: true }),
   };
 }
 
 async function start(role: 'host' | 'guest') {
   print(`${role}: connecting...`);
   button('host').disabled = button('join').disabled = true;
-  pending = connectPeer({ role, signaling: signaling() });
+  const line = signaling();
+  // Waiting for the other tab to be opened by hand takes longer than a real connect.
+  pending = connectPeer({ role, signaling: line, timeoutMs: 60_000 });
+  if (role === 'guest') line.hello();
   try {
     connection = await pending.done;
   } catch (error) {
@@ -56,13 +73,13 @@ async function start(role: 'host' | 'guest') {
     setTimeout(() => {
       const at = link.startIn(3000);
       print(`startAt in 3 s (local ${at.toFixed(0)})`);
-      setTimeout(() => print(`START (host) at ${performance.now().toFixed(0)}`), 3000);
+      setTimeout(() => print(`START (host) at ${Date.now() % 100000}`), 3000);
     }, 1500);
   } else {
     link.onMessage((message) => {
       if (message.type !== 'startAt') return;
       const local = link.toLocalTime(message.at);
-      setTimeout(() => print(`START (guest) at ${performance.now().toFixed(0)}`), local - performance.now());
+      setTimeout(() => print(`START (guest) at ${Date.now() % 100000}`), local - performance.now());
     });
   }
 }
