@@ -128,9 +128,14 @@ Shield Standard (L3/L4) is free; no WAF.
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,
-`POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
+`POST match/{id}/leave`, `POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
+Matchmaking and signaling live in `infra/lambda/api/` as a `Matchmaker` over a small atomic `Store` (in-memory for
+tests and local dev, DynamoDB conditional writes in the cloud). Players are anonymous ids (`pid`) in the body or the
+`pid` query of `GET match/{id}`; the host's word-list version wins at pairing; a waiter or opponent who hasn't polled
+for 10 s is gone (polls write liveness at most every 4 s). Errors are `{error}` codes: `invalid` 400, `forbidden` 403,
+`gone`/`expired` 404, `full`/`own` 409, `too_large` 413, `busy` 503. `npm run smoke:api -- <url>` in `infra/` checks it live.
 
-**DynamoDB** (provisioned 25/25, always-free, shared per region):
+**DynamoDB** (provisioned 25/25 in total, always-free, shared per region; `matches` has 10/10):
 - `matches` — `Q#<lang>` single pointer (≤1 waiter/language) + `M#<id>` match items (seeds, SDP, status, `*Seen`).
 - `presence` — `P#<lang>#<30s bucket>` counters; online = last complete bucket.
 - `match_details` — one item per player per Match (incl. Practice), keyed `pid` / `endedAt#matchId`; accounts-ready.
