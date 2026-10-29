@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
+import type { TextGrid } from '../render/AsciiRenderer';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
@@ -80,7 +81,17 @@ export class AsciiGameView implements GameView {
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
+  /** A text screen to draw instead of the game scene (null = the game scene). */
+  private screenDraw: ((text: TextGrid, dt: number) => void) | null = null;
+
+  setScreen(draw: ((text: TextGrid, dt: number) => void) | null) {
+    this.screenDraw = draw;
+  }
+
   render(state: GameViewState, dt: number) {
+    if (this.screenDraw) return this.renderScreen(this.screenDraw, dt);
+    this.scene.visible = true;
+    this.overlay.visible = true;
     this.enemy.update(dt);
     this.stars.update(dt);
     // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
@@ -105,6 +116,15 @@ export class AsciiGameView implements GameView {
     this.cockpit.update(state, dt, text);
     if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
 
+    this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
+  }
+
+  private renderScreen(draw: (text: TextGrid, dt: number) => void, dt: number) {
+    this.scene.visible = false;
+    this.overlay.visible = false;
+    const text = this.ascii.textGrid;
+    text.clear();
+    draw(text, dt);
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
   }
 

@@ -1,3 +1,4 @@
+import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameViewState, ViewEvent } from './GameViewState';
 
 /**
@@ -15,6 +16,12 @@ export interface GameView {
   render(state: GameViewState, dt: number): void;
   /** Start the animation for a one-off moment. */
   trigger(event: ViewEvent): void;
+  /**
+   * Show a text screen (menu, how-to, waiting...) instead of the game scene: while `draw` is set, `render()` hides
+   * the scene, clears the text grid and calls `draw(text, dt)` before the ASCII pass (so the CRT filters apply).
+   * Pass null to go back to the game scene.
+   */
+  setScreen(draw: ((text: TextGrid, dt: number) => void) | null): void;
   /**
    * Re-fit to the viewport (CSS px + devicePixelRatio): fixed 128×45 grid, cells via
    * fitToViewport(), camera aspect = real canvas aspect. Rebuilds glyph atlas and render targets.
