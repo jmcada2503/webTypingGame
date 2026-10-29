@@ -163,10 +163,28 @@ const hash = (n: number) => {
 function drawA(text: TextGrid, t: number) {
   const a = Math.min(1, t / 1.5);
   if (a > 0.2) text.writeScaled((COLS - 'PEACE'.length * 8) / 2, 3.5, 'PEACE', 8, 'fg');
-  centered(text, 16, 'NOBODY WON. NOBODY LOST.', 'fg');
-  centered(text, 17.6, 'BOTH SHIPS WENT QUIET AND FLEW AWAY', 'dim');
-  statsBlock(text, 21);
-  if (t > 1) rematchSlot(text, 33);
+  centered(text, 15, 'NOBODY WON. NOBODY LOST.', 'fg');
+  centered(text, 17, 'BOTH SHIPS WENT QUIET AND FLEW AWAY', 'dim');
+  statsBlock(text, 20);
+
+  // Reminder: the way out of Peace is to attack. "RED WORD" is red, like the Attack word in the Cockpit.
+  if (t > 0.8) {
+    const parts: [string, 'fg' | 'red' | 'yellow'][] = [['NEXT TIME: TYPE YOUR ', 'fg'], ['RED WORD', 'red'], [' AND PRESS ENTER TO ATTACK', 'fg']];
+    const len = parts.reduce((n, [s]) => n + s.length, 0);
+    let col = (COLS - len) / 2;
+    parts.forEach(([s, c]) => {
+      put(text, col, 27.5, s, c);
+      col += s.length;
+    });
+  }
+
+  // A well-known line about peace (Albert Einstein).
+  if (t > 1.4) {
+    centered(text, 31, '"PEACE CANNOT BE KEPT BY FORCE;', 'dim');
+    centered(text, 32.4, 'IT CAN ONLY BE ACHIEVED BY UNDERSTANDING."', 'dim');
+    centered(text, 34, '- ALBERT EINSTEIN', 'dim');
+  }
+  if (t > 1) rematchSlot(text, 37);
 }
 
 // ---------------------------------------------------------------- B: two ships fly into the sunset
