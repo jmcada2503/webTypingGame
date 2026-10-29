@@ -140,7 +140,7 @@ describe('placing the player from their first words', () => {
 
   test("after the first words are typed the run is moved on to the player's level", () => {
     const { session, typist } = practice();
-    typist(3)(PRACTICE_CALIBRATION.words * PRACTICE_CALIBRATION.spawnEvery + 10);
+    typist(3)(60);
     const r = session.result();
     expect(r.startLevel).not.toBeNull();
     expect(r.startLevel!).toBeGreaterThan(0);
@@ -159,6 +159,25 @@ describe('placing the player from their first words', () => {
     expect(results[1].calibrationPace!).toBeLessThan(results[2].calibrationPace!);
     expect(results[0].startLevel!).toBeLessThan(results[1].startLevel!);
     expect(results[1].startLevel!).toBeLessThan(results[2].startLevel!);
+  });
+
+  test('a slow typist gets through the first words without losing a Life, and starts from the beginning', () => {
+    const { session, typist } = practice();
+    typist(1.25)(60); // about 15 words per minute
+    expect(session.state().lives).toBe(3);
+    expect(session.result().startLevel).toBe(0);
+  });
+
+  test('the first words never pile up: only one is on screen at a time', () => {
+    const { session, typist } = practice();
+    const play = typist(1.25);
+    let most = 0;
+    while (session.result().startLevel === null && session.status === 'running') {
+      play(0.25);
+      most = Math.max(most, session.state().wordBullets.length);
+    }
+    expect(session.result().startLevel).not.toBeNull();
+    expect(most).toBe(1);
   });
 
   test('a slow player who misses words starts from the beginning', () => {
@@ -219,7 +238,7 @@ describe('the level rises faster while the screen is empty', () => {
   });
 
   test('a player who always has a word to type climbs in step with time', () => {
-    const { session, since, rise } = riseSincePlacement('last-moment player', 90);
+    const { session, since, rise } = riseSincePlacement('last-moment player', 120);
     expect(session.status).toBe('running');
     expect(since).toBeGreaterThan(40);
     expect(rise).toBeGreaterThan(since * 0.9);
@@ -272,7 +291,7 @@ describe('the result', () => {
     const active = session.result().activeSeconds;
     expect(active).toBeGreaterThan(0);
 
-    // The screen is empty again until the next word is due (calibration: every 2.5 s).
+    // The screen stays empty until the next calibration word, a short gap after it was cleared.
     play(0.5);
     expect(session.state().wordBullets).toEqual([]);
     expect(session.result().activeSeconds).toBe(active);

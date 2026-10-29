@@ -52,6 +52,30 @@ function run(director: PracticeDirector, seconds: number, from = 0, onScreen: re
 }
 const gapsOf = (spawns: { t: number }[]) => spawns.slice(1).map((s, k) => s.t - spawns[k].t);
 
+/**
+ * Runs the director with a real screen: each word stays until the player clears it, `typeSeconds` after it
+ * appears (or until it arrives, `flightSeconds` after it appears). Returns the spawns and the most words
+ * that were ever on screen at once.
+ */
+function playWithScreen(director: PracticeDirector, seconds: number, typeSeconds: number, random?: never) {
+  void random;
+  const dt = 1 / 16;
+  const screen: { word: string; leaves: number }[] = [];
+  const spawns: { t: number; spawn: Spawn }[] = [];
+  let mostOnScreen = 0;
+  for (let t = 0; t < seconds - 1e-9; t += dt) {
+    for (let k = screen.length - 1; k >= 0; k--) if (screen[k].leaves <= t + 1e-9) screen.splice(k, 1);
+    for (const spawn of director.advance(dt, screen.map((s) => s.word))) {
+      spawns.push({ t: t + dt, spawn });
+      screen.push({ word: spawn.word, leaves: t + dt + Math.min(typeSeconds, spawn.flightSeconds) });
+    }
+    mostOnScreen = Math.max(mostOnScreen, screen.length);
+  }
+  return { spawns, mostOnScreen };
+}
+/** Slack for the 1/16 s steps. */
+const near = (actual: number, expected: number) => Math.abs(actual - expected) <= 0.15;
+
 describe('the ramp', () => {
   test('gets harder with time: words come faster, fly faster and get longer', () => {
     const early = rampAt(0);
@@ -133,17 +157,48 @@ describe('calibration: the first words', () => {
     expect(d.startLevel).toBeNull();
   });
 
-  test('the first word comes at the usual time, then words come every calibration interval at its flight time', () => {
+  test('the first word comes at the usual time, at the calibration flight time', () => {
+    const { spawns } = playWithScreen(new PracticeDirector({ list: en, random: middle }), 5, 2);
+    expect(near(spawns[0].t, PRACTICE_RAMP.firstSpawnAt)).toBe(true);
+    expect(spawns[0].spawn.flightSeconds).toBe(PRACTICE_CALIBRATION.flightSeconds);
+  });
+
+  test('is self-paced: the next word comes a short gap after the screen is cleared', () => {
+    const { spawns } = playWithScreen(new PracticeDirector({ list: en, random: middle }), 60, 2);
+    expect(spawns.length).toBeGreaterThan(10);
+    for (const g of gapsOf(spawns)) expect(near(g, 2 + PRACTICE_CALIBRATION.gap)).toBe(true);
+  });
+
+  test('never has two words on screen, however slow the player is: the pace follows the player', () => {
+    for (const typeSeconds of [0.3, 2, 6, 9]) {
+      const { spawns, mostOnScreen } = playWithScreen(new PracticeDirector({ list: en, random: middle }), 120, typeSeconds);
+      expect(mostOnScreen).toBe(1);
+      for (const g of gapsOf(spawns)) expect(near(g, typeSeconds + PRACTICE_CALIBRATION.gap)).toBe(true);
+    }
+  });
+
+  test('a player who never types still gets the next word, once the last one has arrived', () => {
+    const { spawns, mostOnScreen } = playWithScreen(new PracticeDirector({ list: en, random: middle }), 60, Number.POSITIVE_INFINITY);
+    expect(mostOnScreen).toBe(1);
+    expect(spawns.length).toBeGreaterThanOrEqual(4);
+    for (const g of gapsOf(spawns)) expect(near(g, PRACTICE_CALIBRATION.flightSeconds + PRACTICE_CALIBRATION.gap)).toBe(true);
+  });
+
+  test('keeps waiting while a word is still on screen', () => {
     const d = new PracticeDirector({ list: en, random: middle });
-    const spawns = run(d, 30);
-    expect(spawns[0].t).toBeLessThanOrEqual(PRACTICE_RAMP.firstSpawnAt + 0.1);
-    for (const g of gapsOf(spawns)) expect(g).toBeCloseTo(PRACTICE_CALIBRATION.spawnEvery, 0);
-    for (const s of spawns) expect(s.spawn.flightSeconds).toBe(PRACTICE_CALIBRATION.flightSeconds);
-    expect(d.phase).toBe('calibrating'); // it stays in calibration until told otherwise
+    d.advance(2, []); // the first word comes out
+    expect(d.advance(60, ['still-here'])).toEqual([]);
+  });
+
+  test('stays in calibration until told otherwise', () => {
+    const d = new PracticeDirector({ list: en, random: middle });
+    playWithScreen(d, 60, 1);
+    expect(d.phase).toBe('calibrating');
+    expect(d.startLevel).toBeNull();
   });
 
   test('uses a mix of short, medium and long words, so the measured speed is not about one length', () => {
-    const words = Array.from({ length: 10 }, (_, k) => run(new PracticeDirector({ list: en, random: lcg(k + 1) }), 60)).flat();
+    const words = Array.from({ length: 10 }, (_, k) => playWithScreen(new PracticeDirector({ list: en, random: lcg(k + 1) }), 90, 1).spawns).flat();
     const tiers = new Set(words.map((w) => tierOf(w.spawn.word)));
     expect([...tiers].sort()).toEqual([...TIERS].sort());
   });
@@ -224,12 +279,13 @@ describe('placing the player', () => {
     expect(spawns.at(-1)!.spawn.flightSeconds).toBeLessThan(spawns[0].spawn.flightSeconds);
   });
 
-  test('the first word after placement does not come at once, even if a calibration word was nearly due', () => {
+  test('the first word at the new level does not come at once: it comes firstSpawnAt after placement', () => {
     const d = new PracticeDirector({ list: en, random: middle });
-    run(d, 11.4375); // calibration words are due at 1.5, 4, 6.5, 9, 11.5 s: the next one is a moment away
+    d.advance(2, []); // the first calibration word comes out
+    d.advance(0.5, []); // the player has just cleared the screen: the next calibration word is a moment away
     d.finishCalibration(3);
-    expect(d.advance(0.9, BUSY)).toEqual([]); // that word is dropped; the first one at the new level is 1.5 s away
-    const spawns = d.advance(1, BUSY);
+    expect(d.advance(1.4, [])).toEqual([]);
+    const spawns = d.advance(0.2, []);
     expect(spawns).toHaveLength(1);
     expect(spawns[0].flightSeconds).toBeLessThan(PRACTICE_CALIBRATION.flightSeconds);
   });
@@ -293,10 +349,9 @@ describe('acceleration while the screen is empty', () => {
     expect(last.spawn.flightSeconds).toBeLessThan(rampAt(last.t).flightSeconds);
   });
 
-  test('it does not apply during calibration: the first words keep their fixed pace even with an empty screen', () => {
+  test('it does not apply during calibration: there is no level to climb yet', () => {
     const d = new PracticeDirector({ list: en, random: middle });
-    const spawns = run(d, 30, 0, []);
-    for (const g of gapsOf(spawns)) expect(g).toBeCloseTo(PRACTICE_CALIBRATION.spawnEvery, 0);
+    playWithScreen(d, 30, 0.5); // a fast player: the screen is empty most of the time
     expect(d.rampTime).toBeNull();
   });
 });

@@ -15,12 +15,15 @@ export const PRACTICE_RAMP = {
 } as const;
 
 /**
- * The first words of a run: a gentle, fixed mix (not the ramp) used to measure how fast the player
- * types. After `words` of them have been typed or missed, the run is moved on to the player's level.
+ * The first words of a run: a fixed mix (not the ramp) used to measure how fast the player types. They are
+ * self-paced: one word at a time, and the next comes `gap` seconds after the screen is cleared (typed, or
+ * arrived), so a slow typist never has words piling up. After `words` of them have been typed or missed, the
+ * run is moved on to the player's level.
  */
 export const PRACTICE_CALIBRATION = {
   words: 5,
-  spawnEvery: 2.5,
+  /** Seconds of empty screen before the next calibration word (the first one waits `PRACTICE_RAMP.firstSpawnAt`). */
+  gap: 0.8,
   flightSeconds: 10,
   weights: { short: 0.3, medium: 0.5, long: 0.2 },
 } as const;
@@ -108,19 +111,14 @@ export interface PracticeDirectorOptions {
 /** `calibrating`: measuring how fast the player types. `ramp`: playing at the player's level, getting harder. */
 export type DirectorPhase = 'calibrating' | 'ramp';
 
-const CALIBRATION_STEP: RampStep = {
-  spawnEvery: PRACTICE_CALIBRATION.spawnEvery,
-  flightSeconds: PRACTICE_CALIBRATION.flightSeconds,
-  weights: PRACTICE_CALIBRATION.weights,
-};
-
 /**
  * Decides when Practice fires a Word bullet and which word. No seeds and no network: plain local
  * randomness over the word list. Time moves only through `advance(dt)`.
  *
- * A run starts `calibrating` (gentle, fixed words). The caller measures the player and calls
- * `finishCalibration(pace)`: the ramp clock jumps ahead to the player's level and keeps rising from there,
- * one second per second, or `PRACTICE_ACCELERATION.emptyScreenRate` seconds per second while the screen is empty.
+ * A run starts `calibrating`: one word at a time, each a `PRACTICE_CALIBRATION.gap` after the screen was
+ * cleared. The caller measures the player and calls `finishCalibration(pace)`: the ramp clock jumps ahead to
+ * the player's level and keeps rising from there, one second per second, or
+ * `PRACTICE_ACCELERATION.emptyScreenRate` seconds per second while the screen is empty.
  */
 export class PracticeDirector {
   phase: DirectorPhase = 'calibrating';
@@ -129,7 +127,11 @@ export class PracticeDirector {
   private readonly list: WordList;
   private readonly random: () => number;
   private elapsed = 0;
-  private nextAt: number = PRACTICE_RAMP.firstSpawnAt;
+  /** Calibration: seconds the screen has been empty, and how long it must be before the next word. */
+  private emptyFor = 0;
+  private waitFor: number = PRACTICE_RAMP.firstSpawnAt;
+  /** Ramp: when the next word is due (never, until the player is placed). */
+  private nextAt = Number.POSITIVE_INFINITY;
   /** The ramp clock, in ramp seconds (not capped: `rampAt` caps it). */
   private rampClock = 0;
 
@@ -148,8 +150,7 @@ export class PracticeDirector {
 
   /**
    * Ends calibration: places the player from their measured Pace (letters per second) and returns the ramp
-   * time they start at. Words already due but not yet fired are dropped; the first word at the new level
-   * comes after `PRACTICE_RAMP.firstSpawnAt`.
+   * time they start at. The first word at the new level comes `PRACTICE_RAMP.firstSpawnAt` later.
    */
   finishCalibration(pace: number): number {
     this.startLevel = startLevelFor(pace, this.list);
@@ -166,13 +167,31 @@ export class PracticeDirector {
   advance(dt: number, inFlight: readonly string[]): Spawn[] {
     if (!(dt > 0)) return [];
     this.elapsed += dt;
-    const rate = this.phase === 'ramp' && inFlight.length === 0 ? PRACTICE_ACCELERATION.emptyScreenRate : 1;
-    if (this.phase === 'ramp') this.rampClock += dt * rate;
+    return this.phase === 'calibrating' ? this.advanceCalibration(dt, inFlight) : this.advanceRamp(dt, inFlight);
+  }
+
+  /** One word at a time: the next one comes once the screen has been empty for `waitFor` seconds. */
+  private advanceCalibration(dt: number, inFlight: readonly string[]): Spawn[] {
+    if (inFlight.length > 0) {
+      this.emptyFor = 0;
+      return [];
+    }
+    this.emptyFor += dt;
+    if (this.emptyFor < this.waitFor) return [];
+    this.emptyFor = 0;
+    this.waitFor = PRACTICE_CALIBRATION.gap;
+    const word = this.pickWord(PRACTICE_CALIBRATION.weights, new Set(inFlight));
+    return [{ word, flightSeconds: PRACTICE_CALIBRATION.flightSeconds }];
+  }
+
+  private advanceRamp(dt: number, inFlight: readonly string[]): Spawn[] {
+    const rate = inFlight.length === 0 ? PRACTICE_ACCELERATION.emptyScreenRate : 1;
+    this.rampClock += dt * rate;
     const taken = new Set(inFlight);
     const out: Spawn[] = [];
     while (this.nextAt <= this.elapsed) {
       // The difficulty at the moment the word was due, counted back from the ramp clock now.
-      const step = this.phase === 'calibrating' ? CALIBRATION_STEP : rampAt(this.rampClock - (this.elapsed - this.nextAt) * rate);
+      const step = rampAt(this.rampClock - (this.elapsed - this.nextAt) * rate);
       const word = this.pickWord(step.weights, taken);
       taken.add(word);
       out.push({ word, flightSeconds: step.flightSeconds });
