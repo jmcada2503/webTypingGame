@@ -69,7 +69,7 @@ export class ScreenFlow {
     if (this.s.screen !== 'menu') return;
     if (this.resting && choice !== 'practice') return;
     this.joinCode = null;
-    if (choice === 'practice') return this.startCountdown('practice');
+    if (choice === 'practice') return this.startPractice();
     this.kind = choice;
     this.s = { screen: 'howto', kind: choice, secondsLeft: this.config.howToAutoStartSeconds };
   }
@@ -91,7 +91,7 @@ export class ScreenFlow {
 
   /** Practice results: go again. */
   playAgain() {
-    if (this.s.screen === 'end' && this.s.mode === 'practice') this.startCountdown('practice');
+    if (this.s.screen === 'end' && this.s.mode === 'practice') this.startPractice();
   }
 
   /** Back to the menu from an error or end screen. */
@@ -177,6 +177,12 @@ export class ScreenFlow {
 
   private setRematch(rematch: RematchState) {
     if (this.s.screen === 'end' && this.s.mode === 'versus') this.s = { ...this.s, rematch };
+  }
+
+  /** Practice has no opponent to wait for: no Countdown, just the screen-off / black / screen-on gap. */
+  private startPractice() {
+    this.s = { screen: 'starting', mode: 'practice' };
+    this.timer = this.config.startingSeconds;
   }
 
   private startCountdown(mode: 'versus' | 'practice') {

@@ -1,5 +1,8 @@
 import type { Language, MatchKind } from '../flow/types';
+import { PRACTICE_RAMP } from '../practice/PracticeDirector';
+import type { PracticeResult } from '../practice/PracticeSession';
 import type { PaletteColor } from '../render/AsciiRenderer';
+import { formatClock } from './draw';
 
 /** Placeholder until the real GitHub Sponsors page exists (the prototype used the repo owner's login). */
 export const SPONSOR_LINK = 'https://github.com/sponsors/jmcada2503';
@@ -77,6 +80,53 @@ const TIP_LETTERS_PER_SECOND = 22;
 /** The tip being typed out at `t` seconds: each tip shows for 6 s, then the next. */
 export function typedTip(t: number): string {
   return TIPS[Math.floor(t / TIP_SECONDS) % TIPS.length].slice(0, Math.floor((t % TIP_SECONDS) * TIP_LETTERS_PER_SECOND));
+}
+
+/** What the Countdown shows with `secondsLeft` to go: the number, how far into its second (0..1), size and color. */
+export function countdownDisplay(secondsLeft: number) {
+  const n = Math.max(1, Math.ceil(secondsLeft));
+  const frac = Math.min(1, Math.max(0, n - secondsLeft));
+  return {
+    n,
+    frac,
+    /** Each number shrinks a little as its second runs out. */
+    scale: 13 - 2 * frac,
+    /** A color-split pulse in the first moments of each second. */
+    pulse: frac < 0.14,
+    color: n <= 2 ? ('red' as const) : ('yellow' as const),
+  };
+}
+
+/** The GO flash after the Match begins: `t` seconds in, it blinks 8 times a second for just under a second. */
+export const GO_SECONDS = 0.9;
+export function goFlash(t: number): boolean {
+  return t >= 0 && t < GO_SECONDS && Math.floor(t * 8) % 2 === 0;
+}
+
+/** Points for each second of the difficulty ramp a run reached. */
+const POINTS_PER_LEVEL_SECOND = 10;
+
+/**
+ * The Practice score: the difficulty level the run reached (a second of the ramp, 0 to its top), times 10.
+ * 0 if the run never got past the speed measurement. It stops at the top of the ramp, where difficulty stops rising.
+ */
+export function practiceScore(r: Pick<PracticeResult, 'currentLevel'>): number {
+  if (r.currentLevel === null) return 0;
+  return Math.round(Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) * POINTS_PER_LEVEL_SECOND);
+}
+
+/** The lines of the Practice results screen. */
+export function practiceResultLines(r: Pick<PracticeResult, 'survivedSeconds' | 'wordsTyped' | 'accuracy' | 'averagePace' | 'peakPace' | 'wpm' | 'currentLevel'>): string[] {
+  const pad = (label: string) => label.padEnd(20);
+  const difficulty = r.currentLevel === null ? '-' : `${Math.round((Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) / PRACTICE_RAMP.rampSeconds) * 100)}%`;
+  return [
+    `${pad('TIME SURVIVED')}${formatClock(r.survivedSeconds)}`,
+    `${pad('DIFFICULTY REACHED')}${difficulty}`,
+    `${pad('WORDS TYPED')}${r.wordsTyped}`,
+    `${pad('ACCURACY')}${r.accuracy === null ? '-' : `${Math.round(r.accuracy * 100)}%`}`,
+    `${pad('PACE')}${r.averagePace.toFixed(1)} LETTERS/S (${Math.round(r.wpm)} WPM)`,
+    `${pad('BEST PACE')}${r.peakPace.toFixed(1)} LETTERS/S`,
+  ];
 }
 
 export const DEMO_DEFEND_WORD = 'planet';

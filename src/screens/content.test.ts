@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, practiceResultLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -98,5 +98,81 @@ describe('how-to demo (a 10 second loop)', () => {
   test('loops every 10 seconds', () => {
     expect(howToDemo(13.5)).toEqual(howToDemo(3.5));
     expect(howToDemo(27.25)).toEqual(howToDemo(7.25));
+  });
+});
+
+
+describe('countdown number', () => {
+  test('shows 5 down to 1, each for a second, never 0', () => {
+    expect(countdownDisplay(5)).toMatchObject({ n: 5, frac: 0 });
+    expect(countdownDisplay(4.5)).toMatchObject({ n: 5, frac: 0.5 });
+    expect(countdownDisplay(4)).toMatchObject({ n: 4, frac: 0 });
+    expect(countdownDisplay(1.25)).toMatchObject({ n: 2, frac: 0.75 });
+    expect(countdownDisplay(0.25)).toMatchObject({ n: 1, frac: 0.75 });
+    expect(countdownDisplay(0).n).toBe(1);
+    expect(countdownDisplay(-0.1).n).toBe(1);
+  });
+
+  test('the last two seconds are red', () => {
+    expect([5, 4, 3, 2, 1].map((n) => countdownDisplay(n - 0.5).color)).toEqual(['yellow', 'yellow', 'yellow', 'red', 'red']);
+  });
+
+  test('each number gets a color-split pulse in the first moments of its second, and shrinks as the second runs out', () => {
+    expect(countdownDisplay(5).pulse).toBe(true);
+    expect(countdownDisplay(4.9).pulse).toBe(true);
+    expect(countdownDisplay(4.5).pulse).toBe(false);
+    expect(countdownDisplay(5).scale).toBeCloseTo(13);
+    expect(countdownDisplay(4.5).scale).toBeCloseTo(12);
+  });
+});
+
+describe('GO flash', () => {
+  test('flashes for just under a second after the Match starts, then is gone', () => {
+    expect(goFlash(-0.1)).toBe(false);
+    expect(goFlash(0)).toBe(true);
+    expect(goFlash(0.1)).toBe(true); // blinks 8 times a second: on for 1/8 s, off for 1/8 s
+    expect(goFlash(0.13)).toBe(false);
+    expect(goFlash(0.26)).toBe(true);
+    expect(goFlash(0.76)).toBe(true);
+    expect(goFlash(0.9)).toBe(false);
+    expect(goFlash(5)).toBe(false);
+  });
+});
+
+describe('Practice results', () => {
+  const run = { survivedSeconds: 83.4, wordsTyped: 12, wrongSubmits: 1, accuracy: 12 / 13, averagePace: 3.14, peakPace: 4.5, wpm: 37.7, currentLevel: 210 };
+
+  test('show the time survived, words, accuracy, difficulty and pace', () => {
+    expect(practiceResultLines(run)).toEqual([
+      'TIME SURVIVED       01:23',
+      'DIFFICULTY REACHED  50%',
+      'WORDS TYPED         12',
+      'ACCURACY            92%',
+      'PACE                3.1 LETTERS/S (38 WPM)',
+      'BEST PACE           4.5 LETTERS/S',
+    ]);
+  });
+
+  test('show a dash for accuracy when nothing was submitted, and for difficulty before the run was placed', () => {
+    const lines = practiceResultLines({ ...run, accuracy: null, wordsTyped: 0, currentLevel: null });
+    expect(lines).toContain('ACCURACY            -');
+    expect(lines).toContain('DIFFICULTY REACHED  -');
+  });
+});
+
+describe('Practice score (the difficulty level reached)', () => {
+  test('is 10 points for each second of the difficulty ramp the run reached', () => {
+    expect(practiceScore({ currentLevel: 0 })).toBe(0);
+    expect(practiceScore({ currentLevel: 100 })).toBe(1000);
+    expect(practiceScore({ currentLevel: 123.46 })).toBe(1235);
+  });
+
+  test('is 0 when the run never got past the speed measurement', () => {
+    expect(practiceScore({ currentLevel: null })).toBe(0);
+  });
+
+  test('stops at the top of the ramp (4200), where the difficulty stops rising', () => {
+    expect(practiceScore({ currentLevel: 420 })).toBe(4200);
+    expect(practiceScore({ currentLevel: 9999 })).toBe(4200);
   });
 });
