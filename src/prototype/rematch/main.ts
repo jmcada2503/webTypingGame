@@ -1,14 +1,16 @@
 // PROTOTYPE (throwaway): "Prototype: Rematch menu".
 // Question: what should the Rematch UX on the end screen look like (proposer's view, the opponent's accept / deny
 // menu, Declined, Opponent left, the 10 s window running out, the Private variant that always offers Rematch)?
-// It lives in the 80-wide strip left under the win / lose banner. Four layouts to compare. The opponent is simulated.
+// It lives in the 80-wide strip left under the win / lose banner. Layout chosen: the "edge bar". The opponent is simulated.
 //
 // Rules (from the map): a Rematch can be proposed for 10 s after a Match ends (Public). The opponent gets an accept /
 // deny menu. Both propose -> it starts right away. Declined -> the proposer sees "Declined" and is back at the end-screen
 // options. Opponent left -> "Opponent left". After the 10 s only "search new match" is left. Private: Rematch is always
 // there until one player leaves (no timer).
+// Round 2: once a request exists (you proposed, or they did) the 10 s window bar disappears and the other side gets a
+// fixed response time, always the full time even if the window has run out (T switches 5 / 10 s). No answer = it expires.
 //
-// Keys:  1-4 layout      P Public / Private      W win / lose      R reset the end screen
+// Keys:  P Public / Private      W win / lose      T response time 5 / 10 s      R reset the end screen
 //   You:  hjkl or arrows + Enter
 //   The simulated opponent:  A proposes a Rematch   S accepts your proposal   D denies it   F leaves
 import * as THREE from 'three';
@@ -24,14 +26,13 @@ import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 
 const COLS = 128;
 const WINDOW = 10; // seconds the Rematch can be proposed (Public)
-const DECLINED_SHOW = 2.4; // how long "DECLINED" shows before the options come back
+const DECLINED_SHOW = 2.4; // how long "DECLINED" / "NO ANSWER" shows before the options come back
+let respond = 5; // seconds the other side has to answer a request (T switches 5 / 10)
 const STARTING_SHOW = 1.0; // "REMATCH!" before the glitch into the Countdown
 const params = new URLSearchParams(location.search);
 
 type Kind = 'public' | 'private';
-type View = 'idle' | 'waiting' | 'incoming' | 'declined' | 'left' | 'closed' | 'starting';
-const LAYOUTS = ['Framed list', 'Big buttons', 'Channel log', 'Edge bar'];
-let layout = Math.min(3, Math.max(0, Number(params.get('layout') ?? 1) - 1));
+type View = 'idle' | 'waiting' | 'incoming' | 'declined' | 'expired' | 'left' | 'closed' | 'starting';
 let kind: Kind = params.get('kind') === 'private' ? 'private' : 'public';
 let win = params.get('result') !== 'lose';
 let sel = 0;
@@ -46,13 +47,26 @@ const now = () => freezeT ?? clock() - endStart;
 
 // ---------------------------------------------------------------- the Rematch state (simulated opponent)
 
-const s = { iProposed: false, theyProposed: false, deniedByMe: false, spent: false, declinedAt: -1, left: false, startingAt: -1, closedLogged: false };
+const s = {
+  iProposed: false,
+  iProposedAt: 0,
+  theyProposed: false,
+  theyProposedAt: 0,
+  deniedByMe: false,
+  spent: false,
+  declinedAt: -1,
+  expiredAt: -1,
+  expiredText: 'NO ANSWER',
+  left: false,
+  startingAt: -1,
+  closedLogged: false,
+};
 const log: { t: number; msg: string }[] = [];
 const say = (msg: string) => (toast = { msg, at: clock() });
 const note = (msg: string) => log.push({ t: now(), msg });
 
 function reset() {
-  Object.assign(s, { iProposed: false, theyProposed: false, deniedByMe: false, spent: false, declinedAt: -1, left: false, startingAt: -1, closedLogged: false });
+  Object.assign(s, { iProposed: false, iProposedAt: 0, theyProposed: false, theyProposedAt: 0, deniedByMe: false, spent: false, declinedAt: -1, expiredAt: -1, left: false, startingAt: -1, closedLogged: false });
   log.length = 0;
   endStart = clock();
   sel = 0;
@@ -62,14 +76,31 @@ function reset() {
 
 const windowLeft = (t: number) => (kind === 'public' ? Math.max(0, WINDOW - t) : Number.POSITIVE_INFINITY);
 
+/** A request that nobody answered in time expires. The response time is the full `respond` whatever the window says. */
+function tickRematch(t: number) {
+  if (s.startingAt >= 0 || s.left) return;
+  if (s.iProposed && t >= s.iProposedAt + respond) {
+    s.iProposed = false;
+    s.expiredAt = t;
+    s.expiredText = 'NO ANSWER';
+    note('NO ANSWER');
+  }
+  if (s.theyProposed && !s.iProposed && !s.deniedByMe && t >= s.theyProposedAt + respond) {
+    s.theyProposed = false;
+    s.expiredAt = t;
+    s.expiredText = 'TOO LATE';
+    note('REQUEST EXPIRED');
+  }
+}
+
 function currentView(t: number): View {
   if (s.startingAt >= 0) return 'starting';
   if (s.left) return 'left';
-  const open = windowLeft(t) > 0;
   if (s.declinedAt >= 0 && t - s.declinedAt < DECLINED_SHOW) return 'declined';
-  if (s.theyProposed && !s.iProposed && !s.deniedByMe && open) return 'incoming';
-  if (s.iProposed && open) return 'waiting';
-  return open ? 'idle' : 'closed';
+  if (s.expiredAt >= 0 && t - s.expiredAt < DECLINED_SHOW) return 'expired';
+  if (s.theyProposed && !s.iProposed && !s.deniedByMe) return 'incoming';
+  if (s.iProposed) return 'waiting';
+  return windowLeft(t) > 0 ? 'idle' : 'closed';
 }
 
 function start() {
@@ -80,6 +111,7 @@ function start() {
 }
 function propose() {
   s.iProposed = true;
+  s.iProposedAt = now();
   note('YOU: REMATCH?');
   if (s.theyProposed) start();
 }
@@ -101,6 +133,7 @@ function theyPropose() {
   const t = now();
   if (s.left || s.startingAt >= 0 || windowLeft(t) <= 0) return say('NOT POSSIBLE NOW');
   s.theyProposed = true;
+  s.theyProposedAt = t;
   note('ENEMY: REMATCH?');
   if (s.iProposed) start();
 }
@@ -131,6 +164,7 @@ function options(v: View): Opt[] {
   if (v === 'incoming') return [{ id: 'accept', label: 'ACCEPT' }, { id: 'deny', label: 'DENY' }];
   if (v === 'waiting') return [{ id: 'cancel', label: 'CANCEL' }];
   if (v === 'starting') return [];
+  if (v === 'declined' || v === 'expired') v = windowLeft(now()) > 0 ? 'idle' : 'closed';
   if (v === 'left' || v === 'closed') return kind === 'public' ? [search, menu] : [menu];
   const rematch: Opt[] = s.spent && kind === 'public' ? [] : [{ id: 'rematch', label: 'REMATCH' }];
   return kind === 'public' ? [...rematch, search, menu] : [...rematch, menu];
@@ -149,6 +183,7 @@ const STATUS: Record<View, { text: string; color: PaletteColor }> = {
   waiting: { text: 'WAITING FOR OPPONENT', color: 'yellow' },
   incoming: { text: 'OPPONENT WANTS A REMATCH', color: 'yellow' },
   declined: { text: 'DECLINED', color: 'red' },
+  expired: { text: 'NO ANSWER', color: 'dim' },
   left: { text: 'OPPONENT LEFT', color: 'red' },
   closed: { text: 'REMATCH CLOSED', color: 'dim' },
   starting: { text: 'REMATCH!', color: 'green' },
@@ -252,6 +287,7 @@ function drawEnd(t: number) {
   centered(15, win ? 'THE ENEMY SHIP IS DESTROYED' : 'YOUR SHIP IS DESTROYED', win ? 'green' : 'red');
   centered(21, '[ MATCH STATS GO HERE ]', 'dim');
 
+  tickRematch(t);
   const v = currentView(t);
   if (windowLeft(t) <= 0 && !s.closedLogged) {
     s.closedLogged = true;
@@ -259,9 +295,10 @@ function drawEnd(t: number) {
   }
   const opts = options(v);
   if (sel >= opts.length) sel = Math.max(0, opts.length - 1);
-  const vm: VM = { t, v, opts, left: windowLeft(t), timed: kind === 'public' && v !== 'starting' };
-  [layoutList, layoutButtons, layoutLog, layoutEdge][layout](vm);
-  put(2, 43, `PROTOTYPE  LAYOUT ${layout + 1}: ${LAYOUTS[layout]}  ${kind.toUpperCase()}  ${win ? 'WIN' : 'LOSE'}   1-4 layout  P kind  W result  R reset   opponent: A propose  S accept  D deny  F leave`, 'dim');
+  const answerLeft = v === 'waiting' ? s.iProposedAt + respond - t : v === 'incoming' ? s.theyProposedAt + respond - t : null;
+  const vm: VM = { t, v, opts, left: windowLeft(t), timed: kind === 'public' && v !== 'starting', answerLeft };
+  layoutEdge(vm);
+  put(2, 43, `PROTOTYPE  ${kind.toUpperCase()}  ${win ? 'WIN' : 'LOSE'}  ANSWER TIME ${respond} S   P kind  W result  T answer time  R reset   opponent: A propose  S accept  D deny  F leave`, 'dim');
 }
 
 function drawCountdownStub() {
@@ -278,68 +315,18 @@ interface VM {
   left: number;
   /** Whether a window timer is shown. */
   timed: boolean;
+  /** Seconds left to answer a pending request (waiting / incoming); null otherwise. */
+  answerLeft: number | null;
 }
 
 const dots = (t: number) => '.'.repeat(1 + (Math.floor(t * 2.5) % 3));
-const statusText = (vm: VM) => STATUS[vm.v].text + (vm.v === 'waiting' ? dots(vm.t) : '');
+const statusText = (vm: VM) => (vm.v === 'expired' ? s.expiredText : STATUS[vm.v].text + (vm.v === 'waiting' ? dots(vm.t) : ''));
 const statusColor = (vm: VM): PaletteColor => (vm.v === 'incoming' && !blink(vm.t, 3) ? 'fg' : STATUS[vm.v].color);
 const timerFrac = (vm: VM) => (Number.isFinite(vm.left) ? vm.left / WINDOW : 1);
 const timerColor = (vm: VM): PaletteColor => (vm.left <= 3 ? 'red' : 'yellow');
 const secs = (vm: VM) => `${Math.ceil(vm.left)} S`;
 const optColor = (on: boolean, t: number): PaletteColor => (on ? (blink(t, 3) ? 'yellow' : 'fg') : 'dim');
 const optText = (label: string, on: boolean) => (on ? `> ${label} <` : `  ${label}  `);
-
-/** 1: a framed list, like the Opponent left screen. */
-function layoutList(vm: VM) {
-  const { c0, r0, w } = STRIP;
-  box(c0, r0, w, 9, vm.v === 'incoming' ? (blink(vm.t, 3) ? 'yellow' : 'dim') : 'dim');
-  put(c0 + 3, r0, ' REMATCH ', 'yellow');
-  if (vm.timed && vm.v !== 'closed' && vm.v !== 'left') put(c0 + w - 10, r0, ` ${secs(vm)} `, timerColor(vm));
-  const st = statusText(vm);
-  if (st) put(c0 + 5, r0 + 2, st, statusColor(vm));
-  vm.opts.forEach((o, i) => {
-    const row = r0 + 4 + i;
-    put(c0 + 5, row, optText(o.label, i === sel), optColor(i === sel, vm.t));
-    if (o.id === 'rematch' && vm.timed && vm.v === 'idle') bar(c0 + 34, row, 24, timerFrac(vm), timerColor(vm));
-  });
-  put(c0 + w - 32, r0 + 7, 'ARROWS OR HJKL   ENTER', 'dim');
-}
-
-/** 2: one big button per choice; the Rematch button carries its own timer bar. */
-function layoutButtons(vm: VM) {
-  const { r0 } = STRIP;
-  const st = statusText(vm);
-  if (st) text.writeScaled((COLS - [...st].length * 1.4) / 2, r0, st, 1.4, statusColor(vm));
-  const n = Math.max(1, vm.opts.length);
-  const bw = 24;
-  const gap = 3;
-  const total = n * bw + (n - 1) * gap;
-  const x0 = (COLS - total) / 2;
-  vm.opts.forEach((o, i) => {
-    const x = x0 + i * (bw + gap);
-    const on = i === sel;
-    box(x, r0 + 3, bw, 6, on ? (blink(vm.t, 3) ? 'yellow' : 'fg') : 'dim');
-    const label = o.label.length > bw - 4 ? o.label.replace('SEARCH NEW MATCH', 'NEW MATCH') : o.label;
-    put(x + (bw - [...label].length) / 2, r0 + 5, label, on ? 'fg' : 'dim');
-    if (o.id === 'rematch' && vm.timed && vm.v === 'idle') {
-      bar(x + 2, r0 + 7, bw - 4, timerFrac(vm), timerColor(vm));
-    }
-  });
-  if (vm.timed && vm.v === 'idle' && vm.opts.some((o) => o.id === 'rematch')) centered(r0 + 10, `REMATCH OPEN ${secs(vm)}`, timerColor(vm));
-}
-
-/** 3: a channel log on the left (what happened), the choices on the right. */
-function layoutLog(vm: VM) {
-  const { c0, r0, w } = STRIP;
-  box(c0, r0, w, 9, 'dim');
-  const st = statusText(vm);
-  put(c0 + 3, r0, ` REMATCH${st ? ': ' + st : ''} `, st ? statusColor(vm) : 'yellow');
-  if (vm.timed && vm.v !== 'closed' && vm.v !== 'left') put(c0 + w - 10, r0, ` ${secs(vm)} `, timerColor(vm));
-  const lines = log.slice(-6);
-  lines.forEach((l, i) => put(c0 + 4, r0 + 2 + i, `[+${l.t.toFixed(1).padStart(4, '0')}] ${l.msg}`.slice(0, 40), i === lines.length - 1 ? 'fg' : 'dim'));
-  for (let r = r0 + 1; r < r0 + 8; r++) put(c0 + 46, r, '|', 'dim');
-  vm.opts.forEach((o, i) => put(c0 + 50, r0 + 2 + i * 2, optText(o.label, i === sel), optColor(i === sel, vm.t)));
-}
 
 /** 4: no boxes: a status line, a row of choices, and a thin bar along the edge that shrinks with the window. */
 function layoutEdge(vm: VM) {
@@ -355,11 +342,21 @@ function layoutEdge(vm: VM) {
     put(x, r0 + 5, l, optColor(i === sel, vm.t));
     x += widths[i] + gap;
   });
-  if (vm.timed && (vm.v === 'idle' || vm.v === 'waiting' || vm.v === 'incoming')) {
+  if (vm.timed && vm.v === 'idle') {
+    // The 10 s window to propose.
     const filled = Math.round(w * clamp01(timerFrac(vm)));
     put(c0, r0 + 8, '='.repeat(filled), timerColor(vm));
     put(c0 + filled, r0 + 8, '.'.repeat(w - filled), 'dim');
     put(c0 + w + 1, r0 + 8, secs(vm), timerColor(vm));
+  } else if (vm.answerLeft !== null) {
+    // A request exists: the window bar is gone, and a separate answer time runs (the full time, always).
+    const frac = clamp01(vm.answerLeft / respond);
+    const filled = Math.round(w * frac);
+    const col: PaletteColor = vm.answerLeft <= 1.5 ? 'red' : 'green';
+    put(c0, r0 + 8, '-'.repeat(filled), col);
+    put(c0 + filled, r0 + 8, ' '.repeat(w - filled), 'dim');
+    put(c0 + w + 1, r0 + 8, `${Math.ceil(Math.max(0, vm.answerLeft))} S`, col);
+    put(c0, r0 + 9, vm.v === 'incoming' ? 'TIME TO ANSWER' : 'TIME FOR THEM TO ANSWER', 'dim');
   }
 }
 
@@ -368,9 +365,9 @@ function layoutEdge(vm: VM) {
 window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || trans) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (k >= '1' && k <= '4') {
-    layout = Number(k) - 1;
-    return say(`LAYOUT ${layout + 1}: ${LAYOUTS[layout].toUpperCase()}`);
+  if (k === 't') {
+    respond = respond === 5 ? 10 : 5;
+    return say(`ANSWER TIME ${respond} S`);
   }
   if (k === 'p') {
     kind = kind === 'public' ? 'private' : 'public';
