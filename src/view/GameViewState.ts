@@ -47,4 +47,8 @@ export type ViewEvent =
   | { type: 'shotHit'; id: string }
   /** The opponent typed a Shot's word and destroyed it. */
   | { type: 'shotDefended'; id: string }
-  | { type: 'enemyFired'; id: string };
+  | { type: 'enemyFired'; id: string }
+  /** The player has been Idle (no typing) for a while: draw attention to the Attack word. */
+  | { type: 'idleNudge' }
+  /** Both players stayed Idle too long: the Match ends in Peace. */
+  | { type: 'peace' };
