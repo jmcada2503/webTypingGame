@@ -127,14 +127,14 @@ describe('Two players through the fake network', () => {
     expect(p.flowA.state()).toMatchObject({ screen: 'end', rematch: { status: 'declined' } });
   });
 
-  test('if a player drops during the Match, the other waits 5 seconds and then wins', () => {
+  test('if a player drops during the Match, the other waits 10 seconds and then wins', () => {
     const p = twoPlayers();
     bothSearching(p);
     p.tick(5);
     p.tick(1.8);
 
     p.backend.drop(p.a);
-    p.flowB.update(4);
+    p.flowB.update(9);
     expect(p.flowB.state().screen).toBe('match');
     p.flowB.update(1.1);
     expect(p.flowB.state()).toMatchObject({ screen: 'opponentLeft', during: 'match', youWin: true });

@@ -31,9 +31,15 @@ export const SCREEN_FILTERS = {
 /** One-off screen flash (0..1), e.g. when a life is lost: the screen dips to black + stronger color fringes. */
 export const SCREEN_HIT = { level: 0 };
 
+/**
+ * Screen-change effect (see `ScreenTransition`). `level` 0 = normal, 1 = fully "between channels"; the caller
+ * ramps it 0 -> 1, swaps the picture, then 1 -> 0. `mode`: 1 channel flip, 2 TV off/on, 3 static cut, 4 glitch.
+ */
+export const SCREEN_TRANSITION = { mode: 1, level: 0 };
+
 export const anyFilterOn = () => {
   const f = SCREEN_FILTERS;
-  return f.scanlines || f.glow || f.vignette > 0 || f.curvature > 0 || f.aberration > 0 || f.noise > 0 || f.flicker > 0 || f.glass > 0 || SCREEN_HIT.level > 0;
+  return f.scanlines || f.glow || f.vignette > 0 || f.curvature > 0 || f.aberration > 0 || f.noise > 0 || f.flicker > 0 || f.glass > 0 || SCREEN_HIT.level > 0 || SCREEN_TRANSITION.level > 0;
 };
 
 const VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -93,6 +99,7 @@ export class ScreenFilters {
       uniform float glow; uniform float scan; uniform float scanPeriod; uniform float vignette;
       uniform float curvature; uniform float cornerRadius; uniform float aberration;
       uniform float noise; uniform float flicker; uniform float time; uniform float glass; uniform float hit;
+      uniform float tMode; uniform float tLevel;
       out vec4 outColor;
 
       float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -112,18 +119,58 @@ export class ScreenFilters {
         float inside = curvature > 0.0 ? 1.0 - smoothstep(-1.5 / res.y, 1.5 / res.y, dist) : 1.0;
         if (inside <= 0.0) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
 
+        // ---- screen-change effect (prototype) ----
+        vec2 tuv = uv;
+        float tBright = 1.0; float tSnow = 0.0; float tAb = 1.0; bool tBlack = false; vec3 tLine = vec3(0.0);
+        if (tLevel > 0.0) {
+          float k = tLevel;
+          if (tMode > 0.5 && tMode < 1.5) {
+            // Channel flip: the picture rolls vertically, tears sideways, and sinks into snow.
+            tuv.y = fract(uv.y + k * k * 0.7 + sin(time * 30.0) * 0.01 * k);
+            tuv.x += (hash(vec2(floor(uv.y * 60.0), floor(time * 30.0))) - 0.5) * 0.25 * k;
+            tSnow = k * k * 0.85;
+            tAb = 1.0 + 4.0 * k;
+          } else if (tMode > 1.5 && tMode < 2.5) {
+            // TV off / on: collapse to a bright line, then to a dot (and back on the way in).
+            float h = pow(1.0 - k, 3.0);
+            float w = 1.0 - smoothstep(0.8, 1.0, k);
+            vec2 p = uv - 0.5;
+            tuv = 0.5 + p / vec2(max(w, 0.0005), max(h, 0.0005));
+            tBlack = abs(tuv.x - 0.5) > 0.5 || abs(tuv.y - 0.5) > 0.5;
+            tBright = 1.0 + 2.5 * (1.0 - h);
+            float lineMask = step(abs(p.y), 0.003 + 0.5 * h) * step(abs(p.x), 0.5 * w);
+            tLine = vec3(1.0) * lineMask * smoothstep(0.0, 0.2, w) * smoothstep(0.35, 0.8, k) * 1.4;
+          } else if (tMode > 2.5 && tMode < 3.5) {
+            // Static cut: a quick burst of snow with a little sideways jitter.
+            tSnow = smoothstep(0.0, 0.6, k);
+            tuv.x += (hash(vec2(floor(uv.y * 90.0), floor(time * 40.0))) - 0.5) * 0.05 * k;
+          } else {
+            // Glitch: slices of the picture jump sideways, colors split hard.
+            float frameId = floor(time * 20.0);
+            float row = floor(uv.y * 22.0 + frameId * 3.0);
+            float on = step(0.45, hash(vec2(row, frameId)));
+            tuv.x += (hash(vec2(row, 7.0)) - 0.5) * 0.5 * k * on;
+            tAb = 1.0 + 9.0 * k;
+            tBright = 1.0 + 0.5 * k * on;
+          }
+        }
+
         vec3 c;
         if (aberration > 0.0) {
           // Fringes grow toward the edges, mostly sideways.
-          vec2 dir = vec2(cc.x * 2.0, cc.y * 0.6) * (aberration * (1.0 + hit * 3.0)) / res;
-          c = vec3(texture(tFrame, uv + dir).r, texture(tFrame, uv).g, texture(tFrame, uv - dir).b);
-          c += 0.35 * vec3(0.0, 0.0, texture(tFrame, uv + dir * 1.5).b) + 0.35 * vec3(texture(tFrame, uv - dir * 1.5).r, 0.0, 0.0);
+          vec2 dir = vec2(cc.x * 2.0 + (tAb - 1.0) * 0.5, cc.y * 0.6) * (aberration * (1.0 + hit * 3.0) * tAb) / res;
+          c = vec3(texture(tFrame, tuv + dir).r, texture(tFrame, tuv).g, texture(tFrame, tuv - dir).b);
+          c += 0.35 * vec3(0.0, 0.0, texture(tFrame, tuv + dir * 1.5).b) + 0.35 * vec3(texture(tFrame, tuv - dir * 1.5).r, 0.0, 0.0);
         } else {
-          c = texture(tFrame, uv).rgb;
+          c = texture(tFrame, tuv).rgb;
         }
-        c += texture(tGlow, uv).rgb * glow;
+        c += texture(tGlow, tuv).rgb * glow;
+        c *= tBright;
         // Tube glass: dark gray, a touch blue-green, so the screen reads as a lit tube.
         c += glass * vec3(0.85, 1.0, 0.95);
+        if (tBlack) c = glass * vec3(0.85, 1.0, 0.95);
+        c += tLine;
+        if (tSnow > 0.0) c = mix(c, vec3(hash(gl_FragCoord.xy + fract(time) * 77.0)) * 0.9, tSnow);
         if (scan > 0.0) {
           // Smooth dark band once per period; brighten a little so the screen doesn't just dim.
           float y = mod(gl_FragCoord.y, scanPeriod) / scanPeriod;
@@ -160,6 +207,8 @@ export class ScreenFilters {
         time: { value: 0 },
         glass: { value: 0 },
         hit: { value: 0 },
+        tMode: { value: 1 },
+        tLevel: { value: 0 },
       },
     );
   }
@@ -220,6 +269,8 @@ export class ScreenFilters {
     fu.flicker.value = f.flicker;
     fu.glass.value = f.glass;
     fu.hit.value = SCREEN_HIT.level;
+    fu.tMode.value = SCREEN_TRANSITION.mode;
+    fu.tLevel.value = SCREEN_TRANSITION.level;
     fu.time.value = (performance.now() / 1000) % 1000;
     gl.setRenderTarget(null);
     gl.render(this.final.scene, this.ortho);

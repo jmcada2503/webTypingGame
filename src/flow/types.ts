@@ -84,6 +84,6 @@ export const DEFAULT_FLOW_CONFIG: FlowConfig = {
   countdownSeconds: 5,
   startingSeconds: 1.8,
   connectTimeoutSeconds: 10,
-  disconnectGraceSeconds: 5,
+  disconnectGraceSeconds: 10,
   rematchWindowSeconds: 10,
 };

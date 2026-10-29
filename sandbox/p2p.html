@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>P2P check · web typing game</title>
+    <style>
+      body { font: 14px/1.4 ui-monospace, monospace; margin: 24px; max-width: 760px; }
+      button { font: inherit; padding: 4px 10px; margin-right: 6px; }
+      pre { background: #111; color: #9f9; padding: 12px; min-height: 160px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>P2P transport check</h1>
+    <p>
+      Open this page in two tabs (or Chrome and Safari). In one tab press <b>Host</b>, then in the other
+      <b>Join</b>. Signaling goes through a BroadcastChannel, so both must be on the same origin and machine;
+      the connection itself is a real WebRTC DataChannel (STUN only).
+    </p>
+    <p>
+      <button id="host">Host</button><button id="join">Join</button><button id="send" disabled>Send shot</button
+      ><button id="leave" disabled>Leave</button>
+    </p>
+    <pre id="log"></pre>
+    <script type="module" src="/src/sandbox/p2pCheck.ts"></script>
+  </body>
+</html>

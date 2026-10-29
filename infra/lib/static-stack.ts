@@ -47,8 +47,8 @@ export class StaticStack extends Stack {
     });
 
     const distribution = new Distribution(this, "Cdn", {
-      // Until the real app entry exists, the site is the visual sandbox.
-      defaultRootObject: "sandbox/index.html",
+      // The game is at /; the visual sandbox stays reachable at /sandbox/.
+      defaultRootObject: "index.html",
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessControl(bucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

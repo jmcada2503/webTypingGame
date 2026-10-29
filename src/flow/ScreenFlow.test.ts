@@ -38,6 +38,16 @@ const setup = () => {
 const screen = (flow: ScreenFlow) => flow.state().screen;
 
 describe('Menu, how-to and waiting', () => {
+  test('knows the chosen language on every screen, not only on the menu', () => {
+    const { flow } = setup();
+    expect(flow.language()).toBe('en');
+    flow.setLanguage('es');
+    flow.choose('public');
+    flow.confirm();
+    expect(screen(flow)).toBe('waiting');
+    expect(flow.language()).toBe('es');
+  });
+
   test('starts on the menu', () => {
     const { flow } = setup();
     expect(flow.state()).toMatchObject({ screen: 'menu', serversResting: false, language: 'en' });
@@ -180,14 +190,15 @@ const playing = () => {
 };
 
 describe('Practice', () => {
-  test('goes from the menu straight to the Countdown and then the Match, never touching the network', () => {
+  test('goes from the menu straight to the starting gap (no Countdown) and then the Match, never touching the network', () => {
     const { flow, network } = setup();
 
     flow.choose('practice');
-    expect(flow.state()).toMatchObject({ screen: 'countdown', mode: 'practice', secondsLeft: 5 });
+    expect(flow.state()).toMatchObject({ screen: 'starting', mode: 'practice' });
 
-    flow.update(5);
-    flow.update(1.8);
+    flow.update(1.7);
+    expect(screen(flow)).toBe('starting');
+    flow.update(0.1);
     expect(flow.state()).toMatchObject({ screen: 'match', mode: 'practice' });
     expect(network.calls).toEqual([]);
   });
@@ -195,16 +206,14 @@ describe('Practice', () => {
   test('ends in a results screen, from where the player can play again or go back to the menu', () => {
     const { flow } = setup();
     flow.choose('practice');
-    flow.update(5);
     flow.update(1.8);
 
     flow.matchEnded('lost');
     expect(flow.state()).toMatchObject({ screen: 'end', mode: 'practice', result: 'practiceOver' });
 
     flow.playAgain();
-    expect(flow.state()).toMatchObject({ screen: 'countdown', mode: 'practice' });
+    expect(flow.state()).toMatchObject({ screen: 'starting', mode: 'practice' });
 
-    flow.update(5);
     flow.update(1.8);
     flow.matchEnded('lost');
     flow.backToMenu();
@@ -265,11 +274,11 @@ describe('The opponent leaves', () => {
     expect(b.flow.state()).toMatchObject({ screen: 'opponentLeft', during: 'countdown', youWin: false });
   });
 
-  test('during the Match, a dropped connection gets 5 seconds to come back, then the player wins', () => {
+  test('during the Match, a dropped connection gets 10 seconds to come back, then the player wins', () => {
     const { flow, network } = playing();
 
     network.emit({ type: 'opponentDisconnected' });
-    flow.update(4.9);
+    flow.update(9.9);
     expect(screen(flow)).toBe('match');
 
     flow.update(0.2);
@@ -514,14 +523,13 @@ describe('Servers resting', () => {
     expect(screen(flow)).toBe('menu');
 
     flow.choose('practice');
-    expect(screen(flow)).toBe('countdown');
+    expect(screen(flow)).toBe('starting');
   });
 
   test('the menu remembers it after coming back from anywhere', () => {
     const { flow } = setup();
     flow.setServersResting(true);
     flow.choose('practice');
-    flow.update(5);
     flow.update(1.8);
     flow.matchEnded('lost');
     flow.backToMenu();

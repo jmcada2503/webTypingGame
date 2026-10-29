@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ASCII_STYLE, fitToViewport } from '../render/asciiStyle';
+import type { TextGrid } from '../render/AsciiRenderer';
 import { GpuAsciiRenderer } from '../render/GpuAsciiRenderer';
 import type { GameView } from './GameView';
 import type { GameViewState, ViewEvent } from './GameViewState';
@@ -80,7 +81,24 @@ export class AsciiGameView implements GameView {
     this.overlay.add(this.words.scene, this.cockpit.overlay);
   }
 
+  /** A text screen to draw instead of the game scene (null = the game scene). */
+  private screenDraw: ((text: TextGrid, dt: number) => void) | null = null;
+  private overlayDraw: ((text: TextGrid, dt: number) => void) | null = null;
+  /** Show the last ViewEvent's name as a dim label at the top left: a debugging aid for the sandbox. */
+  debugEventLabel = false;
+
+  setScreen(draw: ((text: TextGrid, dt: number) => void) | null) {
+    this.screenDraw = draw;
+  }
+
+  setOverlay(draw: ((text: TextGrid, dt: number) => void) | null) {
+    this.overlayDraw = draw;
+  }
+
   render(state: GameViewState, dt: number) {
+    if (this.screenDraw) return this.renderScreen(this.screenDraw, dt);
+    this.scene.visible = true;
+    this.overlay.visible = true;
     this.enemy.update(dt);
     this.stars.update(dt);
     // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
@@ -95,7 +113,7 @@ export class AsciiGameView implements GameView {
     this.typingFeedback(state);
     this.words.update(state, this.camera, dt);
     this.hitFx.update(dt);
-    SCREEN_HIT.level = Math.max(0, SCREEN_HIT.level - dt / HIT_LOOK.flashSeconds);
+    this.fadeHitFlash(dt);
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
     this.paceMotion.update(state.pace, dt);
@@ -103,8 +121,24 @@ export class AsciiGameView implements GameView {
     this.sparks.update(dt, text);
     this.attackSparks.update(dt);
     this.cockpit.update(state, dt, text);
-    if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
+    if (this.debugEventLabel && this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
+    this.overlayDraw?.(text, dt);
 
+    this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
+  }
+
+  /** The black flash from losing a Life fades with time, on the game scene and on text screens alike. */
+  private fadeHitFlash(dt: number) {
+    SCREEN_HIT.level = Math.max(0, SCREEN_HIT.level - dt / HIT_LOOK.flashSeconds);
+  }
+
+  private renderScreen(draw: (text: TextGrid, dt: number) => void, dt: number) {
+    this.fadeHitFlash(dt); // the last Life lost starts a flash; it must not outlast the Match and dim the next screens
+    this.scene.visible = false;
+    this.overlay.visible = false;
+    const text = this.ascii.textGrid;
+    text.clear();
+    draw(text, dt);
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
   }
 
