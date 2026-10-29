@@ -102,7 +102,7 @@ Ordering rules:
 2. Same for Shots: send `shotHit` / `shotDefended` before the first render that no longer lists the Shot. The `x` appears where the Radar last drew that Shot, so a Shot removed before it was ever drawn leaves no `x`.
 3. `lifeLost` is separate from `wordBulletArrived`: an arrival does not imply a life lost (the game decides), so send both when it applies.
 4. `attackFired` and `shots` go together: add the Shot to `state.shots` in the same frame you send the event.
-5. The view shows the last event's name and id as a dim debug label at the top left for 1.2 s (`AsciiGameView.lastEvent`). Remove that line when the real game ships.
+5. The view can show the last event's name and id as a dim debug label at the top left for 1.2 s. It is off by default; the sandbox turns it on with `view.debugEventLabel = true`.
 
 ## Typing input
 

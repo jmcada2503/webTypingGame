@@ -83,9 +83,16 @@ export class AsciiGameView implements GameView {
 
   /** A text screen to draw instead of the game scene (null = the game scene). */
   private screenDraw: ((text: TextGrid, dt: number) => void) | null = null;
+  private overlayDraw: ((text: TextGrid, dt: number) => void) | null = null;
+  /** Show the last ViewEvent's name as a dim label at the top left: a debugging aid for the sandbox. */
+  debugEventLabel = false;
 
   setScreen(draw: ((text: TextGrid, dt: number) => void) | null) {
     this.screenDraw = draw;
+  }
+
+  setOverlay(draw: ((text: TextGrid, dt: number) => void) | null) {
+    this.overlayDraw = draw;
   }
 
   render(state: GameViewState, dt: number) {
@@ -114,7 +121,8 @@ export class AsciiGameView implements GameView {
     this.sparks.update(dt, text);
     this.attackSparks.update(dt);
     this.cockpit.update(state, dt, text);
-    if (this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
+    if (this.debugEventLabel && this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
+    this.overlayDraw?.(text, dt);
 
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
   }

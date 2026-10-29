@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -98,5 +98,43 @@ describe('how-to demo (a 10 second loop)', () => {
   test('loops every 10 seconds', () => {
     expect(howToDemo(13.5)).toEqual(howToDemo(3.5));
     expect(howToDemo(27.25)).toEqual(howToDemo(7.25));
+  });
+});
+
+
+describe('countdown number', () => {
+  test('shows 5 down to 1, each for a second, never 0', () => {
+    expect(countdownDisplay(5)).toMatchObject({ n: 5, frac: 0 });
+    expect(countdownDisplay(4.5)).toMatchObject({ n: 5, frac: 0.5 });
+    expect(countdownDisplay(4)).toMatchObject({ n: 4, frac: 0 });
+    expect(countdownDisplay(1.25)).toMatchObject({ n: 2, frac: 0.75 });
+    expect(countdownDisplay(0.25)).toMatchObject({ n: 1, frac: 0.75 });
+    expect(countdownDisplay(0).n).toBe(1);
+    expect(countdownDisplay(-0.1).n).toBe(1);
+  });
+
+  test('the last two seconds are red', () => {
+    expect([5, 4, 3, 2, 1].map((n) => countdownDisplay(n - 0.5).color)).toEqual(['yellow', 'yellow', 'yellow', 'red', 'red']);
+  });
+
+  test('each number gets a color-split pulse in the first moments of its second, and shrinks as the second runs out', () => {
+    expect(countdownDisplay(5).pulse).toBe(true);
+    expect(countdownDisplay(4.9).pulse).toBe(true);
+    expect(countdownDisplay(4.5).pulse).toBe(false);
+    expect(countdownDisplay(5).scale).toBeCloseTo(13);
+    expect(countdownDisplay(4.5).scale).toBeCloseTo(12);
+  });
+});
+
+describe('GO flash', () => {
+  test('flashes for just under a second after the Match starts, then is gone', () => {
+    expect(goFlash(-0.1)).toBe(false);
+    expect(goFlash(0)).toBe(true);
+    expect(goFlash(0.1)).toBe(true); // blinks 8 times a second: on for 1/8 s, off for 1/8 s
+    expect(goFlash(0.13)).toBe(false);
+    expect(goFlash(0.26)).toBe(true);
+    expect(goFlash(0.76)).toBe(true);
+    expect(goFlash(0.9)).toBe(false);
+    expect(goFlash(5)).toBe(false);
   });
 });

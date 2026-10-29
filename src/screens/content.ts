@@ -79,6 +79,27 @@ export function typedTip(t: number): string {
   return TIPS[Math.floor(t / TIP_SECONDS) % TIPS.length].slice(0, Math.floor((t % TIP_SECONDS) * TIP_LETTERS_PER_SECOND));
 }
 
+/** What the Countdown shows with `secondsLeft` to go: the number, how far into its second (0..1), size and color. */
+export function countdownDisplay(secondsLeft: number) {
+  const n = Math.max(1, Math.ceil(secondsLeft));
+  const frac = Math.min(1, Math.max(0, n - secondsLeft));
+  return {
+    n,
+    frac,
+    /** Each number shrinks a little as its second runs out. */
+    scale: 13 - 2 * frac,
+    /** A color-split pulse in the first moments of each second. */
+    pulse: frac < 0.14,
+    color: n <= 2 ? ('red' as const) : ('yellow' as const),
+  };
+}
+
+/** The GO flash after the Match begins: `t` seconds in, it blinks 8 times a second for just under a second. */
+export const GO_SECONDS = 0.9;
+export function goFlash(t: number): boolean {
+  return t >= 0 && t < GO_SECONDS && Math.floor(t * 8) % 2 === 0;
+}
+
 export const DEMO_DEFEND_WORD = 'planet';
 export const DEMO_ATTACK_WORD = 'rocket';
 
