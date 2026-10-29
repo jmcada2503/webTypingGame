@@ -24,7 +24,7 @@ Which screen the player is on and how they move between screens: menu, how-to, w
 
 ## Rules
 
-- **Practice:** menu → Countdown → Match, no how-to, no network. Ends in a results screen (play again / menu).
+- **Practice:** menu → the `starting` gap (TV off, 1 s black, TV on; **no Countdown, no how-to**) → Match, no network. Ends in a results screen (play again / menu); play again goes straight to the gap again.
 - **Public:** how-to → `joinQueue(language)` → `matched` (connecting, 10 s to be confirmed or `connectFailed`) → `connected` → Countdown → `starting` → Match.
 - **Private:** host: `createPrivate` → `inviteCreated` shows the link. Guest: `joinInvite(code)` skips the menu, then how-to, then `joinPrivate(code)`; a full or expired link is an error screen. `cancel()` and leaving are quiet (`network.leave()`).
 - **The opponent leaves** (`opponentLeft`, or `opponentDisconnected` outside a Match): the `opponentLeft` screen, `youWin` true only in the Match. In a Match a dropped connection gets **5 s** to come back (`opponentReconnected`), then the player wins.

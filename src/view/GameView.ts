@@ -23,6 +23,11 @@ export interface GameView {
    */
   setScreen(draw: ((text: TextGrid, dt: number) => void) | null): void;
   /**
+   * Draw extra text over the game scene (e.g. the GO flash). `draw` runs every frame after the scene's own text,
+   * before the ASCII pass. Pass null to remove it.
+   */
+  setOverlay(draw: ((text: TextGrid, dt: number) => void) | null): void;
+  /**
    * Re-fit to the viewport (CSS px + devicePixelRatio): fixed 128×45 grid, cells via
    * fitToViewport(), camera aspect = real canvas aspect. Rebuilds glyph atlas and render targets.
    */

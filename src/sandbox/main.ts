@@ -21,6 +21,7 @@ import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
 const session = new SandboxSession();
 const input = new KeyboardTypingInput();
 const view = await AsciiGameView.create();
+view.debugEventLabel = true;
 const shell = new AppShell(view, session, input);
 shell.start();
 if (import.meta.env.DEV) Object.assign(window, { sandbox: session });

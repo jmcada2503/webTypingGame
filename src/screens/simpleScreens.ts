@@ -1,5 +1,7 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
+import type { PracticeResult } from '../practice/PracticeSession';
+import { practiceResultLines, practiceScore } from './content';
 import { blink, centered, formatClock, twoTone } from './draw';
 import type { Screen, ScreenSet } from './Screen';
 
@@ -10,7 +12,7 @@ import type { Screen, ScreenSet } from './Screen';
  */
 const lines = (text: TextGrid, start: number, rows: string[], color: 'fg' | 'dim' = 'fg') => rows.forEach((r, i) => centered(text, start + i, r, color));
 
-export function simpleScreens(flow: ScreenFlow): ScreenSet {
+export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeResult | null = () => null): ScreenSet {
   const menu: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'menu') return;
@@ -72,7 +74,16 @@ export function simpleScreens(flow: ScreenFlow): ScreenSet {
       if (s.screen !== 'end') return;
       if (s.mode === 'practice') {
         twoTone(text, 6, 'GAME ', 'OVER', 3);
-        lines(text, 18, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
+        const result = practiceResult();
+        if (result) {
+          // One left-aligned block, centered as a whole, so the numbers line up.
+          const score = `SCORE ${practiceScore(result)}`;
+          text.writeScaled((128 - score.length * 3) / 2, 11.5, score, 3, 'yellow');
+          const rows = practiceResultLines(result);
+          const col = (128 - Math.max(...rows.map((l) => l.length))) / 2;
+          rows.forEach((l, i) => text.write(Math.round(col), 17 + i, l, 'fg'));
+        }
+        lines(text, 25, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
         return;
       }
       const title = { won: 'YOU WIN', lost: 'YOU LOSE', peace: 'PEACE' }[s.result];
