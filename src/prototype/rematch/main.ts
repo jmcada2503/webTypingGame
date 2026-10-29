@@ -27,7 +27,7 @@ import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 const COLS = 128;
 const WINDOW = 10; // seconds the Rematch can be proposed (Public)
 const DECLINED_SHOW = 2.4; // how long "DECLINED" / "NO ANSWER" shows before the options come back
-let respond = 5; // seconds the other side has to answer a request (T switches 5 / 10)
+let respond = 10; // seconds the other side has to answer a request (decided: 10; T switches 5 / 10)
 const STARTING_SHOW = 1.0; // "REMATCH!" before the glitch into the Countdown
 const params = new URLSearchParams(location.search);
 
@@ -366,7 +366,7 @@ window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || trans) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (k === 't') {
-    respond = respond === 5 ? 10 : 5;
+    respond = respond === 10 ? 5 : 10;
     return say(`ANSWER TIME ${respond} S`);
   }
   if (k === 'p') {
