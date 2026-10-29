@@ -2,8 +2,8 @@
 // Question: what should the player see (1) while the opponent's connection is down in a Match (10 s grace),
 // and (2) on the "Opponent left" screen afterwards?   Real renderer + CRT filter, stub opponent, no networking.
 //
-// Keys:  D  opponent's connection drops (starts the 10 s grace, then the Opponent left screen)
-//        X  opponent comes back during the grace      R  reset to a running Match
+// Keys:  D  opponent's connection drops (10 s grace, then the win + Opponent left screen; the 3rd drop skips the grace)
+//        X  opponent comes back during the grace (words reappear, 5 s countdown)      R  reset to a running Match
 //        1-4 disconnect animation A-D                 [ ]  Opponent-left layout 1-3
 //        C  where it happened (waiting / countdown / match)      P  Public / Private
 //        O  jump straight to the Opponent-left screen   W  show/hide held words   hjkl or arrows + Enter  pick an option
@@ -21,7 +21,13 @@ const COLS = 128;
 const GRACE = 10; // seconds the opponent has to come back
 const params = new URLSearchParams(location.search);
 
-type Phase = 'match' | 'lost' | 'restored' | 'left';
+type Phase = 'match' | 'lost' | 'back' | 'win' | 'left';
+const BACK_BEAT = 0.8; // the words reappear this long before the countdown starts
+const BACK_COUNT = 5; // seconds of countdown over the game once the opponent is back
+const WIN_STUB = 2.6; // placeholder for the win animation (its own prototype ticket)
+const MAX_DROPS = 3; // the 3rd signal loss in a Match: no reconnect time, the opponent is considered gone
+let drops = 0;
+let reason: 'timeout' | 'unstable' = 'timeout';
 type Where = 'waiting' | 'countdown' | 'match';
 const ANIMS = [
   { key: 'A', name: 'Signal breakup (static eats the ship)' },
@@ -48,7 +54,7 @@ const setPhase = (p: Phase) => {
   phase = p;
   phaseStart = clock();
   sel = 0;
-  session.setFrozen(p === 'lost');
+  session.setFrozen(p === 'lost' || p === 'back'); // held while the opponent is away and during the countdown
 };
 
 // ---------------------------------------------------------------- stub opponent + game
@@ -103,17 +109,19 @@ const asciiRender = hidden.ascii.render.bind(hidden.ascii);
 hidden.ascii.render = (scene, camera, overlay) => {
   const world = phase !== 'left';
   hidden.scene.visible = world;
-  hidden.overlay.visible = world && !(phase === 'lost' && hideWords);
+  hidden.overlay.visible = world && !((phase === 'lost' && hideWords) || phase === 'win');
   if (!world) text.clear();
   else text.fill(7, 1, 30, 3, ' '); // hide the game view's dim debug event label
   const t = phaseT();
   hidden.enemy.root.visible = true;
   session.pace = { player: 1, enemy: 1 };
   if (phase === 'lost') drawLost(t);
-  else if (phase === 'restored') drawRestored(t);
+  else if (phase === 'back') drawBack(t);
+  else if (phase === 'win') drawWin(t);
   else if (phase === 'left') drawLeft(t);
-  if (phase === 'lost' && t >= GRACE) setPhase('left');
-  if (phase === 'restored' && t >= 1.6) setPhase('match');
+  if (phase === 'lost' && t >= GRACE) endMatch('timeout');
+  if (phase === 'back' && t >= BACK_BEAT + BACK_COUNT) setPhase('match'); // the Match resumes
+  if (phase === 'win' && t >= WIN_STUB) setPhase('left');
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   hint();
   asciiRender(scene, camera, overlay);
@@ -194,6 +202,9 @@ function drawLost(t: number) {
   else if (anim === 1) animDeadFeed(t, left);
   else if (anim === 2) animTakeover(t, left, secs, frac);
   else animRadar(t, left);
+  // After the 2nd loss, warn: one more and there is no reconnect time at all.
+  if (drops >= MAX_DROPS - 1) centered(20.2, blink(t, 1.5) ? `SIGNAL LOSS ${drops} OF ${MAX_DROPS}: ONE MORE AND THE OPPONENT IS CONSIDERED GONE` : '', 'red');
+  else if (drops > 0) centered(20.2, `SIGNAL LOSS ${drops} OF ${MAX_DROPS}`, 'dim');
 }
 
 /** A: the ship's picture falls apart into static that spreads until it cuts out. */
@@ -269,10 +280,49 @@ function animRadar(t: number, left: number) {
   put(85, 19.7, `${left.toFixed(1)} s`, 'fg');
 }
 
-function drawRestored(t: number) {
-  staticField(SHIP.c, SHIP.r, SHIP.w, SHIP.h, Math.max(0, 0.5 - t * 0.9), t);
-  if (blink(t, 6)) centered(1.2, 'SIGNAL RESTORED', 'green');
-  centered(18, 'THE OTHER PLAYER IS BACK. MATCH CONTINUES.', 'green');
+/**
+ * The opponent is back. Their held Word bullets are on screen again at once (the player sees where they stand),
+ * and after a short beat a 5 s countdown runs over the game. The "enemy is back" message lives with the countdown
+ * (the words can cover anything drawn elsewhere). The Match resumes when it ends.
+ */
+function drawBack(t: number) {
+  staticField(SHIP.c, SHIP.r, SHIP.w, SHIP.h, Math.max(0, 0.45 - t * 1.2), t);
+  centered(17.2, blink(t, 4) ? 'ENEMY IS BACK' : '', 'green');
+  if (t < BACK_BEAT) return centered(19, 'CHECK YOUR WORDS', 'dim');
+  const c = t - BACK_BEAT;
+  const n = Math.max(1, Math.ceil(BACK_COUNT - c));
+  const frac = c % 1;
+  text.fill(0, 19, COLS, 12, ' ');
+  centered(19.2, 'THE MATCH RESUMES IN', 'fg');
+  bigNumber(String(n), 9 - 1.4 * frac, 21, n <= 2 ? 'red' : 'yellow', frac);
+  centered(32, 'THEIR WORDS ARE STILL HELD. NOTHING MOVES UNTIL THE COUNTDOWN ENDS.', 'dim');
+}
+
+/** Placeholder: the real win animation is designed in its own prototype ticket. It also plays after a disconnect. */
+function drawWin(t: number) {
+  hidden.enemy.root.visible = false;
+  if (blink(t, 8) || t > 1.2) centered(15, 'YOU WIN', 'green');
+  text.writeScaled((COLS - 7 * 6) / 2, 17, 'YOU WIN', 6, blink(t, 6) ? 'green' : 'fg');
+  centered(28, '[ WIN ANIMATION PLACEHOLDER: SAME ONE AS A NORMAL WIN ]', 'dim');
+  centered(30, reason === 'unstable' ? 'THE OPPONENT CONNECTION KEPT DROPPING' : 'THE OPPONENT DID NOT COME BACK', 'dim');
+}
+
+/** The Match ends because of the opponent's connection: the win animation first, then the Opponent left screen. */
+function endMatch(why: 'timeout' | 'unstable') {
+  reason = why;
+  where = 'match';
+  setPhase('win');
+}
+
+/** The opponent's signal drops. The third time there is no reconnect time at all. */
+function dropSignal() {
+  where = 'match';
+  drops++;
+  if (drops >= MAX_DROPS) {
+    say('THIRD SIGNAL LOSS: NO RECONNECT TIME');
+    return endMatch('unstable');
+  }
+  setPhase('lost');
 }
 
 // ---------------------------------------------------------------- the "Opponent left" screen
@@ -282,6 +332,8 @@ const SUB: Record<Where, string> = {
   countdown: 'THE OTHER PLAYER LEFT DURING THE COUNTDOWN. THE MATCH NEVER STARTED.',
   match: 'THE OTHER PLAYER LEFT THE MATCH AND DID NOT COME BACK IN 10 SECONDS.',
 };
+/** The message under the title; a Match that ended because the connection kept dropping says so. */
+const subText = () => (where === 'match' && reason === 'unstable' ? "THE OTHER PLAYER'S CONNECTION KEPT DROPPING, SO THE MATCH WAS ENDED." : SUB[where]);
 const WHEN: Record<Where, string> = { waiting: 'BEFORE THE MATCH', countdown: 'DURING THE COUNTDOWN', match: 'DURING THE MATCH' };
 const wins = () => where === 'match';
 const options = () => (kind === 'public' ? ['SEARCH AGAIN', 'MENU'] : ['MENU']);
@@ -307,7 +359,7 @@ function drawLeft(t: number) {
 function layoutTerminal(t: number) {
   const w = 76;
   const c0 = (COLS - w) / 2;
-  const sub = wrap(SUB[where], w - 10);
+  const sub = wrap(subText(), w - 10);
   const h = 11 + sub.length + (wins() ? 3 : 0);
   const r0 = Math.round((45 - h) / 2) - 2;
   box(c0, r0, w, h, wins() ? 'green' : 'yellow');
@@ -336,7 +388,7 @@ function layoutBanner(t: number) {
   if (wins()) centered(5, blink(t, 2) ? 'YOU WIN' : '       ', 'green');
   text.writeScaled(c, 8, a, scale, 'fg');
   text.writeScaled(c + [...a].length * scale, 8, b, scale, 'yellow');
-  const sub = wrap(SUB[where], 70);
+  const sub = wrap(subText(), 70);
   sub.forEach((l, i) => centered(17 + i, l, 'fg'));
   centered(19 + sub.length, wins() ? 'THE RESULT COUNTS AS A WIN FOR YOU.' : 'NO RESULT: NOBODY WON OR LOST.', 'dim');
   optionsRow(26, 'row');
@@ -359,12 +411,12 @@ function layoutLog(t: number) {
   const log: [string, PaletteColor][] = [
     ['> CHANNEL TO OPPONENT CLOSED', 'fg'],
     [`> WHEN: ${WHEN[where]}`, 'fg'],
-    [where === 'match' ? '> GRACE PERIOD: 10 S, NO REPLY' : '> GRACE PERIOD: NOT NEEDED', 'dim'],
+    [where !== 'match' ? '> GRACE PERIOD: NOT NEEDED' : reason === 'unstable' ? `> SIGNAL LOST ${MAX_DROPS} TIMES: NO GRACE` : '> GRACE PERIOD: 10 S, NO REPLY', 'dim'],
     [wins() ? '> RESULT: YOU WIN' : '> RESULT: NONE', wins() ? 'green' : 'dim'],
     [kind === 'public' ? '> MODE: PUBLIC MATCH' : '> MODE: PRIVATE MATCH', 'dim'],
   ];
   log.forEach(([l, col], i) => put(c0, 9 + i * 2, l, col));
-  wrap(SUB[where], 54).forEach((l, i) => put(c0, 21 + i, l, 'fg'));
+  wrap(subText(), 54).forEach((l, i) => put(c0, 21 + i, l, 'fg'));
   optionsRow(27, 'column', c0);
   put(c0, 33, 'ARROWS CHOOSE   ENTER CONFIRM', 'dim');
 }
@@ -373,7 +425,7 @@ function layoutLog(t: number) {
 
 function hint() {
   if (phase === 'left') return;
-  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop  X reconnect  R reset  1-4 anim  O left screen  W words`, 'dim');
+  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop (${drops}/${MAX_DROPS})  X opponent back  R reset  1-4 anim  O left screen  W words`, 'dim');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -401,12 +453,13 @@ window.addEventListener('keydown', (e) => {
     hideWords = !hideWords;
     return say(hideWords ? 'HELD WORDS HIDDEN' : 'HELD WORDS SHOWN');
   }
-  if (k === 'r' || k === 'R') return setPhase('match');
-  if (k === 'd' || k === 'D') {
-    where = 'match';
-    return setPhase('lost');
+  if (k === 'r' || k === 'R') {
+    drops = 0;
+    reason = 'timeout';
+    return setPhase('match');
   }
-  if ((k === 'x' || k === 'X') && phase === 'lost') return setPhase('restored');
+  if ((k === 'd' || k === 'D') && (phase === 'match' || phase === 'back')) return dropSignal();
+  if ((k === 'x' || k === 'X') && phase === 'lost') return setPhase('back');
   if (phase === 'left') {
     const n = options().length;
     if (k === 'ArrowDown' || k === 'ArrowRight' || k === 'j' || k === 'l') sel = (sel + 1) % n;
