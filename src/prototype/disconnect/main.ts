@@ -1,12 +1,12 @@
 // PROTOTYPE (throwaway): "Prototype: Disconnect animation and Opponent-left screen".
-// Question: what should the player see (1) while the opponent's connection is down in a Match (5 s grace),
+// Question: what should the player see (1) while the opponent's connection is down in a Match (10 s grace),
 // and (2) on the "Opponent left" screen afterwards?   Real renderer + CRT filter, stub opponent, no networking.
 //
-// Keys:  D  opponent's connection drops (starts the 5 s grace, then the Opponent left screen)
+// Keys:  D  opponent's connection drops (starts the 10 s grace, then the Opponent left screen)
 //        X  opponent comes back during the grace      R  reset to a running Match
 //        1-4 disconnect animation A-D                 [ ]  Opponent-left layout 1-3
-//        C  where it happened (waiting / countdown / match)      K  Public / Private
-//        L  jump straight to the Opponent-left screen            Arrows + Enter  pick an option there
+//        C  where it happened (waiting / countdown / match)      P  Public / Private
+//        O  jump straight to the Opponent-left screen   W  show/hide held words   hjkl or arrows + Enter  pick an option
 import * as THREE from 'three';
 import '../../app/app.css';
 import { AppShell } from '../../app/AppShell';
@@ -18,7 +18,7 @@ import { AsciiGameView } from '../../view/AsciiGameView';
 import type { GameViewState, ViewEvent } from '../../view/GameViewState';
 
 const COLS = 128;
-const GRACE = 5; // seconds the opponent has to come back
+const GRACE = 10; // seconds the opponent has to come back
 const params = new URLSearchParams(location.search);
 
 type Phase = 'match' | 'lost' | 'restored' | 'left';
@@ -36,6 +36,7 @@ let layout = Math.min(2, Math.max(0, Number(params.get('layout') ?? 1) - 1));
 let where: Where = (WHERES.find((w) => w === params.get('where')) ?? 'match') as Where;
 let kind: 'public' | 'private' = params.get('kind') === 'private' ? 'private' : 'public';
 let sel = 0;
+let hideWords = true; // the opponent's held Word bullets are hidden while they are away (W toggles)
 let toast: { msg: string; at: number } | null = null;
 
 const t0 = performance.now();
@@ -102,7 +103,7 @@ const asciiRender = hidden.ascii.render.bind(hidden.ascii);
 hidden.ascii.render = (scene, camera, overlay) => {
   const world = phase !== 'left';
   hidden.scene.visible = world;
-  hidden.overlay.visible = world;
+  hidden.overlay.visible = world && !(phase === 'lost' && hideWords);
   if (!world) text.clear();
   else text.fill(7, 1, 30, 3, ' '); // hide the game view's dim debug event label
   const t = phaseT();
@@ -166,7 +167,7 @@ function bigNumber(s: string, scale: number, row: number, color: PaletteColor, f
   text.writeScaled(c, row, s, scale, color);
 }
 
-// ---------------------------------------------------------------- while the connection is down (5 s grace)
+// ---------------------------------------------------------------- while the connection is down 
 
 /** Roughly where the Enemy ship is on the grid (it bobs a little). */
 const SHIP = { c: 40, r: 3, w: 48, h: 14 };
@@ -279,7 +280,7 @@ function drawRestored(t: number) {
 const SUB: Record<Where, string> = {
   waiting: 'THE OTHER PLAYER LEFT BEFORE THE MATCH COULD START.',
   countdown: 'THE OTHER PLAYER LEFT DURING THE COUNTDOWN. THE MATCH NEVER STARTED.',
-  match: 'THE OTHER PLAYER LEFT THE MATCH AND DID NOT COME BACK IN 5 SECONDS.',
+  match: 'THE OTHER PLAYER LEFT THE MATCH AND DID NOT COME BACK IN 10 SECONDS.',
 };
 const WHEN: Record<Where, string> = { waiting: 'BEFORE THE MATCH', countdown: 'DURING THE COUNTDOWN', match: 'DURING THE MATCH' };
 const wins = () => where === 'match';
@@ -358,7 +359,7 @@ function layoutLog(t: number) {
   const log: [string, PaletteColor][] = [
     ['> CHANNEL TO OPPONENT CLOSED', 'fg'],
     [`> WHEN: ${WHEN[where]}`, 'fg'],
-    [where === 'match' ? '> GRACE PERIOD: 5 S, NO REPLY' : '> GRACE PERIOD: NOT NEEDED', 'dim'],
+    [where === 'match' ? '> GRACE PERIOD: 10 S, NO REPLY' : '> GRACE PERIOD: NOT NEEDED', 'dim'],
     [wins() ? '> RESULT: YOU WIN' : '> RESULT: NONE', wins() ? 'green' : 'dim'],
     [kind === 'public' ? '> MODE: PUBLIC MATCH' : '> MODE: PRIVATE MATCH', 'dim'],
   ];
@@ -372,7 +373,7 @@ function layoutLog(t: number) {
 
 function hint() {
   if (phase === 'left') return;
-  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop  X reconnect  R reset  1-4 anim  L left screen`, 'dim');
+  put(2, 43, `PROTOTYPE  ANIM ${ANIMS[anim].key}: ${ANIMS[anim].name}   D drop  X reconnect  R reset  1-4 anim  O left screen  W words`, 'dim');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -390,12 +391,16 @@ window.addEventListener('keydown', (e) => {
     where = WHERES[(WHERES.indexOf(where) + 1) % 3];
     return say(`HAPPENED: ${where.toUpperCase()}`);
   }
-  if (k === 'k' || k === 'K') {
+  if (k === 'p' || k === 'P') {
     kind = kind === 'public' ? 'private' : 'public';
     sel = 0;
     return say(kind.toUpperCase());
   }
-  if (k === 'l' || k === 'L') return setPhase('left');
+  if (k === 'o' || k === 'O') return setPhase('left');
+  if (k === 'w' || k === 'W') {
+    hideWords = !hideWords;
+    return say(hideWords ? 'HELD WORDS HIDDEN' : 'HELD WORDS SHOWN');
+  }
   if (k === 'r' || k === 'R') return setPhase('match');
   if (k === 'd' || k === 'D') {
     where = 'match';
@@ -404,8 +409,8 @@ window.addEventListener('keydown', (e) => {
   if ((k === 'x' || k === 'X') && phase === 'lost') return setPhase('restored');
   if (phase === 'left') {
     const n = options().length;
-    if (k === 'ArrowDown' || k === 'ArrowRight') sel = (sel + 1) % n;
-    else if (k === 'ArrowUp' || k === 'ArrowLeft') sel = (sel + n - 1) % n;
+    if (k === 'ArrowDown' || k === 'ArrowRight' || k === 'j' || k === 'l') sel = (sel + 1) % n;
+    else if (k === 'ArrowUp' || k === 'ArrowLeft' || k === 'k' || k === 'h') sel = (sel + n - 1) % n;
     else if (k === 'Enter') say(`${options()[sel]}: not part of this prototype`);
   }
 });
