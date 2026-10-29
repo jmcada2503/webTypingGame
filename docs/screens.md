@@ -31,7 +31,7 @@ Input is locked while an effect runs (`ScreenTransition.active`), and typing is 
 
 The flow's `starting` gap (the TV effect) draws the game scene idle (nothing flying). When the flow reaches `match`, the host calls `createMatch(mode)`, attaches the typing input, starts the session and flashes a green **GO** over the scene for 0.9 s (it blinks 8 times a second). Input is on only from then on. When the session's status leaves `running` (`won`, `lost` or `peace`), the host calls `flow.matchEnded(status)` and the flow moves to the end screen; the session is disposed once that screen is up.
 
-`src/main.ts` decides what runs: online matches use `MatchSession` over a `MatchEngine` with seeded Attack words from the chosen language's word list (the seed will come from the server; for now it is local, and there is no transport, so the opponent never answers). **Practice is not wired yet**: it shows the idle game scene until `PracticeSession` is merged and plugged into `createMatch`.
+`src/main.ts` decides what runs. **Practice** runs the real `PracticeSession` (words from the game on a ramp; it measures your speed first), and its Game Over screen shows the run's results (time survived, words, accuracy, pace). **Online** matches use `MatchSession` over a `MatchEngine` with seeded Attack words from the chosen language's word list (the seed will come from the server; for now it is local, and there is no transport, so the opponent never answers).
 
 ## Running it
 

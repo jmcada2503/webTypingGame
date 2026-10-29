@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countdownDisplay, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, practiceResultLines, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -136,5 +136,17 @@ describe('GO flash', () => {
     expect(goFlash(0.76)).toBe(true);
     expect(goFlash(0.9)).toBe(false);
     expect(goFlash(5)).toBe(false);
+  });
+});
+
+describe('Practice results', () => {
+  const run = { survivedSeconds: 83.4, wordsTyped: 12, wrongSubmits: 1, accuracy: 12 / 13, averagePace: 3.14, peakPace: 4.5, wpm: 37.7 };
+
+  test('show the time survived, words, accuracy and pace', () => {
+    expect(practiceResultLines(run)).toEqual(['TIME SURVIVED   01:23', 'WORDS TYPED     12', 'ACCURACY        92%', 'PACE            3.1 LETTERS/S (38 WPM)', 'BEST PACE       4.5 LETTERS/S']);
+  });
+
+  test('show a dash for accuracy when nothing was submitted', () => {
+    expect(practiceResultLines({ ...run, accuracy: null, wordsTyped: 0 })[2]).toBe('ACCURACY        -');
   });
 });

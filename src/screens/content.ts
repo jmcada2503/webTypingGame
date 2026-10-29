@@ -1,5 +1,7 @@
 import type { Language, MatchKind } from '../flow/types';
+import type { PracticeResult } from '../practice/PracticeSession';
 import type { PaletteColor } from '../render/AsciiRenderer';
+import { formatClock } from './draw';
 
 /** Placeholder until the real GitHub Sponsors page exists (the prototype used the repo owner's login). */
 export const SPONSOR_LINK = 'https://github.com/sponsors/jmcada2503';
@@ -98,6 +100,18 @@ export function countdownDisplay(secondsLeft: number) {
 export const GO_SECONDS = 0.9;
 export function goFlash(t: number): boolean {
   return t >= 0 && t < GO_SECONDS && Math.floor(t * 8) % 2 === 0;
+}
+
+/** The lines of the Practice results screen. */
+export function practiceResultLines(r: Pick<PracticeResult, 'survivedSeconds' | 'wordsTyped' | 'accuracy' | 'averagePace' | 'peakPace' | 'wpm'>): string[] {
+  const pad = (label: string) => label.padEnd(16);
+  return [
+    `${pad('TIME SURVIVED')}${formatClock(r.survivedSeconds)}`,
+    `${pad('WORDS TYPED')}${r.wordsTyped}`,
+    `${pad('ACCURACY')}${r.accuracy === null ? '-' : `${Math.round(r.accuracy * 100)}%`}`,
+    `${pad('PACE')}${r.averagePace.toFixed(1)} LETTERS/S (${Math.round(r.wpm)} WPM)`,
+    `${pad('BEST PACE')}${r.peakPace.toFixed(1)} LETTERS/S`,
+  ];
 }
 
 export const DEMO_DEFEND_WORD = 'planet';
