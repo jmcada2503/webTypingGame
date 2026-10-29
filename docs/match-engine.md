@@ -39,7 +39,7 @@ Engine methods: `typed(word)` (the Typed word changed, which counts as activity)
 - **Damage:** each of my Shots that hits adds **40%** Enemy ship damage, capped at **100%** (so the second hit crosses 75%). The opponent's report of 0 Lives wins the Match.
 - **Idle:** Idle means no typing. After **5 s** the engine emits one `idleNudge` (re-armed by typing). If **both** players are Idle for over **10 s** the Match ends in **Peace** (`peace` event; nobody wins).
 - **Pace:** letters of correct words (Word bullets destroyed plus Attack words fired) per second over the last 10 s, eased over 1 s. The opponent's Pace is whatever they last reported.
-- **Practice:** no Attack word, nothing is sent to a network, no Peace; the game calls `spawnBullet`. It ends when Lives reach 0.
+- **Practice:** no Attack word, nothing is sent to a network, no Peace; the game calls `spawnBullet(word, flightSeconds?)` (the optional flight time lets later words fly faster). It ends when Lives reach 0. `src/practice/` drives it, see Practice below.
 - `stats()` gives counters for the results screen and the Match report: elapsed time, correct words and letters, wrong submits, Word bullets destroyed and arrived, Shots fired, hit and defended.
 
 ## Network events (`NetEvent`)
@@ -55,6 +55,15 @@ The only thing crossing the wire. Each engine produces them with `drainOutgoing(
 | `peace` | Both of us were Idle too long: the Match is over. |
 
 Each client judges its own defense; the opponent trusts these reports. A `MatchTransport` (`send(event)` and `onEvent(cb)`) carries them: P2P WebRTC implements it, and a relay could replace it without touching the rules.
+
+## Practice
+
+`PracticeSession` (`src/practice/`) is a `GameSession`: the engine in `practice` mode plus a `PracticeDirector` that fires the Word bullets. Build one with `createPracticeSession(language)` (loads the word list) or `new PracticeSession({ list, random? })`. Local randomness only: no seeds, no network.
+
+- **Ramp** (`PRACTICE_RAMP`, tunable): from 0 s to 420 s, then it stays. A word every 4 s down to 1 s (each gap varies by up to 20%), flight time 10 s down to 5.5 s, tier chances short/medium/long 70/28/2% to 10/40/50%. First word at 1.5 s. A word already on screen is not repeated. Endless: it ends only at 0 Lives. These numbers are a first guess, tuned by playing: `/sandbox/practice.html?lang=en|es` runs the real thing with a plain text result (dev page, not part of the build).
+- **Placing the player** (`PRACTICE_CALIBRATION`, `PRACTICE_PLACEMENT`): a run starts with 3 calibration words (a fixed short/medium/long mix, 10 s flight). They are **self-paced**: one word on screen at a time, and the next comes 0.8 s after the screen is cleared (the first at 1.5 s), so a slow typist never has words piling up and a fast one is not kept waiting. A word nobody types arrives after its flight time and costs a Life, then the next one comes. When 3 have been typed or missed, the player's Pace is measured (letters typed / seconds with words on screen, at least 3 s) and the ramp clock jumps ahead to the first second whose demand (letters per second the ramp asks for, from the words' average length and the gap) is 80% of that Pace (`PRACTICE_PLACEMENT.share`). The ramp then keeps rising from there, so a fast typist skips the easy start and a slow one starts at 0. A missed word adds time but no letters, so it lowers the level. A player who never gets through the 3 words is never placed (the run ends first).
+- **Acceleration** (`PRACTICE_ACCELERATION.emptyScreenRate`, 3): after placement the ramp clock normally runs 1 ramp second per second. While no Word bullet is on screen it runs 3 per second, so a player who clears the screen fast climbs faster and is never left waiting at an easy level. Only the empty seconds count extra; it does not apply during the 3 calibration words. `session.result().currentLevel` is the ramp second the run is at now (capped at the end of the ramp).
+- **Result** (`session.result()`, final once the status is `lost`): `survivedSeconds`, `activeSeconds` (time with at least one Word bullet on screen), `wordsTyped`, `lettersTyped`, `wrongSubmits`, `accuracy` (right submits / all submits, `null` if none), `averagePace` (letters of correct words per second of `activeSeconds`: time with an empty screen is left out, there is nothing to type), `peakPace` (never below the average), `wpm` (average Pace, 5 letters = 1 word), `calibrationPace`, `startLevel` (the ramp second the run was moved on to) and `currentLevel` (all three `null` until placed). The result screen itself is a later ticket.
 
 ## Seeded Attack words
 

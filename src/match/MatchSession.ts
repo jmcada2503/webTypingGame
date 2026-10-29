@@ -44,8 +44,8 @@ export class MatchSession implements GameSession {
   }
 
   /** Practice: the game fires a Word bullet at the player. */
-  spawnBullet(word: string) {
-    this.engine.spawnBullet(word);
+  spawnBullet(word: string, flightSeconds?: number) {
+    this.engine.spawnBullet(word, flightSeconds);
   }
 
   update(dt: number): ViewEvent[] {
