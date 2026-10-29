@@ -1,7 +1,8 @@
 import type { TypingInput } from '../input/TypingInput';
 import type { GameViewState, ViewEvent } from '../view/GameViewState';
 
-export type SessionStatus = 'idle' | 'running' | 'won' | 'lost';
+/** `peace`: both players stayed Idle too long, nobody won. */
+export type SessionStatus = 'idle' | 'running' | 'won' | 'lost' | 'peace';
 
 /**
  * Anything the app shell can run: SandboxSession now (tweak-panel driven), MatchSession later
