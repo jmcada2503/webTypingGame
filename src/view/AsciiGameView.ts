@@ -17,6 +17,7 @@ import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
 import { PaceMotion } from './juice/PaceMotion';
 import { SCREEN_HIT } from '../render/ScreenFilters';
+import type { EndingFrame } from '../screens/endings';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -95,10 +96,28 @@ export class AsciiGameView implements GameView {
     this.overlayDraw = draw;
   }
 
+  /** The ending being applied (Win / Lose / Peace), or null. */
+  private ending: EndingFrame | null = null;
+
+  setEnding(frame: EndingFrame | null) {
+    this.ending = frame;
+    if (!frame) this.applyEnding(null);
+  }
+
+  /** Apply the ending's frame to the scene: the Enemy ship, the Peace labels. (The dimming is added after the hit flash fades.) */
+  private applyEnding(frame: EndingFrame | null) {
+    this.enemy.root.visible = frame ? frame.enemyVisible : true;
+    this.enemy.endingOffset.set(frame?.enemyOffset.x ?? 0, frame?.enemyOffset.y ?? 0, frame?.enemyOffset.z ?? 0);
+    this.cockpit.attackLabel = frame?.peaceLabels ? 'PEACE!!' : 'ATTACK';
+    this.cockpit.attackLabelColor = frame?.peaceLabels ? 'fg' : 'dim';
+    this.cockpit.attackWordWhite = frame?.peaceLabels ?? false;
+  }
+
   render(state: GameViewState, dt: number) {
     if (this.screenDraw) return this.renderScreen(this.screenDraw, dt);
     this.scene.visible = true;
     this.overlay.visible = true;
+    this.applyEnding(this.ending);
     this.enemy.update(dt);
     this.stars.update(dt);
     // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
@@ -114,6 +133,7 @@ export class AsciiGameView implements GameView {
     this.words.update(state, this.camera, dt);
     this.hitFx.update(dt);
     this.fadeHitFlash(dt);
+    if (this.ending) SCREEN_HIT.level = Math.max(SCREEN_HIT.level, this.ending.dim); // Lose: the lights dim
     this.destroyFx.update(dt, text); // before the Cockpit, so Cockpit text wins over grid bursts
     this.shotHitFx.update(dt, text);
     this.paceMotion.update(state.pace, dt);
@@ -175,6 +195,10 @@ export class AsciiGameView implements GameView {
       SCREEN_HIT.level = 1;
     }
     if (event.type === 'shotHit') this.shotHitFx.hit();
+    if (event.type === 'enemyDestroyed') {
+      this.shotHitFx.hit(6); // a bigger explosion than a normal hit, and a shake
+      this.hitFx.shake();
+    }
     if (event.type === 'shotDefended') this.cockpit.radar.defended(event.id);
     if (event.type === 'enemyFired') {
       // The ship flashes and throws a ring of yellow sparks from where words launch.

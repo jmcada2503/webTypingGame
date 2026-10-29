@@ -48,6 +48,8 @@ export type ViewEvent =
   /** The opponent typed a Shot's word and destroyed it. */
   | { type: 'shotDefended'; id: string }
   | { type: 'enemyFired'; id: string }
+  /** The Enemy ship is destroyed (the Match is won): a bigger explosion and a shake. */
+  | { type: 'enemyDestroyed' }
   /** The player has been Idle (no typing) for a while: draw attention to the Attack word. */
   | { type: 'idleNudge' }
   /** Both players stayed Idle too long: the Match ends in Peace. */
