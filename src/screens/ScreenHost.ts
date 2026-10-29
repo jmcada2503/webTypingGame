@@ -5,14 +5,14 @@ import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { SCREEN_TRANSITION } from '../render/ScreenFilters';
 import type { GameView } from '../view/GameView';
-import type { GameViewState, ViewEvent } from '../view/GameViewState';
+import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { GO_SECONDS, goFlash } from './content';
 import { bigNumber } from './countdownScreen';
 import type { ScreenSet } from './Screen';
 import { ScreenTransition, type ScreenId, transitionFor, visualOf } from './ScreenTransition';
 
 /** What the game scene shows when no Match is feeding it (the TV gap before the Match). */
-const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 } };
+const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 }, idle: NOT_IDLE };
 
 /** Creates the session that plays one Match (or Practice). Online play and Practice each bring their own. */
 export type CreateMatch = (mode: PlayMode) => GameSession;

@@ -36,6 +36,11 @@ snap.add(session, 'attackWord').name('Attack word').listen();
 snap.add(live, 'typed').name('Typed word').disable().listen();
 snap.add(session, 'lastSubmitted').name('last submitted').disable().listen();
 
+const idle = gui.addFolder('Idle nudge');
+idle.add(session, 'idleNudging').name('player Idle (nudge)');
+idle.add(session, 'idleOpponent').name('opponent Idle too');
+idle.add(session, 'peaceIn', 0, 5, 0.1).name('seconds to Peace');
+
 const spawnOpts = { word: SAMPLE_WORDS[0] };
 const wb = gui.addFolder('Word bullets');
 wb.add(spawnOpts, 'word', SAMPLE_WORDS).name('word');

@@ -341,6 +341,105 @@ describe('Idle nudge', () => {
   });
 });
 
+describe('Idle state for the view', () => {
+  test('nobody is Idle at the start', () => {
+    expect(engine().state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+
+  test('the player is nudged from 5 seconds without typing, until they type', () => {
+    const m = engine();
+
+    advance(m, 4.75);
+    expect(m.state().idle.nudging).toBe(false);
+    advance(m, 0.5);
+    expect(m.state().idle.nudging).toBe(true);
+    advance(m, 20);
+    expect(m.state().idle.nudging).toBe(true); // it keeps going, not just a one-off event
+
+    m.typed('r');
+    expect(m.state().idle.nudging).toBe(false);
+  });
+
+  test('submitting a word stops the nudge too', () => {
+    const m = engine();
+    advance(m, 6);
+    m.submit('anything');
+    expect(m.state().idle.nudging).toBe(false);
+  });
+
+  test('Practice has no Attack word to nudge', () => {
+    const m = engine({ mode: 'practice' });
+    advance(m, 30);
+    expect(m.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+
+  test('the opponent is Idle too once they report 5 seconds without typing, and the report ages', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 1, pace: 0 });
+    expect(m.state().idle.opponentIdle).toBe(false);
+
+    advance(m, 3.75); // their Idle time is now about 4.75
+    expect(m.state().idle.opponentIdle).toBe(false);
+    advance(m, 0.5);
+    expect(m.state().idle.opponentIdle).toBe(true);
+
+    m.receive({ type: 'presence', idleFor: 0.5, pace: 0 }); // they typed
+    expect(m.state().idle.opponentIdle).toBe(false);
+  });
+
+  test('when both are Idle, the snapshot counts down to Peace', () => {
+    const m = engine();
+    advance(m, 4);
+    m.receive({ type: 'presence', idleFor: 6, pace: 0 }); // they have been Idle since Match time -2
+
+    advance(m, 2); // Match time 6: I have been Idle 6 s, they 8 s
+    expect(m.state().idle).toEqual({ nudging: true, opponentIdle: true, peaceIn: 4 });
+
+    advance(m, 3); // Match time 9
+    expect(m.state().idle.peaceIn).toBeCloseTo(1);
+  });
+
+  test('Peace waits for the one who has been Idle for the shorter time', () => {
+    const m = engine();
+    advance(m, 4.5);
+    m.typed('r'); // I was active at 4.5
+    advance(m, 5.25); // Match time 9.75: I have been Idle 5.25 s
+    m.receive({ type: 'presence', idleFor: 30, pace: 0 }); // they have been Idle for ages
+
+    expect(m.state().idle.peaceIn).toBeCloseTo(4.75);
+  });
+
+  test('no countdown to Peace when only one of us is Idle', () => {
+    const me = engine();
+    advance(me, 8);
+    expect(me.state().idle).toMatchObject({ nudging: true, opponentIdle: false, peaceIn: null });
+
+    const them = engine();
+    them.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(them, 2);
+    them.typed('r');
+    expect(them.state().idle).toMatchObject({ nudging: false, opponentIdle: true, peaceIn: null });
+  });
+
+  test('typing clears the countdown', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(m, 6);
+    expect(m.state().idle.peaceIn).not.toBeNull();
+
+    m.typed('r');
+    expect(m.state().idle.peaceIn).toBeNull();
+  });
+
+  test('after the Match ends nothing is Idle any more', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(m, 12); // both Idle for over 10 s: Peace
+    expect(m.status).toBe('peace');
+    expect(m.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+});
+
 describe('Peace', () => {
   test('when both players stay Idle for over 10 seconds, the Match ends in Peace', () => {
     const m = engine();

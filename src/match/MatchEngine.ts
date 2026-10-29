@@ -1,5 +1,5 @@
 import { matchPrefix } from '../utils/matchPrefix';
-import type { GameViewState, ShotState, ViewEvent, WordBulletState } from '../view/GameViewState';
+import type { GameViewState, IdleViewState, ShotState, ViewEvent, WordBulletState } from '../view/GameViewState';
 import type { MatchConfig, MatchStatus, NetEvent } from './types';
 
 const STARTING_LIVES = 3;
@@ -158,6 +158,7 @@ export class MatchEngine {
       shots: this.shots.map((s) => ({ id: s.id, word: s.word, flight: Math.min(1, (this.time - s.firedAt) / this.config.shotFlightSeconds) })),
       enemyDamage: Math.min(1, this.hitsOnEnemy * DAMAGE_PER_HIT),
       pace: { player: this.pace, enemy: this.opponentPace },
+      idle: this.idleState(),
     };
   }
 
@@ -173,6 +174,18 @@ export class MatchEngine {
     while (this.correctWords.length && this.correctWords[0].t < this.time - PACE_WINDOW) this.correctWords.shift();
     const rate = this.correctWords.reduce((n, w) => n + w.chars, 0) / PACE_WINDOW;
     if (dt > 0) this.pace += (rate - this.pace) * (1 - Math.exp(-dt / PACE_EASE));
+  }
+
+  /** Who is Idle right now, for the view. Practice has no Attack word to nudge, and nothing is Idle once the Match ends. */
+  private idleState(): IdleViewState {
+    if (this.config.mode !== 'versus' || this.status !== 'running') return { nudging: false, opponentIdle: false, peaceIn: null };
+    const mine = this.time - this.lastActivityAt;
+    const theirs = this.opponentIdle ? this.opponentIdle.idleFor + (this.time - this.opponentIdle.at) : 0;
+    const nudging = mine >= NUDGE_AFTER;
+    const opponentIdle = this.opponentIdle !== null && theirs >= NUDGE_AFTER;
+    // Peace comes when both have been Idle for over PEACE_AFTER: it waits for whoever has been Idle for less time.
+    const peaceIn = nudging && opponentIdle ? Math.max(0, PEACE_AFTER - mine, PEACE_AFTER - theirs) : null;
+    return { nudging, opponentIdle, peaceIn };
   }
 
   private bothIdle() {
