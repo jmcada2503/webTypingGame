@@ -124,7 +124,26 @@ describe('Two players through the fake network', () => {
     expect(p.flowB.state()).toMatchObject({ screen: 'end', rematch: { status: 'incoming' } });
 
     p.flowB.declineRematch();
-    expect(p.flowA.state()).toMatchObject({ screen: 'end', rematch: { status: 'declined' } });
+    expect(p.flowA.state()).toMatchObject({ screen: 'end', rematch: { status: 'notice', notice: 'declined' } });
+  });
+
+  test('a request one side takes back disappears for the other; one nobody answers expires for both', () => {
+    const p = twoPlayers();
+    bothSearching(p);
+    p.tick(5);
+    p.tick(1.8);
+    p.flowA.matchEnded('lost');
+    p.flowB.matchEnded('won');
+
+    p.flowA.proposeRematch();
+    expect(p.flowB.state()).toMatchObject({ rematch: { status: 'incoming' } });
+    p.flowA.cancelRematch();
+    expect(p.flowB.state()).toMatchObject({ rematch: { status: 'available' } });
+
+    p.flowA.proposeRematch();
+    p.tick(10);
+    expect(p.flowA.state()).toMatchObject({ rematch: { status: 'notice', notice: 'noAnswer' } });
+    expect(p.flowB.state()).toMatchObject({ rematch: { status: 'notice', notice: 'tooLate' } });
   });
 
   test('if a player drops during the Match, the other waits 10 seconds and then wins', () => {

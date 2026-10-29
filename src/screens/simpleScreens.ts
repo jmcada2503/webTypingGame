@@ -91,11 +91,11 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
       const r = s.rematch;
       const rematch =
         r.status === 'available' ? `[R] PROPOSE A REMATCH${r.secondsLeft === null ? '' : ` (${Math.ceil(r.secondsLeft)}S)`}`
-        : r.status === 'waiting' ? 'WAITING FOR THE OPPONENT TO ANSWER...'
-        : r.status === 'incoming' ? 'THE OPPONENT WANTS A REMATCH: [R] ACCEPT  [D] DECLINE'
-        : r.status === 'declined' ? 'THE OPPONENT DECLINED THE REMATCH'
+        : r.status === 'waiting' ? `WAITING FOR THE OPPONENT TO ANSWER... ${Math.ceil(r.answerSecondsLeft)}S  [C] CANCEL`
+        : r.status === 'incoming' ? `THE OPPONENT WANTS A REMATCH (${Math.ceil(r.answerSecondsLeft)}S): [R] ACCEPT  [D] DENY`
+        : r.status === 'notice' ? { noAnswer: 'NO ANSWER', tooLate: 'TOO LATE', declined: 'DECLINED' }[r.notice]
         : r.status === 'opponentLeft' ? 'THE OPPONENT LEFT'
-        : 'NO REMATCH';
+        : 'REMATCH CLOSED';
       lines(text, 18, [rematch]);
       lines(text, 22, [s.kind === 'public' ? '[S] SEARCH FOR A NEW OPPONENT' : '', '[Q] MENU'], 'dim');
     },
@@ -107,6 +107,7 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
       } else {
         if (k === 'r') flow.proposeRematch();
         if (k === 'd') flow.declineRematch();
+        if (k === 'c') flow.cancelRematch();
         if (k === 's') flow.searchAgain();
       }
       if (k === 'q') flow.backToMenu();
