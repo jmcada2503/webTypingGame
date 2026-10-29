@@ -6,7 +6,7 @@ import type { PlayMode } from '../flow/types';
 import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameView } from '../view/GameView';
-import type { GameViewState, ViewEvent } from '../view/GameViewState';
+import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import type { Screen, ScreenSet } from './Screen';
 import { ScreenHost } from './ScreenHost';
 
@@ -26,7 +26,7 @@ class FakeView implements GameView {
   }
 }
 
-const state = (lives: number): GameViewState => ({ lives, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 } });
+const state = (lives: number): GameViewState => ({ lives, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 }, idle: NOT_IDLE });
 
 /** A Match session the tests drive by hand. */
 class FakeMatch implements GameSession {

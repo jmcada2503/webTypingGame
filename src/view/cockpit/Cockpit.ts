@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
+import { nudgeLook, peaceLabel } from './attackNudge';
 import { gridRectOf, writeCenteredScaled } from './gridProjection';
 import { Radar, RADAR_SIZE } from './Radar';
 import { matchPrefix } from '../../utils/matchPrefix';
@@ -16,6 +17,8 @@ const LAMP_FLICKER_SECONDS = 1.2;
 /** Typed word, ATTACK label and Attack word: size × the normal grid glyph. */
 const TEXT_SCALE = 1.2;
 const LAMP_FLICKER_HZ = 14;
+/** The `PEACE IN n` label sits this many grid rows above the Attack word. */
+const PEACE_LABEL_ROWS_UP = 10;
 
 /**
  * The player's Cockpit ("Cockpit design": pilot controls), built from primitives in camera-local
@@ -44,6 +47,8 @@ export class Cockpit {
   private readonly labelAnchors: { panel: THREE.Object3D; anchor: THREE.Object3D }[] = [];
   readonly radar: Radar;
   private t = 0;
+  /** Seconds the Idle nudge has been running (0 when it is not). */
+  private nudgeT = 0;
   private lastLives = -1;
   private typedShake = 0;
   /** Grid cell at the center of the Typed word screen (the Cockpit's center), as last drawn. */
@@ -137,6 +142,7 @@ export class Cockpit {
 
   update(state: GameViewState, dt: number, text: TextGrid) {
     this.t += dt;
+    this.nudgeT = state.idle.nudging ? this.nudgeT + dt : 0;
     // A life lost: the lamp(s) that just went out flicker before staying dark ("Juice: Hit taken").
     if (this.lastLives >= 0 && state.lives < this.lastLives) {
       for (let i = state.lives; i < this.lastLives; i++) this.flicker.set(i, LAMP_FLICKER_SECONDS);
@@ -172,7 +178,8 @@ export class Cockpit {
     const row = edge.r0 - 2;
     text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' '); // two rows, so the larger text sits on blank
     const textRow = row + 1 - TEXT_SCALE / 2; // centered on the blank rows
-    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, 'dim');
+    const look = state.idle.nudging ? nudgeLook(this.nudgeT, state.idle.opponentIdle) : null;
+    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, look ? 'fg' : 'dim'); // bright while the nudge runs
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
@@ -181,9 +188,23 @@ export class Cockpit {
     const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
     const at = edge.c1 - letters.length * TEXT_SCALE - 1;
     text.writeScaled(at, textRow, letters.slice(0, typed).join(''), TEXT_SCALE, 'fg');
-    text.writeScaled(at + typed * TEXT_SCALE, textRow, letters.slice(typed).join(''), TEXT_SCALE, 'red');
+    text.writeScaled(at + typed * TEXT_SCALE, textRow, letters.slice(typed).join(''), TEXT_SCALE, look?.popping ? 'yellow' : 'red');
+    if (look) this.drawNudge(text, at, letters.length * TEXT_SCALE, textRow, look);
+    if (state.idle.peaceIn !== null) {
+      // Both players are Idle: a steady white label above the Attack word counts down to Peace.
+      const label = peaceLabel(state.idle.peaceIn);
+      text.write(Math.round((ASCII_STYLE.grid.cols - label.length) / 2), Math.round(textRow - PEACE_LABEL_ROWS_UP), label, 'fg');
+    }
 
     this.radar.draw(text, this.camera, state.shots, dt);
+  }
+
+  /** The Idle nudge: a marker bobbing above the Attack word, a hint, and an underline ("Prototype: Idle nudge animation"). */
+  private drawNudge(text: TextGrid, at: number, width: number, textRow: number, look: ReturnType<typeof nudgeLook>) {
+    const cx = at + width / 2;
+    text.write(Math.round(cx - 0.5), Math.round(textRow - 3 + look.markerOffset), 'V', 'yellow');
+    if (look.hint) text.write(Math.round(cx - 3.5), Math.round(textRow - 5), 'TYPE IT', 'yellow');
+    text.write(Math.round(at), Math.round(textRow + 1.7), '^'.repeat(Math.ceil(width)), look.underlineLit ? 'yellow' : 'dim');
   }
 
   dispose() {
