@@ -5,7 +5,7 @@ import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { SCREEN_TRANSITION } from '../render/ScreenFilters';
 import type { GameView } from '../view/GameView';
-import type { GameViewState, ViewEvent } from '../view/GameViewState';
+import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { GO_SECONDS, goFlash } from './content';
 import { bigNumber } from './countdownScreen';
 import { ENDINGS, endingFrame, endingMoments, type EndingResult } from './endings';
@@ -13,7 +13,7 @@ import type { ScreenSet } from './Screen';
 import { ScreenTransition, type ScreenId, transitionFor, visualOf } from './ScreenTransition';
 
 /** What the game scene shows when no Match is feeding it (the TV gap before the Match). */
-const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 } };
+const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: 0, enemy: 0 }, idle: NOT_IDLE };
 
 /** Creates the session that plays one Match (or Practice). Online play and Practice each bring their own. */
 export type CreateMatch = (mode: PlayMode) => GameSession;
@@ -88,10 +88,11 @@ export class ScreenHost implements GameSession {
   state(): GameViewState {
     const base = this.displayed === 'match' && this.match ? this.match.state() : IDLE_STATE;
     if (!this.ending) return base;
-    // The ending's effect on what the view is told: Peace says PEACE!! and the stars race, Lose slows the stars.
+    // The ending's effect on what the view is told: Peace keeps the Idle nudge's PEACE!! label up and the stars race, Lose slows the stars.
     const f = endingFrame(this.ending.result, this.ending.t);
     const pace = f.pace ?? base.pace.player * f.paceScale;
-    return { ...base, attackWord: this.ending.result === 'peace' ? 'PEACE!!' : base.attackWord, pace: { player: pace, enemy: f.pace ?? base.pace.enemy * f.paceScale } };
+    const idle = this.ending.result === 'peace' ? { nudging: false, opponentIdle: false, peaceIn: 0 } : base.idle;
+    return { ...base, idle, pace: { player: pace, enemy: f.pace ?? base.pace.enemy * f.paceScale } };
   }
 
   /** The ending scene of a Win / Lose / Peace: apply it, play its one-off moments, then change screen. */

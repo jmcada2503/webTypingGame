@@ -29,8 +29,7 @@ export interface GameView {
    */
   setOverlay(draw: ((text: TextGrid, dt: number) => void) | null): void;
   /**
-   * The scene's ending (Win / Lose / Peace): hides or moves the Enemy ship, dims the picture, and (Peace) turns
-   * the Attack label and word to PEACE!!. Applied every frame while set; pass null to go back to normal.
+   * The scene's ending (Win / Lose / Peace): hides or moves the Enemy ship, dims the picture,. Applied every frame while set; pass null to go back to normal.
    */
   setEnding(frame: EndingFrame | null): void;
   /**

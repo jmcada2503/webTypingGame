@@ -9,9 +9,9 @@ describe('ending timelines (seconds after the result is known)', () => {
     expect(ENDINGS.lost).toMatchObject({ effect: TV_OFF_ON, hold: 1, sceneSeconds: 3.8 });
   });
 
-  test('at the start Win and Lose leave the scene untouched (Peace already changes the labels)', () => {
-    for (const r of ['won', 'lost'] as const) {
-      expect(endingFrame(r, 0)).toEqual({ enemyVisible: true, enemyOffset: { x: 0, y: 0, z: 0 }, pace: null, paceScale: 1, dim: 0, peaceLabels: false });
+  test('at the start the scene is untouched', () => {
+    for (const r of ['won', 'lost', 'peace'] as const) {
+      expect(endingFrame(r, 0)).toEqual({ enemyVisible: true, enemyOffset: { x: 0, y: 0, z: 0 }, pace: null, paceScale: 1, dim: 0 });
     }
   });
 });
@@ -45,11 +45,6 @@ describe('Lose', () => {
 });
 
 describe('Peace', () => {
-  test('both labels turn to PEACE!! at once', () => {
-    expect(endingFrame('peace', 0).peaceLabels).toBe(true);
-    expect(endingFrame('peace', 3).peaceLabels).toBe(true);
-  });
-
   test('the Enemy ship flies away from 0.8 s over 3 s, up, aside and far off, accelerating', () => {
     expect(endingFrame('peace', 0.8).enemyOffset).toEqual({ x: 0, y: 0, z: 0 });
     const mid = endingFrame('peace', 2.3).enemyOffset; // halfway: k = 0.5, eased to 0.25

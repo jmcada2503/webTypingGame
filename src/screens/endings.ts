@@ -18,8 +18,6 @@ export interface EndingFrame {
   paceScale: number;
   /** How dark the picture is, 0..1 (Lose: the lights dim). */
   dim: number;
-  /** The Attack label and the Attack word both read PEACE!! (the word in white). */
-  peaceLabels: boolean;
 }
 
 /** One-off moments the view plays. */
@@ -41,7 +39,7 @@ export const ENDINGS: Record<EndingResult, EndingPlan> = {
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
-const NEUTRAL: EndingFrame = { enemyVisible: true, enemyOffset: { x: 0, y: 0, z: 0 }, pace: null, paceScale: 1, dim: 0, peaceLabels: false };
+const NEUTRAL: EndingFrame = { enemyVisible: true, enemyOffset: { x: 0, y: 0, z: 0 }, pace: null, paceScale: 1, dim: 0 };
 
 /** Where the Peace ship ends up: up, aside and far off. */
 const PEACE_FLY = { x: 30, y: 12, z: -70 };
@@ -54,7 +52,6 @@ export function endingFrame(result: EndingResult, t: number): EndingFrame {
     frame.paceScale = 1 - clamp01((t - 0.4) / 1);
     frame.dim = Math.min(0.85, Math.max(0, (t - 0.6) * 0.45));
   } else {
-    frame.peaceLabels = true;
     if (t >= 0.8) frame.pace = Math.min(9, 2 + (t - 0.8) * 3);
     const k = clamp01((t - 0.8) / 3);
     const e = k * k;

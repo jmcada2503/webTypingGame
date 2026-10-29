@@ -20,6 +20,13 @@ import type { AttackWordSource } from './types';
  */
 export const ATTACK_PICKER_VERSION = 1;
 
+/**
+ * Where each Match on one connection starts its Attack-word indices: Match k (0 = the first, then each
+ * Rematch) starts at k * this, for both players. Both sides count Rematches the same way, so they agree
+ * without sending indices (Shots still in flight when a Match ends are dropped, so counting them would drift).
+ */
+export const REMATCH_INDEX_STRIDE = 10_000;
+
 export type TierWeights = Readonly<Record<Tier, number>>;
 
 /**

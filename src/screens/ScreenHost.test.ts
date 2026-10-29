@@ -6,7 +6,7 @@ import type { PlayMode } from '../flow/types';
 import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameView } from '../view/GameView';
-import type { GameViewState, ViewEvent } from '../view/GameViewState';
+import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import type { EndingFrame } from './endings';
 import type { Screen, ScreenSet } from './Screen';
 import { ScreenHost } from './ScreenHost';
@@ -31,7 +31,7 @@ class FakeView implements GameView {
   }
 }
 
-const state = (lives: number, pace = 0): GameViewState => ({ lives, typedWord: '', attackWord: 'rocket', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: pace, enemy: pace } });
+const state = (lives: number, pace = 0): GameViewState => ({ lives, typedWord: '', attackWord: 'rocket', wordBullets: [], shots: [], enemyDamage: 0, pace: { player: pace, enemy: pace }, idle: NOT_IDLE });
 
 /** A Match session the tests drive by hand. */
 class FakeMatch implements GameSession {
@@ -303,7 +303,6 @@ describe('Online endings', () => {
     ctx.made[0].status = 'peace';
 
     ctx.run(2);
-    expect(ctx.view.ending?.peaceLabels).toBe(true);
     expect(ctx.view.ending?.enemyOffset.x).toBeGreaterThan(0);
     expect(sceneIsShown(ctx)).toBe(true);
 
@@ -323,11 +322,11 @@ describe('Online endings', () => {
     expect(ctx.made[0].updates).toBe(updates);
   });
 
-  test('during a Peace the Attack word reads PEACE!!, and during a Lose the Pace slows to a stop', () => {
+  test('during a Peace the Idle nudge hands over to its PEACE!! label, and during a Lose the Pace slows to a stop', () => {
     const peace = intoOnlineMatch();
     peace.made[0].status = 'peace';
     peace.run(1);
-    expect(peace.host.state().attackWord).toBe('PEACE!!');
+    expect(peace.host.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: 0 });
 
     const lose = intoOnlineMatch();
     lose.made[0].paceNow = 4;

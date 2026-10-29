@@ -52,8 +52,10 @@ export type NetworkEvent =
   | { type: 'inviteInvalid'; reason: 'full' | 'expired' }
   /** An opponent was found; the two clients now connect to each other. */
   | { type: 'matched' }
-  /** Both connections are confirmed. */
+  /** Both connections are confirmed (sent at the same moment on both sides: the Countdown starts together). */
   | { type: 'connected' }
+  /** The connection can't be made (no network path, the backend refused or is unreachable). */
+  | { type: 'connectFailed' }
   /** The opponent's connection dropped; in a Match they get a short grace to come back. */
   | { type: 'opponentDisconnected' }
   | { type: 'opponentReconnected' }

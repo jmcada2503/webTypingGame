@@ -102,6 +102,11 @@ export class SandboxSession implements GameSession {
     return events;
   }
 
+  /** Panel switches for the Idle nudge (sandbox only): the player is nudged, the opponent is Idle too, seconds to Peace. */
+  idleNudging = false;
+  idleOpponent = false;
+  peaceIn = 4;
+
   state(): GameViewState {
     return {
       lives: this.lives,
@@ -111,6 +116,7 @@ export class SandboxSession implements GameSession {
       shots: this.shots.map((s) => ({ ...s })),
       enemyDamage: this.enemyDamage,
       pace: { player: this.playerPaceOverride >= 0 ? this.playerPaceOverride : this.measuredPace, enemy: this.enemyPace },
+      idle: { nudging: this.idleNudging, opponentIdle: this.idleOpponent, peaceIn: this.idleNudging && this.idleOpponent ? this.peaceIn : null },
     };
   }
 

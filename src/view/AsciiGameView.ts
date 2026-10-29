@@ -104,13 +104,10 @@ export class AsciiGameView implements GameView {
     if (!frame) this.applyEnding(null);
   }
 
-  /** Apply the ending's frame to the scene: the Enemy ship, the Peace labels. (The dimming is added after the hit flash fades.) */
+  /** Apply the ending's frame to the scene: the Enemy ship. (The dimming is added after the hit flash fades.) */
   private applyEnding(frame: EndingFrame | null) {
     this.enemy.root.visible = frame ? frame.enemyVisible : true;
     this.enemy.endingOffset.set(frame?.enemyOffset.x ?? 0, frame?.enemyOffset.y ?? 0, frame?.enemyOffset.z ?? 0);
-    this.cockpit.attackLabel = frame?.peaceLabels ? 'PEACE!!' : 'ATTACK';
-    this.cockpit.attackLabelColor = frame?.peaceLabels ? 'fg' : 'dim';
-    this.cockpit.attackWordWhite = frame?.peaceLabels ?? false;
   }
 
   render(state: GameViewState, dt: number) {
