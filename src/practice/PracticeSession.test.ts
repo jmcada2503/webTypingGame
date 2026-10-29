@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import { FakeTypingInput } from '../input/FakeTypingInput';
 import { loadWordList, type WordList } from '../words/wordLists';
-import { PRACTICE_CALIBRATION, PRACTICE_RAMP } from './PracticeDirector';
+import { PRACTICE_ACCELERATION, PRACTICE_CALIBRATION, PRACTICE_RAMP } from './PracticeDirector';
 import { PracticeSession } from './PracticeSession';
 
 let list: WordList;
@@ -44,7 +44,14 @@ function practice(seed = 1) {
       }
     };
   };
-  return { session, input, play, typist };
+  /** A player who types every Word bullet at the last moment, so there is always a word on screen. */
+  const lastMoment = (seconds: number) => {
+    for (let t = 0; t < seconds - 1e-9; t += STEP) {
+      session.update(STEP);
+      session.state().wordBullets.filter((b) => b.flight >= 0.9).forEach((b) => input.say(b.word));
+    }
+  };
+  return { session, input, play, typist, lastMoment };
 }
 
 describe('a Practice run', () => {
@@ -154,9 +161,10 @@ describe('placing the player from their first words', () => {
     expect(results[1].startLevel!).toBeLessThan(results[2].startLevel!);
   });
 
-  test('a slow typist starts from the beginning', () => {
+  test('a slow player who misses words starts from the beginning', () => {
     const { session, typist } = practice();
-    typist(0.8)(60);
+    typist(1.5, (n) => n === 1 || n === 3)(60);
+    expect(session.status).toBe('running'); // two Lives lost, one left
     expect(session.result().startLevel).toBe(0);
   });
 
@@ -180,6 +188,48 @@ describe('placing the player from their first words', () => {
     const { session, typist } = practice();
     typist(4)(90);
     expect(session.status).toBe('running');
+  });
+});
+
+describe('the level rises faster while the screen is empty', () => {
+  /** Plays second by second until the run is placed, then on to `total` seconds. Returns how the level moved since. */
+  function riseSincePlacement(player: 'fast typist' | 'last-moment player', total: number) {
+    const { session, typist, lastMoment } = practice();
+    const play = player === 'fast typist' ? typist(6) : lastMoment;
+    let placedAt: number | null = null;
+    for (let t = 0; t < total; t++) {
+      play(1);
+      if (placedAt === null && session.result().startLevel !== null) placedAt = session.result().survivedSeconds;
+    }
+    const r = session.result();
+    return { session, r, since: r.survivedSeconds - placedAt!, rise: r.currentLevel! - r.startLevel! };
+  }
+
+  test('there is no level before the player is placed', () => {
+    const { session, play } = practice();
+    play(3);
+    expect(session.result().currentLevel).toBeNull();
+  });
+
+  test('a typist who keeps clearing the screen climbs faster than time passes, but not faster than the speed-up allows', () => {
+    const { r, since, rise } = riseSincePlacement('fast typist', 60);
+    expect(r.currentLevel!).toBeLessThan(PRACTICE_RAMP.rampSeconds); // not capped, so the numbers mean something
+    expect(rise).toBeGreaterThan(since * 1.3);
+    expect(rise).toBeLessThanOrEqual(since * PRACTICE_ACCELERATION.emptyScreenRate + 1);
+  });
+
+  test('a player who always has a word to type climbs in step with time', () => {
+    const { session, since, rise } = riseSincePlacement('last-moment player', 90);
+    expect(session.status).toBe('running');
+    expect(since).toBeGreaterThan(40);
+    expect(rise).toBeGreaterThan(since * 0.9);
+    expect(rise).toBeLessThan(since * 1.3);
+  });
+
+  test('the level stops moving when the run is over', () => {
+    const { session, play } = practice();
+    play(60); // never types: lost before being placed
+    expect(session.result().currentLevel).toBeNull();
   });
 });
 

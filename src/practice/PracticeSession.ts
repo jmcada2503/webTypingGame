@@ -28,6 +28,8 @@ export interface PracticeResult {
   calibrationPace: number | null;
   /** The ramp second the run was moved on to from that Pace (0 = the beginning); `null` until placed. */
   startLevel: number | null;
+  /** The ramp second the run is at now (it climbs faster while the screen is empty); `null` until placed. */
+  currentLevel: number | null;
 }
 
 export interface PracticeOptions {
@@ -120,6 +122,7 @@ export class PracticeSession implements GameSession {
       wpm: (averagePace * 60) / LETTERS_PER_WORD,
       calibrationPace: this.calibrationPace,
       startLevel: this.director.startLevel,
+      currentLevel: this.director.rampTime,
     };
   }
 

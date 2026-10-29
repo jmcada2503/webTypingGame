@@ -29,7 +29,7 @@ const show = (r: PracticeResult, done: boolean) =>
     `pace      ${r.averagePace.toFixed(1)} letters/s avg, ${r.peakPace.toFixed(1)} peak (${Math.round(r.wpm)} wpm)`,
     r.startLevel === null
       ? 'level     measuring your speed...'
-      : `level     started at ${r.startLevel} s of the ramp (measured ${(r.calibrationPace ?? 0).toFixed(1)} letters/s)`,
+      : `level     ${Math.round(r.currentLevel ?? 0)} s of the ramp (placed at ${r.startLevel} s from ${(r.calibrationPace ?? 0).toFixed(1)} letters/s; climbs faster when the screen is empty)`,
     done ? 'reload to play again' : '',
   ].join('\n'));
 

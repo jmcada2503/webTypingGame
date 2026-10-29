@@ -28,9 +28,15 @@ export const PRACTICE_CALIBRATION = {
 /** Where the player is placed on the ramp. */
 export const PRACTICE_PLACEMENT = {
   /** The level starts out asking this share of the player's measured Pace (they then climb from there). */
-  share: 0.6,
+  share: 0.8,
   /** The measured Pace never divides by less than this many seconds of words on screen. */
   minActiveSeconds: 3,
+} as const;
+
+/** After placement, the ramp climbs faster while the player has nothing to type, so it never gets boring. */
+export const PRACTICE_ACCELERATION = {
+  /** Seconds of ramp that pass per real second while no Word bullet is on screen (1 = no speed-up). */
+  emptyScreenRate: 3,
 } as const;
 
 export interface RampStep {
@@ -113,7 +119,8 @@ const CALIBRATION_STEP: RampStep = {
  * randomness over the word list. Time moves only through `advance(dt)`.
  *
  * A run starts `calibrating` (gentle, fixed words). The caller measures the player and calls
- * `finishCalibration(pace)`: the ramp clock jumps ahead to the player's level and keeps rising from there.
+ * `finishCalibration(pace)`: the ramp clock jumps ahead to the player's level and keeps rising from there,
+ * one second per second, or `PRACTICE_ACCELERATION.emptyScreenRate` seconds per second while the screen is empty.
  */
 export class PracticeDirector {
   phase: DirectorPhase = 'calibrating';
@@ -123,8 +130,13 @@ export class PracticeDirector {
   private readonly random: () => number;
   private elapsed = 0;
   private nextAt: number = PRACTICE_RAMP.firstSpawnAt;
-  /** The ramp clock: `rampTime = startLevel + (time since the ramp began)`. */
-  private rampBegan = 0;
+  /** The ramp clock, in ramp seconds (not capped: `rampAt` caps it). */
+  private rampClock = 0;
+
+  /** The difficulty level right now, in ramp seconds (0..`rampSeconds`); `null` while calibrating. */
+  get rampTime(): number | null {
+    return this.phase === 'ramp' ? Math.min(this.rampClock, PRACTICE_RAMP.rampSeconds) : null;
+  }
 
   constructor(options: PracticeDirectorOptions) {
     for (const tier of TIERS) {
@@ -142,19 +154,25 @@ export class PracticeDirector {
   finishCalibration(pace: number): number {
     this.startLevel = startLevelFor(pace, this.list);
     this.phase = 'ramp';
-    this.rampBegan = this.elapsed;
+    this.rampClock = this.startLevel;
     this.nextAt = this.elapsed + PRACTICE_RAMP.firstSpawnAt;
     return this.startLevel;
   }
 
-  /** Moves time on by `dt` seconds. `inFlight` = the words of the Word bullets on screen (not repeated). */
+  /**
+   * Moves time on by `dt` seconds. `inFlight` = the words of the Word bullets on screen: they are not repeated,
+   * and when there are none the ramp runs faster for this step.
+   */
   advance(dt: number, inFlight: readonly string[]): Spawn[] {
     if (!(dt > 0)) return [];
     this.elapsed += dt;
+    const rate = this.phase === 'ramp' && inFlight.length === 0 ? PRACTICE_ACCELERATION.emptyScreenRate : 1;
+    if (this.phase === 'ramp') this.rampClock += dt * rate;
     const taken = new Set(inFlight);
     const out: Spawn[] = [];
     while (this.nextAt <= this.elapsed) {
-      const step = this.stepAt(this.nextAt); // the difficulty at the moment the word was due
+      // The difficulty at the moment the word was due, counted back from the ramp clock now.
+      const step = this.phase === 'calibrating' ? CALIBRATION_STEP : rampAt(this.rampClock - (this.elapsed - this.nextAt) * rate);
       const word = this.pickWord(step.weights, taken);
       taken.add(word);
       out.push({ word, flightSeconds: step.flightSeconds });
@@ -162,10 +180,6 @@ export class PracticeDirector {
       this.nextAt += step.spawnEvery * jitter;
     }
     return out;
-  }
-
-  private stepAt(time: number): RampStep {
-    return this.phase === 'calibrating' ? CALIBRATION_STEP : rampAt(this.startLevel! + (time - this.rampBegan));
   }
 
   private draw(weights: RampStep['weights']): string {

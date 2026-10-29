@@ -3,6 +3,7 @@ import { loadWordList, TIER_LENGTHS, TIERS, type Tier, type WordList } from '../
 import {
   demandAt,
   meanLengths,
+  PRACTICE_ACCELERATION,
   PRACTICE_CALIBRATION,
   PRACTICE_PLACEMENT,
   PRACTICE_RAMP,
@@ -34,12 +35,18 @@ function placed(list: WordList, pace: number, random: () => number = middle) {
   return d;
 }
 
-/** Runs the director for `seconds` in 1/16 s steps, returning every spawn with the time it happened. */
-function run(director: PracticeDirector, seconds: number, from = 0) {
+/** A screen that is never empty: something is always flying, so the ramp does not speed up. */
+const BUSY = ['on-screen'];
+
+/**
+ * Runs the director for `seconds` in 1/16 s steps, returning every spawn with the time it happened.
+ * `onScreen` is what the player has on screen the whole time (default: always something).
+ */
+function run(director: PracticeDirector, seconds: number, from = 0, onScreen: readonly string[] = BUSY) {
   const out: { t: number; spawn: Spawn }[] = [];
   const dt = 1 / 16;
   for (let t = from; t < from + seconds - 1e-9; t += dt) {
-    for (const spawn of director.advance(dt, [])) out.push({ t: t + dt, spawn });
+    for (const spawn of director.advance(dt, onScreen)) out.push({ t: t + dt, spawn });
   }
   return out;
 }
@@ -221,8 +228,8 @@ describe('placing the player', () => {
     const d = new PracticeDirector({ list: en, random: middle });
     run(d, 11.4375); // calibration words are due at 1.5, 4, 6.5, 9, 11.5 s: the next one is a moment away
     d.finishCalibration(3);
-    expect(d.advance(0.9, [])).toEqual([]); // that word is dropped; the first one at the new level is 1.5 s away
-    const spawns = d.advance(1, []);
+    expect(d.advance(0.9, BUSY)).toEqual([]); // that word is dropped; the first one at the new level is 1.5 s away
+    const spawns = d.advance(1, BUSY);
     expect(spawns).toHaveLength(1);
     expect(spawns[0].flightSeconds).toBeLessThan(PRACTICE_CALIBRATION.flightSeconds);
   });
@@ -230,6 +237,67 @@ describe('placing the player', () => {
   test('works for Spanish too', () => {
     expect(startLevelFor(3, es)).toBeGreaterThan(0);
     expect(startLevelFor(3, es)).toBeLessThanOrEqual(PRACTICE_RAMP.rampSeconds);
+  });
+});
+
+describe('acceleration while the screen is empty', () => {
+  const rate = PRACTICE_ACCELERATION.emptyScreenRate;
+
+  test('there is a real speed-up to test', () => {
+    expect(rate).toBeGreaterThan(1);
+  });
+
+  test('the ramp clock starts at the placement level and runs in step with time while the screen is busy', () => {
+    const d = placed(en, 3);
+    const level = d.startLevel!;
+    expect(d.rampTime).toBe(level);
+    d.advance(10, BUSY);
+    expect(d.rampTime).toBeCloseTo(level + 10, 9);
+  });
+
+  test('it runs faster while no Word bullet is on screen, by the emptyScreenRate', () => {
+    const d = placed(en, 3);
+    const level = d.startLevel!;
+    d.advance(10, []);
+    expect(d.rampTime).toBeCloseTo(level + 10 * rate, 9);
+    d.advance(10, BUSY);
+    expect(d.rampTime).toBeCloseTo(level + 10 * rate + 10, 9);
+  });
+
+  test('the speed-up follows how long the screen is empty: only the empty seconds count extra', () => {
+    const d = placed(en, 3);
+    const level = d.startLevel!;
+    for (let k = 0; k < 20; k++) d.advance(1, k % 2 === 0 ? [] : BUSY); // 10 s empty, 10 s busy
+    expect(d.rampTime).toBeCloseTo(level + 10 * rate + 10, 9);
+  });
+
+  test('the level shown never goes past the end of the ramp', () => {
+    const d = placed(en, 1000);
+    d.advance(100, []);
+    expect(d.rampTime).toBe(PRACTICE_RAMP.rampSeconds);
+  });
+
+  test('an empty screen makes later words come faster and fly faster than a busy one does', () => {
+    const busy = run(placed(en, 1), 90, 0, BUSY);
+    const empty = run(placed(en, 1), 90, 0, []);
+    expect(empty.length).toBeGreaterThan(busy.length);
+    expect(empty.at(-1)!.spawn.flightSeconds).toBeLessThan(busy.at(-1)!.spawn.flightSeconds);
+  });
+
+  test('a word fired during an empty stretch is at the harder level that stretch reached', () => {
+    const d = placed(en, 1); // level 0
+    const spawns = run(d, 30, 0, []);
+    const last = spawns.at(-1)!;
+    // Ramp time at that spawn: about `rate` times the seconds since placement (less the small first delay)
+    expect(last.spawn.flightSeconds).toBeCloseTo(rampAt(last.t * rate).flightSeconds, 0);
+    expect(last.spawn.flightSeconds).toBeLessThan(rampAt(last.t).flightSeconds);
+  });
+
+  test('it does not apply during calibration: the first words keep their fixed pace even with an empty screen', () => {
+    const d = new PracticeDirector({ list: en, random: middle });
+    const spawns = run(d, 30, 0, []);
+    for (const g of gapsOf(spawns)) expect(g).toBeCloseTo(PRACTICE_CALIBRATION.spawnEvery, 0);
+    expect(d.rampTime).toBeNull();
   });
 });
 
