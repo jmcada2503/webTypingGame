@@ -7,13 +7,16 @@ The rules of one **Match** (or of **Practice**) as plain TypeScript: no DOM, no 
 | `MatchEngine.ts` | The rules. One engine = one Match. |
 | `MatchSession.ts` | A thin `GameSession` that wires the engine to the existing `TypingInput` and to a `MatchTransport`. |
 | `types.ts` | `MatchConfig`, `AttackWordSource`, `NetEvent`, `MatchTransport`, `MatchStatus`. |
+| `attackWords.ts` | The seeded Attack-word picker: `pick`, `createAttackWordSource`, the difficulty curve. |
+| `ShotVerifier.ts` | Checks the opponent's Shots against their seed. |
 
 ## Using it
 
 ```ts
 const engine = new MatchEngine({
   mode: 'versus',                 // or 'practice': no Attack word, no opponent, no Peace
-  attackWords: seededPicker,      // { wordAt(i, t): string }, see below
+  attackWords: createAttackWordSource(mySeed, list), // { wordAt(i, t): string }, see Seeded Attack words
+  verifyShot: (shot, at) => verifier.verify(shot, at).ok, // optional: ignore Shots that fail the check
   startIndex: 0,                  // continue the word index after a Rematch
   bulletFlightSeconds: 8,         // Flight 0 → 1 (placeholder, tuned later)
   shotFlightSeconds: 8,           // how long a Shot takes to reach the Enemy ship on the Radar
@@ -26,7 +29,7 @@ session.start();
 
 Engine methods: `typed(word)` (the Typed word changed, which counts as activity), `submit(word)` (Space or Enter), `receive(netEvent)`, `drainOutgoing()`, `spawnBullet(word)` (Practice), `update(dt)` → `ViewEvent[]`, `state()` → `GameViewState`, `stats()`, and `status` (`running | won | lost | peace`). `MatchSession` calls these from `TypingInput.onChange` / `onSubmit`; the engine never sees raw keys. After the Match ends it ignores input, events and time, and the session disables the input.
 
-**Attack words:** `wordAt(i, t)` returns the `i`-th word, picked at Match time `t` (the moment the previous Attack word was fired; `0` for the first). The real source is the seeded picker over the word list with the server-issued seed (a separate ticket); tests use a fake.
+**Attack words:** `wordAt(i, t)` returns the `i`-th word, picked at Match time `t` (the moment the previous Attack word was fired; `0` for the first). The real source is the seeded picker (below); tests use a fake.
 
 ## Rules
 
@@ -53,6 +56,17 @@ The only thing crossing the wire. Each engine produces them with `drainOutgoing(
 
 Each client judges its own defense; the opponent trusts these reports. A `MatchTransport` (`send(event)` and `onEvent(cb)`) carries them: P2P WebRTC implements it, and a relay could replace it without touching the rules.
 
+## Seeded Attack words
+
+At pairing the server issues each player a 32-bit seed; both players know both seeds. Player P's `i`-th Attack word is `pick(seedP, i, t, list)`: a pure function of the seed, the index, the Match time `t` it was picked at, and the word list. It is stateless (any `i` can be recomputed in any order) and uses only exact integer maths, so every browser gets the same word.
+
+- **Difficulty:** `t` moves the chance of each length tier in a straight line from `DIFFICULTY.start` (short 55%, medium 40%, long 5%) at 0 s to `DIFFICULTY.end` (15 / 40 / 45%) at `rampSeconds` (180 s), then it stays. Short words are always possible. The numbers are a tunable constant in `attackWords.ts`.
+- **Rematch:** the same seed keeps being used; the next Match starts at `startIndex` = the next unused `i`, with `t` back at 0. No API call.
+- **Verifying:** `new ShotVerifier({ seed: opponentSeed, list, startIndex, oneWayLatency, report })`, then pass `verify(shot, matchTime).ok` to the engine as `verifyShot`. A Shot is accepted when it is the next index (a cheater can't skip ahead to easy words), its `t` is within 1 s of (previous Shot's arrival time - one-way latency; exactly 0 for the first), `t` doesn't go backwards, and the word is what the seed picks. Otherwise the engine ignores it (no Word bullet) and the verifier reports `invalid_attack` with a reason (`bad_index`, `bad_time`, `non_monotonic`, `bad_word`, `malformed`). Accepted Shots more than half way into the tolerance are reported as `near_miss`. A repeat of an accepted Shot is ignored quietly.
+- **Only accepted Shots advance the sequence.** That stops a modified client skipping a hard word by sending a bad Shot, but an honest Shot that is wrongly rejected (clocks further apart than the tolerance) also blocks that player's later Shots. The tolerance is tuned with the near-miss logs.
+- **Both sides must agree** on the picker, the curve and the word list. `ATTACK_PICKER_VERSION` (bump it on any change to `attackWords.ts`) and the word list's `listVersion` should be compared in the handshake. A test pins exact words for fixed inputs so a change can't slip by.
+- **The Match clock:** the check assumes both engines' clocks run in step (the Countdown's `startAt` syncs them). `update(dt)` clamps `dt` in the app shell, so a frozen or throttled tab drifts from the opponent's clock.
+
 ## Not in the engine
 
-The Countdown and the transitions between screens, the seeded word picker and its peer verification (a Shot's `{i, t, word}` is what the opponent will check), the real transport, the Rematch flow, win / lose / Peace screens, and the Match report.
+The Countdown and the transitions between screens, the real transport, the Rematch flow, win / lose / Peace screens, and the Match report.

@@ -101,7 +101,9 @@ export class MatchEngine {
   /** An event from the opponent. */
   receive(event: NetEvent) {
     if (this.status !== 'running') return;
-    if (event.type === 'shot') this.addBullet(`e${event.i}`, event.word, event.i);
+    if (event.type === 'shot' && (this.config.verifyShot?.(event, this.time) ?? true)) {
+      this.addBullet(`e${event.i}`, event.word, event.i);
+    }
     if (event.type === 'presence') {
       this.opponentIdle = { idleFor: event.idleFor, at: this.time };
       this.opponentPace = event.pace;
