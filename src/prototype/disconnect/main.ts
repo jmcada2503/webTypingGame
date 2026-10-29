@@ -2,7 +2,7 @@
 // Question: what should the player see (1) while the opponent's connection is down in a Match (10 s grace),
 // and (2) on the "Opponent left" screen afterwards?   Real renderer + CRT filter, stub opponent, no networking.
 //
-// Keys:  D  opponent's connection drops (10 s grace, then the win + Opponent left screen; the 3rd drop skips the grace)
+// Keys:  D  opponent's connection drops (10 s grace, then a glitch into the Opponent left screen; the 3rd drop skips the grace)
 //        X  opponent comes back during the grace (words reappear, 5 s countdown)      R  reset to a running Match
 //        1-4 disconnect animation A-D                 [ ]  Opponent-left layout 1-3
 //        C  where it happened (waiting / countdown / match)      P  Public / Private
@@ -23,10 +23,9 @@ const COLS = 128;
 const GRACE = 10; // seconds the opponent has to come back
 const params = new URLSearchParams(location.search);
 
-type Phase = 'match' | 'lost' | 'back' | 'win' | 'left';
+type Phase = 'match' | 'lost' | 'back' | 'left';
 const BACK_BEAT = 0.8; // the words reappear this long before the countdown starts
 const BACK_COUNT = 5; // seconds of countdown over the game once the opponent is back
-const WIN_STUB = 2.6; // placeholder for the win animation (its own prototype ticket)
 const MAX_DROPS = 3; // the 3rd signal loss in a Match: no reconnect time, the opponent is considered gone
 let drops = 0;
 let reason: 'timeout' | 'unstable' = 'timeout';
@@ -148,7 +147,7 @@ hidden.ascii.render = (scene, camera, overlay) => {
   const t = phaseT();
   const world = phase !== 'left';
   hidden.scene.visible = world;
-  hidden.overlay.visible = world && !((phase === 'lost' && hideWords && wordsHiddenWhenLost(t)) || phase === 'win');
+  hidden.overlay.visible = world && !((phase === 'lost' && hideWords && wordsHiddenWhenLost(t)));
   if (!world) text.clear();
   else text.fill(7, 1, 30, 3, ' '); // hide the game view's dim debug event label
   if (phase === 'lost' && !trans && t < 0.5) {
@@ -159,11 +158,9 @@ hidden.ascii.render = (scene, camera, overlay) => {
   session.pace = { player: 1, enemy: 1 };
   if (phase === 'lost') drawLost(t);
   else if (phase === 'back') drawBack(t);
-  else if (phase === 'win') drawWin(t);
   else if (phase === 'left') drawLeft(t);
   if (phase === 'lost' && t >= GRACE) endMatch('timeout');
   if (phase === 'back' && t >= BACK_BEAT + BACK_COUNT) setPhase('match'); // the Match resumes
-  if (phase === 'win' && t >= WIN_STUB) glitchTo('left');
   if (toast && clock() - toast.at < 2.4) centered(0.3, toast.msg, 'green');
   hint();
   if (phase === 'back') renderTextOnTop(scene, camera, overlay);
@@ -491,20 +488,11 @@ function drawBack(t: number) {
   bigNumber(String(n), 8 - 1.2 * frac, 21.2, n <= 2 ? 'red' : 'yellow', frac);
 }
 
-/** Placeholder: the real win animation is designed in its own prototype ticket. It also plays after a disconnect. */
-function drawWin(t: number) {
-  hidden.enemy.root.visible = false;
-  if (blink(t, 8) || t > 1.2) centered(15, 'YOU WIN', 'green');
-  text.writeScaled((COLS - 7 * 6) / 2, 17, 'YOU WIN', 6, blink(t, 6) ? 'green' : 'fg');
-  centered(28, '[ WIN ANIMATION PLACEHOLDER: SAME ONE AS A NORMAL WIN ]', 'dim');
-  centered(30, reason === 'unstable' ? 'THE OPPONENT CONNECTION KEPT DROPPING' : 'THE OPPONENT DID NOT COME BACK', 'dim');
-}
-
-/** The Match ends because of the opponent's connection: the win animation first, then the Opponent left screen. */
+/** The Match ends because of the opponent's connection: a glitch straight into the Opponent left screen (no win animation). */
 function endMatch(why: 'timeout' | 'unstable') {
   reason = why;
   where = 'match';
-  setPhase('win');
+  glitchTo('left');
 }
 
 /** The opponent's signal drops. The third time there is no reconnect time at all. */
