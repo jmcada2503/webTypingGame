@@ -30,7 +30,7 @@ const VARIANTS = [
   { key: 'C', name: 'Scanner sweep' },
   { key: 'D', name: 'Sonar rings' },
 ];
-let variant = Math.max(0, 'ABCD'.indexOf(params.get('v') ?? 'B'));
+let variant = Math.max(0, 'ABCD'.indexOf(params.get('v') ?? 'A'));
 let bothIdle = params.get('both') === '1';
 let toast: { msg: string; at: number } | null = null;
 const clock0 = performance.now();
@@ -111,7 +111,7 @@ function applyFx(t: number, idleFor: number) {
     ATTACK_FX.color = blink(nt * r, 1.6) ? 'fg' : 'red';
     ATTACK_FX.labelColor = 'fg';
   } else if (variant === 1) {
-    ATTACK_FX.labelColor = blink(nt * r, 2) ? 'red' : 'fg'; // the ATTACK label flashes red and white
+    ATTACK_FX.labelColor = 'fg';
   } else if (variant === 2) {
     const pos = ((nt * r * 0.8) % 1.5) * (len + 4) - 2;
     ATTACK_FX.colors = Array.from({ length: len }, (_, i) => (Math.abs(i - pos) < 1.3 ? 'fg' : 'red'));
@@ -134,7 +134,7 @@ function drawDecor(t: number, idleFor: number) {
 
   if (bothIdle && idleFor >= NUDGE_AFTER) {
     const left = Math.max(0, Math.ceil(PEACE_AFTER - idleFor));
-    if (left > 0) centered(row - 10, blink(t, 3) ? `PEACE IN ${left}` : '', 'red');
+    if (left > 0) centered(row - 10, `PEACE IN ${left}`, 'fg'); // steady white label, no blinking
     else centered(row - 10, 'PEACE!!', 'fg'); // the Peace ending starts here (its own ticket)
   }
   if (nt < 0) return;
