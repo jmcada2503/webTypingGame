@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import { FakeTypingInput } from '../input/FakeTypingInput';
 import { loadWordList, type WordList } from '../words/wordLists';
+import { PRACTICE_CALIBRATION, PRACTICE_RAMP } from './PracticeDirector';
 import { PracticeSession } from './PracticeSession';
 
 let list: WordList;
@@ -24,7 +25,26 @@ function practice(seed = 1) {
       if (defend) session.state().wordBullets.forEach((b) => input.say(b.word));
     }
   };
-  return { session, input, play };
+  /**
+   * A typist: types each Word bullet `reaction + letters / lettersPerSecond` seconds after it appears.
+   * `skip(n)` says whether to let the n-th bullet (from 0) through untouched.
+   */
+  const typist = (lettersPerSecond: number, skip: (n: number) => boolean = () => false, reaction = 0.4) => {
+    const seen = new Map<string, { n: number; at: number }>();
+    let now = 0;
+    return (seconds: number) => {
+      for (let t = 0; t < seconds - 1e-9; t += STEP) {
+        session.update(STEP);
+        now += STEP;
+        for (const b of session.state().wordBullets) {
+          if (!seen.has(b.id)) seen.set(b.id, { n: seen.size, at: now });
+          const { n, at } = seen.get(b.id)!;
+          if (!skip(n) && now - at >= reaction + [...b.word].length / lettersPerSecond) input.say(b.word);
+        }
+      }
+    };
+  };
+  return { session, input, play, typist };
 }
 
 describe('a Practice run', () => {
@@ -103,6 +123,66 @@ describe('a Practice run', () => {
   });
 });
 
+describe('placing the player from their first words', () => {
+  test('while the first words are on, there is no level yet', () => {
+    const { session, play } = practice();
+    play(3);
+    expect(session.result().startLevel).toBeNull();
+    expect(session.result().calibrationPace).toBeNull();
+  });
+
+  test("after the first words are typed the run is moved on to the player's level", () => {
+    const { session, typist } = practice();
+    typist(3)(PRACTICE_CALIBRATION.words * PRACTICE_CALIBRATION.spawnEvery + 10);
+    const r = session.result();
+    expect(r.startLevel).not.toBeNull();
+    expect(r.startLevel!).toBeGreaterThan(0);
+    expect(r.startLevel!).toBeLessThanOrEqual(PRACTICE_RAMP.rampSeconds);
+    expect(r.calibrationPace).toBeGreaterThan(0);
+  });
+
+  test('a faster typist is placed further along than a slower one', () => {
+    const results = [1, 3, 8].map((lettersPerSecond) => {
+      const { session, typist } = practice();
+      typist(lettersPerSecond)(45);
+      expect(session.status).toBe('running');
+      return session.result();
+    });
+    expect(results[0].calibrationPace!).toBeLessThan(results[1].calibrationPace!);
+    expect(results[1].calibrationPace!).toBeLessThan(results[2].calibrationPace!);
+    expect(results[0].startLevel!).toBeLessThan(results[1].startLevel!);
+    expect(results[1].startLevel!).toBeLessThan(results[2].startLevel!);
+  });
+
+  test('a slow typist starts from the beginning', () => {
+    const { session, typist } = practice();
+    typist(0.8)(60);
+    expect(session.result().startLevel).toBe(0);
+  });
+
+  test('words a player lets through count against them: they are placed lower', () => {
+    const typeAll = practice();
+    typeAll.typist(4)(45);
+    const missSome = practice();
+    missSome.typist(4, (n) => n === 1 || n === 3)(45);
+    expect(missSome.session.result().calibrationPace!).toBeLessThan(typeAll.session.result().calibrationPace!);
+    expect(missSome.session.result().startLevel!).toBeLessThan(typeAll.session.result().startLevel!);
+  });
+
+  test('a player who never types is never placed: the run just ends', () => {
+    const { session, play } = practice();
+    play(60);
+    expect(session.status).toBe('lost');
+    expect(session.result().startLevel).toBeNull();
+  });
+
+  test('a typist keeps up at their own level for a good while', () => {
+    const { session, typist } = practice();
+    typist(4)(90);
+    expect(session.status).toBe('running');
+  });
+});
+
 describe('the result', () => {
   test('counts time survived, words, letters and accuracy', () => {
     const { session, input, play } = practice();
@@ -120,11 +200,39 @@ describe('the result', () => {
     expect(r.accuracy).toBeCloseTo(r.wordsTyped / (r.wordsTyped + 1), 9);
   });
 
-  test('has Pace as letters per second: the average over the run and the best moment', () => {
+  test('Pace only counts the time there is a Word bullet on screen', () => {
+    const { session, typist } = practice();
+    typist(4)(60);
+    const r = session.result();
+    expect(r.activeSeconds).toBeGreaterThan(0);
+    expect(r.activeSeconds).toBeLessThan(r.survivedSeconds); // the screen was empty some of the time
+    expect(r.averagePace).toBeCloseTo(r.lettersTyped / r.activeSeconds, 9);
+    expect(r.averagePace).toBeGreaterThan(r.lettersTyped / r.survivedSeconds);
+  });
+
+  test('time with an empty screen is not counted, however long it lasts', () => {
+    const { session, input, play } = practice();
+    play(1); // the first word is not out yet
+    expect(session.result().activeSeconds).toBe(0);
+    expect(session.result().averagePace).toBe(0);
+
+    play(1); // it comes out at 1.5 s
+    const word = session.state().wordBullets[0].word;
+    input.say(word);
+    const active = session.result().activeSeconds;
+    expect(active).toBeGreaterThan(0);
+
+    // The screen is empty again until the next word is due (calibration: every 2.5 s).
+    play(0.5);
+    expect(session.state().wordBullets).toEqual([]);
+    expect(session.result().activeSeconds).toBe(active);
+  });
+
+  test('has Pace as letters per second: the average over the time words were on screen, and the best moment', () => {
     const { session, play } = practice();
     play(60, true);
     const r = session.result();
-    expect(r.averagePace).toBeCloseTo(r.lettersTyped / r.survivedSeconds, 9);
+    expect(r.averagePace).toBeCloseTo(r.lettersTyped / r.activeSeconds, 9);
     expect(r.averagePace).toBeGreaterThan(0);
     expect(r.peakPace).toBeGreaterThanOrEqual(r.averagePace);
   });
@@ -140,10 +248,11 @@ describe('the result', () => {
   });
 
   test('has words per minute (5 letters = 1 word), from the average Pace', () => {
-    const { session, play } = practice();
-    play(60, true);
+    const { session, typist } = practice();
+    typist(4)(60);
     const r = session.result();
     expect(r.wpm).toBeCloseTo((r.averagePace * 60) / 5, 9);
+    expect(r.wpm).toBeGreaterThan(0);
   });
 
   test('accuracy is null when nothing was submitted, and 1 when everything was right', () => {

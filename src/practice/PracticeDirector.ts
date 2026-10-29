@@ -5,13 +5,32 @@ import { TIERS, type Tier, type WordList } from '../words/wordLists';
  * `rampSeconds`) and then stays: words come faster, fly faster and get longer. Tunable by playing.
  */
 export const PRACTICE_RAMP = {
-  /** Seconds before the first Word bullet. */
+  /** Seconds before the first Word bullet, and before the first one after the player is placed. */
   firstSpawnAt: 1.5,
   rampSeconds: 420,
   start: { spawnEvery: 4, flightSeconds: 10, weights: { short: 0.7, medium: 0.28, long: 0.02 } },
   end: { spawnEvery: 1, flightSeconds: 5.5, weights: { short: 0.1, medium: 0.4, long: 0.5 } },
   /** The gap to the next word varies by up to this share either way, so it isn't a metronome. */
   jitter: 0.2,
+} as const;
+
+/**
+ * The first words of a run: a gentle, fixed mix (not the ramp) used to measure how fast the player
+ * types. After `words` of them have been typed or missed, the run is moved on to the player's level.
+ */
+export const PRACTICE_CALIBRATION = {
+  words: 5,
+  spawnEvery: 2.5,
+  flightSeconds: 10,
+  weights: { short: 0.3, medium: 0.5, long: 0.2 },
+} as const;
+
+/** Where the player is placed on the ramp. */
+export const PRACTICE_PLACEMENT = {
+  /** The level starts out asking this share of the player's measured Pace (they then climb from there). */
+  share: 0.6,
+  /** The measured Pace never divides by less than this many seconds of words on screen. */
+  minActiveSeconds: 3,
 } as const;
 
 export interface RampStep {
@@ -23,7 +42,7 @@ export interface RampStep {
   weights: Readonly<Record<Tier, number>>;
 }
 
-/** The difficulty at Match time `t` (seconds). */
+/** The difficulty at ramp time `t` (seconds). */
 export function rampAt(t: number): RampStep {
   const f = Math.min(Math.max(t / PRACTICE_RAMP.rampSeconds, 0), 1);
   const { start, end } = PRACTICE_RAMP;
@@ -39,6 +58,35 @@ export function rampAt(t: number): RampStep {
   };
 }
 
+export type MeanLengths = Readonly<Record<Tier, number>>;
+
+/** The average number of letters of the words of each tier. */
+export function meanLengths(list: WordList): MeanLengths {
+  const mean = (words: readonly string[]) => words.reduce((sum, w) => sum + [...w].length, 0) / words.length;
+  return { short: mean(list.short), medium: mean(list.medium), long: mean(list.long) };
+}
+
+/** How many letters per second the ramp asks the player to type at ramp time `t`. Goes up with `t`. */
+export function demandAt(t: number, lengths: MeanLengths): number {
+  const step = rampAt(t);
+  const lettersPerWord = TIERS.reduce((sum, tier) => sum + step.weights[tier] * lengths[tier], 0);
+  return lettersPerWord / step.spawnEvery;
+}
+
+/**
+ * The ramp time to start a player at, from their measured Pace (letters per second): the first second
+ * of the ramp that asks for `PRACTICE_PLACEMENT.share` of it. 0 for a slow player, the end of the ramp
+ * for a very fast one.
+ */
+export function startLevelFor(pace: number, list: WordList): number {
+  const target = (Number.isFinite(pace) && pace > 0 ? pace : 0) * PRACTICE_PLACEMENT.share;
+  const lengths = meanLengths(list);
+  for (let t = 0; t < PRACTICE_RAMP.rampSeconds; t++) {
+    if (demandAt(t, lengths) >= target) return t;
+  }
+  return PRACTICE_RAMP.rampSeconds;
+}
+
 /** One Word bullet for the game to fire at the player. */
 export interface Spawn {
   word: string;
@@ -51,15 +99,32 @@ export interface PracticeDirectorOptions {
   random?: () => number;
 }
 
+/** `calibrating`: measuring how fast the player types. `ramp`: playing at the player's level, getting harder. */
+export type DirectorPhase = 'calibrating' | 'ramp';
+
+const CALIBRATION_STEP: RampStep = {
+  spawnEvery: PRACTICE_CALIBRATION.spawnEvery,
+  flightSeconds: PRACTICE_CALIBRATION.flightSeconds,
+  weights: PRACTICE_CALIBRATION.weights,
+};
+
 /**
  * Decides when Practice fires a Word bullet and which word. No seeds and no network: plain local
  * randomness over the word list. Time moves only through `advance(dt)`.
+ *
+ * A run starts `calibrating` (gentle, fixed words). The caller measures the player and calls
+ * `finishCalibration(pace)`: the ramp clock jumps ahead to the player's level and keeps rising from there.
  */
 export class PracticeDirector {
+  phase: DirectorPhase = 'calibrating';
+  /** The ramp time the player was placed at; `null` while calibrating. */
+  startLevel: number | null = null;
   private readonly list: WordList;
   private readonly random: () => number;
   private elapsed = 0;
   private nextAt: number = PRACTICE_RAMP.firstSpawnAt;
+  /** The ramp clock: `rampTime = startLevel + (time since the ramp began)`. */
+  private rampBegan = 0;
 
   constructor(options: PracticeDirectorOptions) {
     for (const tier of TIERS) {
@@ -69,6 +134,19 @@ export class PracticeDirector {
     this.random = options.random ?? Math.random;
   }
 
+  /**
+   * Ends calibration: places the player from their measured Pace (letters per second) and returns the ramp
+   * time they start at. Words already due but not yet fired are dropped; the first word at the new level
+   * comes after `PRACTICE_RAMP.firstSpawnAt`.
+   */
+  finishCalibration(pace: number): number {
+    this.startLevel = startLevelFor(pace, this.list);
+    this.phase = 'ramp';
+    this.rampBegan = this.elapsed;
+    this.nextAt = this.elapsed + PRACTICE_RAMP.firstSpawnAt;
+    return this.startLevel;
+  }
+
   /** Moves time on by `dt` seconds. `inFlight` = the words of the Word bullets on screen (not repeated). */
   advance(dt: number, inFlight: readonly string[]): Spawn[] {
     if (!(dt > 0)) return [];
@@ -76,7 +154,7 @@ export class PracticeDirector {
     const taken = new Set(inFlight);
     const out: Spawn[] = [];
     while (this.nextAt <= this.elapsed) {
-      const step = rampAt(this.nextAt); // the difficulty at the moment the word was due
+      const step = this.stepAt(this.nextAt); // the difficulty at the moment the word was due
       const word = this.pickWord(step.weights, taken);
       taken.add(word);
       out.push({ word, flightSeconds: step.flightSeconds });
@@ -84,6 +162,10 @@ export class PracticeDirector {
       this.nextAt += step.spawnEvery * jitter;
     }
     return out;
+  }
+
+  private stepAt(time: number): RampStep {
+    return this.phase === 'calibrating' ? CALIBRATION_STEP : rampAt(this.startLevel! + (time - this.rampBegan));
   }
 
   private draw(weights: RampStep['weights']): string {

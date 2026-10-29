@@ -23,10 +23,13 @@ const pct = (x: number | null) => (x === null ? '-' : `${Math.round(x * 100)}%`)
 const show = (r: PracticeResult, done: boolean) =>
   (box.textContent = [
     done ? 'GAME OVER' : `PRACTICE (${language})`,
-    `time      ${r.survivedSeconds.toFixed(1)} s`,
+    `time      ${r.survivedSeconds.toFixed(1)} s (${r.activeSeconds.toFixed(1)} s with words on screen)`,
     `words     ${r.wordsTyped}`,
     `accuracy  ${pct(r.accuracy)}`,
     `pace      ${r.averagePace.toFixed(1)} letters/s avg, ${r.peakPace.toFixed(1)} peak (${Math.round(r.wpm)} wpm)`,
+    r.startLevel === null
+      ? 'level     measuring your speed...'
+      : `level     started at ${r.startLevel} s of the ramp (measured ${(r.calibrationPace ?? 0).toFixed(1)} letters/s)`,
     done ? 'reload to play again' : '',
   ].join('\n'));
 
