@@ -18,7 +18,7 @@ class RecordingNetwork implements FlowNetwork {
   leave() {
     this.calls.push('leave');
   }
-  sendRematch(message: 'propose' | 'accept' | 'decline') {
+  sendRematch(message: 'propose' | 'accept' | 'decline' | 'cancel') {
     this.calls.push(`rematch:${message}`);
   }
   onEvent(cb: (e: NetworkEvent) => void) {
@@ -355,118 +355,271 @@ const rematchOf = (flow: ScreenFlow) => {
 };
 
 describe('Rematch', () => {
-  test('a Public match offers a Rematch for 10 seconds, then only a new search', () => {
-    const { flow, network } = ended();
-    expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 10 });
-
-    flow.update(4);
-    expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 6 });
-
-    flow.update(6);
-    expect(rematchOf(flow)).toEqual({ status: 'closed' });
-    flow.proposeRematch();
-    expect(network.calls).not.toContain('rematch:propose');
-  });
-
-  test('a Private match always offers the Rematch', () => {
-    const { flow } = endedPrivate();
-    flow.update(120);
-    expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: null });
-  });
-
-  test('proposing waits for the answer; an accept starts a new Countdown at once', () => {
-    const { flow, network } = ended();
-
-    flow.proposeRematch();
-    expect(rematchOf(flow)).toEqual({ status: 'waiting' });
-    expect(network.calls.at(-1)).toBe('rematch:propose');
-
-    network.emit({ type: 'rematch', message: 'accept' });
-    expect(flow.state()).toMatchObject({ screen: 'countdown', mode: 'versus', secondsLeft: 5 });
-  });
-
-  test('a declined proposal says so and leaves the end-screen options', () => {
-    const { flow, network } = ended();
-    flow.proposeRematch();
-
-    network.emit({ type: 'rematch', message: 'decline' });
-
-    expect(rematchOf(flow)).toEqual({ status: 'declined' });
-    flow.searchAgain();
-    expect(screen(flow)).toBe('waiting');
-  });
-
-  test("the opponent's proposal can be accepted, which starts the Countdown", () => {
-    const { flow, network } = ended();
-
-    network.emit({ type: 'rematch', message: 'propose' });
-    expect(rematchOf(flow)).toEqual({ status: 'incoming' });
-
-    flow.acceptRematch();
-    expect(network.calls.at(-1)).toBe('rematch:accept');
-    expect(screen(flow)).toBe('countdown');
-  });
-
-  test("the opponent's proposal can be declined, which closes the Rematch", () => {
-    const { flow, network } = ended();
-    network.emit({ type: 'rematch', message: 'propose' });
-
-    flow.declineRematch();
-
-    expect(network.calls.at(-1)).toBe('rematch:decline');
-    expect(rematchOf(flow)).toEqual({ status: 'closed' });
-  });
-
-  test('when both players propose, the Rematch starts right away', () => {
-    const { flow, network } = ended();
-    flow.proposeRematch();
-
-    network.emit({ type: 'rematch', message: 'propose' });
-
-    expect(screen(flow)).toBe('countdown');
-  });
-
-  test('proposing while the opponent already proposed counts as accepting', () => {
-    const { flow, network } = ended();
-    network.emit({ type: 'rematch', message: 'propose' });
-
-    flow.proposeRematch();
-
-    expect(network.calls.at(-1)).toBe('rematch:accept');
-    expect(screen(flow)).toBe('countdown');
-  });
-
-  test('a proposal that arrived in time stays open after the 10 seconds', () => {
-    const { flow, network } = ended();
-    flow.update(9);
-    network.emit({ type: 'rematch', message: 'propose' });
-
-    flow.update(5);
-
-    expect(rematchOf(flow)).toEqual({ status: 'incoming' });
-  });
-
-  test('if the opponent leaves while the end screen is up, the Rematch is gone', () => {
-    const { flow, network } = ended();
-    network.emit({ type: 'opponentLeft' });
-    expect(rematchOf(flow)).toEqual({ status: 'opponentLeft' });
-
-    const other = endedPrivate();
-    other.network.emit({ type: 'opponentDisconnected' });
-    expect(rematchOf(other.flow)).toEqual({ status: 'opponentLeft' });
-  });
-
-  test('a Rematch plays like a Match and offers a fresh Rematch window at its end', () => {
-    const { flow, network } = ended();
-    flow.proposeRematch();
-    network.emit({ type: 'rematch', message: 'accept' });
-
+  /** Rematch timing a test wants to shorten (the real values are 10 s window, 10 s answer, 2.4 s notice). */
+  const endedWith = (config: ConstructorParameters<typeof ScreenFlow>[1] = {}, kind: 'public' | 'private' = 'public') => {
+    const network = new RecordingNetwork();
+    const flow = new ScreenFlow(network, config);
+    flow.choose(kind);
+    flow.confirm();
+    network.emit({ type: 'matched' });
+    network.emit({ type: 'connected' });
     flow.update(5);
     flow.update(1.8);
-    expect(flow.state()).toMatchObject({ screen: 'match', mode: 'versus' });
+    flow.matchEnded('lost');
+    return { flow, network };
+  };
 
-    flow.matchEnded('won');
-    expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 10 });
+  describe('the window', () => {
+    test('a Public match offers a Rematch for 10 seconds, then only a new search', () => {
+      const { flow, network } = ended();
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 10 });
+
+      flow.update(4);
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 6 });
+
+      flow.update(6);
+      expect(rematchOf(flow)).toEqual({ status: 'closed' });
+      flow.proposeRematch();
+      expect(network.calls).not.toContain('rematch:propose');
+    });
+
+    test('a Private match always offers the Rematch', () => {
+      const { flow } = endedPrivate();
+      flow.update(120);
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: null });
+    });
+
+    test('a Rematch plays like a Match and offers a fresh Rematch window at its end', () => {
+      const { flow, network } = ended();
+      flow.proposeRematch();
+      network.emit({ type: 'rematch', message: 'accept' });
+
+      flow.update(5);
+      flow.update(1.8);
+      expect(flow.state()).toMatchObject({ screen: 'match', mode: 'versus' });
+
+      flow.matchEnded('won');
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 10 });
+    });
+  });
+
+  describe('proposing', () => {
+    test('waits for the answer for 10 seconds; an accept starts a new Countdown at once', () => {
+      const { flow, network } = ended();
+      flow.update(3);
+
+      flow.proposeRematch();
+      expect(rematchOf(flow)).toEqual({ status: 'waiting', answerSecondsLeft: 10, secondsLeft: 7 });
+      expect(network.calls.at(-1)).toBe('rematch:propose');
+
+      network.emit({ type: 'rematch', message: 'accept' });
+      expect(flow.state()).toMatchObject({ screen: 'countdown', mode: 'versus', secondsLeft: 5 });
+    });
+
+    test('the answer time counts down on its own, apart from the window', () => {
+      const { flow } = ended();
+      flow.proposeRematch();
+
+      flow.update(4);
+
+      expect(rematchOf(flow)).toEqual({ status: 'waiting', answerSecondsLeft: 6, secondsLeft: 6 });
+    });
+
+    test('no answer in time shows NO ANSWER for a moment, then the options again while the window is open', () => {
+      const { flow } = endedWith({ rematchAnswerSeconds: 3 });
+      flow.proposeRematch();
+
+      flow.update(3);
+      expect(rematchOf(flow)).toMatchObject({ status: 'notice', notice: 'noAnswer' });
+
+      flow.update(2.4);
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 4.6 });
+    });
+
+    test('with the window gone by then, a request that expires leaves Rematch closed', () => {
+      const { flow } = ended();
+      flow.update(5);
+      flow.proposeRematch();
+
+      flow.update(10); // answer time over; the window ran out 5 s earlier
+      expect(rematchOf(flow)).toMatchObject({ status: 'notice', notice: 'noAnswer' });
+
+      flow.update(2.4);
+      expect(rematchOf(flow)).toEqual({ status: 'closed' });
+    });
+
+    test('in a Private match the options come back after NO ANSWER, whatever the time', () => {
+      const { flow } = endedPrivate();
+      flow.proposeRematch();
+
+      flow.update(10);
+      flow.update(2.4);
+
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: null });
+    });
+
+    test('cancelling a request tells the opponent and goes back to the options', () => {
+      const { flow, network } = ended();
+      flow.update(2);
+      flow.proposeRematch();
+
+      flow.cancelRematch();
+
+      expect(network.calls.at(-1)).toBe('rematch:cancel');
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 8 });
+    });
+
+    test('cancelling after the window ran out leaves Rematch closed', () => {
+      const { flow } = ended();
+      flow.update(6);
+      flow.proposeRematch();
+      flow.update(5); // the window ends while waiting
+
+      flow.cancelRematch();
+
+      expect(rematchOf(flow)).toEqual({ status: 'closed' });
+    });
+
+    test('when both players propose, the Rematch starts right away', () => {
+      const { flow, network } = ended();
+      flow.proposeRematch();
+
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      expect(screen(flow)).toBe('countdown');
+    });
+  });
+
+  describe("the opponent's request", () => {
+    test('arrives with its own 10 seconds to answer, and can be accepted, which starts the Countdown', () => {
+      const { flow, network } = ended();
+      flow.update(2);
+
+      network.emit({ type: 'rematch', message: 'propose' });
+      expect(rematchOf(flow)).toEqual({ status: 'incoming', answerSecondsLeft: 10, secondsLeft: 8 });
+
+      flow.acceptRematch();
+      expect(network.calls.at(-1)).toBe('rematch:accept');
+      expect(screen(flow)).toBe('countdown');
+    });
+
+    test('proposing while the opponent already proposed counts as accepting', () => {
+      const { flow, network } = ended();
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      flow.proposeRematch();
+
+      expect(network.calls.at(-1)).toBe('rematch:accept');
+      expect(screen(flow)).toBe('countdown');
+    });
+
+    test('keeps its full answer time even after the 10 second window has run out', () => {
+      const { flow, network } = ended();
+      flow.update(9);
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      flow.update(5);
+      expect(rematchOf(flow)).toEqual({ status: 'incoming', answerSecondsLeft: 5, secondsLeft: 0 });
+
+      flow.acceptRematch();
+      expect(screen(flow)).toBe('countdown');
+    });
+
+    test('too late: after the answer time it shows TOO LATE for a moment, then the options (or closed)', () => {
+      const { flow, network } = endedWith({ rematchAnswerSeconds: 3 });
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      flow.update(3);
+      expect(rematchOf(flow)).toMatchObject({ status: 'notice', notice: 'tooLate' });
+
+      flow.update(2.4);
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 4.6 });
+
+      const late = ended();
+      late.flow.update(9);
+      late.network.emit({ type: 'rematch', message: 'propose' });
+      late.flow.update(10);
+      late.flow.update(2.4);
+      expect(rematchOf(late.flow)).toEqual({ status: 'closed' });
+    });
+
+    test('can be denied: the opponent is told, the player sees DECLINED, and in Public Rematch closes', () => {
+      const { flow, network } = ended();
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      flow.declineRematch();
+      expect(network.calls.at(-1)).toBe('rematch:decline');
+      expect(rematchOf(flow)).toMatchObject({ status: 'notice', notice: 'declined' });
+
+      flow.update(2.4);
+      expect(rematchOf(flow)).toEqual({ status: 'closed' });
+    });
+
+    test('a request the opponent cancels disappears, back to the options', () => {
+      const { flow, network } = ended();
+      flow.update(3);
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      network.emit({ type: 'rematch', message: 'cancel' });
+
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 7 });
+    });
+  });
+
+  describe('being declined', () => {
+    test('says DECLINED for a moment; in Public Rematch is then closed, so only a new search remains', () => {
+      const { flow, network } = ended();
+      flow.proposeRematch();
+
+      network.emit({ type: 'rematch', message: 'decline' });
+      expect(rematchOf(flow)).toMatchObject({ status: 'notice', notice: 'declined' });
+
+      flow.update(2.4);
+      expect(rematchOf(flow)).toEqual({ status: 'closed' });
+      flow.searchAgain();
+      expect(screen(flow)).toBe('waiting');
+    });
+
+    test('in a Private match the options come back after DECLINED', () => {
+      const { flow, network } = endedPrivate();
+      flow.proposeRematch();
+
+      network.emit({ type: 'rematch', message: 'decline' });
+      flow.update(2.4);
+
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: null });
+    });
+
+    test('a Private player who denies is back at the options too', () => {
+      const { flow, network } = endedPrivate();
+      network.emit({ type: 'rematch', message: 'propose' });
+
+      flow.declineRematch();
+      flow.update(2.4);
+
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: null });
+    });
+  });
+
+  describe('the opponent leaves', () => {
+    test('while the end screen is up, the Rematch is gone', () => {
+      const { flow, network } = ended();
+      network.emit({ type: 'opponentLeft' });
+      expect(rematchOf(flow)).toEqual({ status: 'opponentLeft' });
+
+      const other = endedPrivate();
+      other.network.emit({ type: 'opponentDisconnected' });
+      expect(rematchOf(other.flow)).toEqual({ status: 'opponentLeft' });
+    });
+
+    test('with a request open, it is gone too', () => {
+      const { flow, network } = ended();
+      flow.proposeRematch();
+
+      network.emit({ type: 'opponentLeft' });
+
+      expect(rematchOf(flow)).toEqual({ status: 'opponentLeft' });
+    });
   });
 });
 

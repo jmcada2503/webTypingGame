@@ -28,7 +28,15 @@ Which screen the player is on and how they move between screens: menu, how-to, w
 - **Public:** how-to → `joinQueue(language)` → `matched` (connecting, 10 s to be confirmed or `connectFailed`) → `connected` → Countdown → `starting` → Match.
 - **Private:** host: `createPrivate` → `inviteCreated` shows the link. Guest: `joinInvite(code)` skips the menu, then how-to, then `joinPrivate(code)`; a full or expired link is an error screen. `cancel()` and leaving are quiet (`network.leave()`).
 - **The opponent leaves** (`opponentLeft`, or `opponentDisconnected` outside a Match): the `opponentLeft` screen, `youWin` true only in the Match. In a Match a dropped connection gets **5 s** to come back (`opponentReconnected`), then the player wins.
-- **Rematch** (online end screen): Public offers it for **10 s** (`available.secondsLeft`), Private always (`secondsLeft: null`). `proposeRematch()` → `waiting`; the opponent's `propose` → `incoming` (`acceptRematch()` / `declineRematch()`); both proposing, or an accept, starts a new Countdown at once (same seeds, no how-to); a decline shows `declined`; a proposal that arrived in time stays open past the window; when the opponent leaves the offer becomes `opponentLeft`.
+- **Rematch** (online end screen), as decided in the Rematch prototype ticket:
+  - **Window (Public only): 10 s** after the Match to propose (`available.secondsLeft`); Private has no timer (`null`).
+  - **A request** (mine: `waiting`; theirs: `incoming`) starts its own **10 s answer time** (`answerSecondsLeft`), always in full even if the window ran out; the window keeps counting in the background.
+  - **Both propose, or an accept** → a new Countdown at once (same seeds, no how-to). Proposing while theirs is open counts as accepting.
+  - **No answer in time** → a `notice` (`noAnswer` for my request, `tooLate` for theirs) for 2.4 s, then the options come back if the window is still open (or Private), else `closed`.
+  - **Declined** (they deny mine, or I deny theirs) → a `declined` notice, then **Public: closed** (only Search new match / Menu), **Private: the options again**.
+  - **Cancel** (`cancelRematch()`, only while `waiting`) tells the opponent and returns to the options (their `incoming` disappears).
+  - **Opponent leaves** → `opponentLeft`. A proposal that arrived in time stays open past the window.
+  - Timings are `FlowConfig` (`rematchWindowSeconds`, `rematchAnswerSeconds`, `rematchNoticeSeconds`). Network messages: `propose`, `accept`, `decline`, `cancel`.
 - **Servers resting:** `setServersResting(true)` blocks Public, Private and invite joining on the menu (Practice works) and sends a how-to or a still-searching wait back to the menu. A Countdown, Match or Rematch already under way is not interrupted.
 
 ## Wiring it

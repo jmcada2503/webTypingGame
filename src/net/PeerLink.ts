@@ -8,7 +8,7 @@ export type WireMessage =
   | NetEvent
   /** The Countdown ends at `at` on the sender's clock; convert with `toLocalTime`. */
   | { type: 'startAt'; at: number }
-  | { type: 'rematch'; message: 'propose' | 'accept' | 'decline' };
+  | { type: 'rematch'; message: 'propose' | 'accept' | 'decline' | 'cancel' };
 
 const MATCH_EVENTS = new Set<string>(['shot', 'defended', 'hit', 'presence', 'peace']);
 

@@ -98,7 +98,7 @@ export class FakeEndpoint implements FlowNetwork {
     this.backend.leave(this);
   }
 
-  sendRematch(message: 'propose' | 'accept' | 'decline') {
+  sendRematch(message: 'propose' | 'accept' | 'decline' | 'cancel') {
     this.peer?.deliver({ type: 'rematch', message });
   }
 
