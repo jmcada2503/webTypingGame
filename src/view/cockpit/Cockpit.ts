@@ -1,10 +1,26 @@
 import * as THREE from 'three';
-import type { TextGrid } from '../../render/AsciiRenderer';
+import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import { ASCII_STYLE } from '../../render/asciiStyle';
 import type { GameViewState } from '../GameViewState';
 import { gridRectOf, writeCenteredScaled } from './gridProjection';
 import { Radar, RADAR_SIZE } from './Radar';
 import { matchPrefix } from '../../utils/matchPrefix';
+
+/**
+ * PROTOTYPE hook (Prototype: Idle nudge animation, throwaway): lets the prototype recolor / shift the Attack word and
+ * its label, and tells it where they are drawn this frame.
+ */
+export const ATTACK_FX = {
+  dx: 0,
+  dy: 0,
+  /** Colors the not-yet-typed letters (default red). */
+  color: null as PaletteColor | null,
+  /** One color per letter (overrides everything else when set). */
+  colors: null as PaletteColor[] | null,
+  labelColor: null as PaletteColor | null,
+  /** Where the word and label were drawn (grid columns / row; `len` letters, each TEXT_SCALE wide). */
+  rect: { c: 0, row: 0, len: 0, scale: 1, labelC: 0 },
+};
 
 const MAX_LIVES = 3;
 const CURSOR_HZ = 1;
@@ -172,7 +188,7 @@ export class Cockpit {
     const row = edge.r0 - 2;
     text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' '); // two rows, so the larger text sits on blank
     const textRow = row + 1 - TEXT_SCALE / 2; // centered on the blank rows
-    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, 'dim');
+    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, ATTACK_FX.labelColor ?? 'dim');
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
@@ -180,8 +196,15 @@ export class Cockpit {
     const targetingBullet = len > 0 && state.wordBullets.some((b) => matchPrefix(state.typedWord, b.word) === len);
     const typed = targetingBullet ? 0 : matchPrefix(state.typedWord, state.attackWord);
     const at = edge.c1 - letters.length * TEXT_SCALE - 1;
-    text.writeScaled(at, textRow, letters.slice(0, typed).join(''), TEXT_SCALE, 'fg');
-    text.writeScaled(at + typed * TEXT_SCALE, textRow, letters.slice(typed).join(''), TEXT_SCALE, 'red');
+    const atx = at + ATTACK_FX.dx;
+    const rowy = textRow + ATTACK_FX.dy;
+    ATTACK_FX.rect = { c: at, row: textRow, len: letters.length, scale: TEXT_SCALE, labelC: edge.c0 + 1 };
+    if (ATTACK_FX.colors) {
+      letters.forEach((ch, i) => text.writeScaled(atx + i * TEXT_SCALE, rowy, ch, TEXT_SCALE, i < typed ? 'fg' : ATTACK_FX.colors![i] ?? 'red'));
+    } else {
+      text.writeScaled(atx, rowy, letters.slice(0, typed).join(''), TEXT_SCALE, 'fg');
+      text.writeScaled(atx + typed * TEXT_SCALE, rowy, letters.slice(typed).join(''), TEXT_SCALE, ATTACK_FX.color ?? 'red');
+    }
 
     this.radar.draw(text, this.camera, state.shots, dt);
   }
