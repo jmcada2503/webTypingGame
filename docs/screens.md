@@ -12,7 +12,7 @@ How the app is put together: the flow decides *which* screen, the screens *draw*
 | `src/screens/menuScreen.ts`, `howtoScreen.ts`, `waitingScreen.ts`, `countdownScreen.ts` | The approved designs: main menu (layout B), how-to (layout B), waiting (terminal style C3), Countdown (variant A: a huge 5 to 1, never 0). Specs: the closed prototype tickets. |
 | `src/screens/content.ts` | The screens' pure logic, tested: menu selection rules, online-count placeholder, the waiting log and tips, the how-to demo timeline, and the placeholder name and sponsor link. |
 | `src/screens/simpleScreens.ts` | Plain versions of every screen. `main.ts` overrides the ones that have an approved design; end, Opponent-left and error stay plain until their prototypes are done. |
-| `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Alt keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
+| `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Ctrl keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
 
 ## Screen-change effects
 
@@ -35,4 +35,4 @@ The flow's `starting` gap (the TV effect) draws the game scene idle (nothing fly
 
 ## Running it
 
-`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Alt+F plays "opponent found", Alt+E / Alt+V ends the Match as lost / won, Alt+D makes the opponent leave, Alt+M / Alt+A / Alt+X make them propose, accept or decline a Rematch, Alt+R toggles "servers resting".
+`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Ctrl+F plays "opponent found", Ctrl+E / Ctrl+V ends the Match as lost / won, Ctrl+D makes the opponent leave, Ctrl+M / Ctrl+A / Ctrl+X make them propose, accept or decline a Rematch, Ctrl+R toggles "servers resting".
