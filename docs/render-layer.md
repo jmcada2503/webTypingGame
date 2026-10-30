@@ -19,7 +19,7 @@ Run the reference client: `npm run sandbox`. Its tweak panel can trigger every s
 | `TypingInput` | `src/input/TypingInput.ts` | The Typed word as the game understands it (see [Typing input](#typing-input)). |
 | `GameSession` | `src/app/GameSession.ts` | **What the game implements.** Advances the game, hands the view a snapshot and one-off events. |
 | `GameView` | `src/view/GameView.ts` | **What the game calls.** Draws a snapshot, plays events. Implementation: `AsciiGameView`. |
-| `AppShell` | `src/app/AppShell.ts` | Mounts the canvas, runs the loop, re-fits on resize / fullscreen, fullscreen button. |
+| `AppShell` | `src/app/AppShell.ts` | Mounts the canvas, runs the loop, re-fits on resize / fullscreen, `toggleFullscreen()`. |
 
 The future `MatchSession` (real mechanics + networking) implements `GameSession`; nothing else changes. The sandbox's `SandboxSession` is the reference implementation.
 
@@ -30,7 +30,7 @@ const view = await AsciiGameView.create();      // async: waits for the font bef
 const input = new KeyboardTypingInput();
 const session = new MatchSession(/* ... */);     // yours, implements GameSession
 const shell = new AppShell(view, session, input);
-shell.start();                                  // mounts canvas + fullscreen button, attaches input, starts the loop
+shell.start();                                  // mounts the canvas, attaches input, starts the loop
 // ... later
 shell.dispose();                                // stops the loop, disposes session, input and view
 ```
@@ -51,7 +51,7 @@ view.render(session.state(), dt);               // ...then the snapshot
 
 - Fixed **128×45 character grid** on every screen (`ASCII_STYLE.grid`), so layout is identical for every player. Cells scale to the window (largest integer cell, letterboxed on black); the glyph atlas is rebuilt at the real cell size on every resize.
 - Palette (`ASCII_STYLE.palette`): monochrome white / gray on black, plus `red` (Attack word, damage), `green` (typed-prefix match, hits on the enemy), `yellow` (firing sparks), `dim`.
-- Fullscreen: the shell's ⛶ button (a key would collide with typing). Esc exits.
+- Fullscreen: `shell.toggleFullscreen()`. The game binds it to **F** on every screen but the Match (there F is a letter being typed; `isFullscreenKey` in `src/app/fullscreen.ts`); the menu shows the key at the top right. The sandbox has a panel button. Esc exits.
 
 ## The snapshot: `GameViewState`
 

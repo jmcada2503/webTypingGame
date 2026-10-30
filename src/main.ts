@@ -1,6 +1,7 @@
 // The game: the screen flow, the screens, and the game scene, mounted by the app shell.
 import './app/app.css';
 import { AppShell } from './app/AppShell';
+import { isFullscreen, isFullscreenKey } from './app/fullscreen';
 import { isTouchOnly } from './app/keyboardGate';
 import { runKeyboardGate } from './app/runKeyboardGate';
 import { installDevKeys } from './dev/devKeys';
@@ -8,7 +9,7 @@ import { FakeBackend } from './flow/FakeNetwork';
 import { ScreenFlow } from './flow/ScreenFlow';
 import { KeyboardTypingInput } from './input/KeyboardTypingInput';
 import { REMATCH_INDEX_STRIDE, createAttackWordSource } from './match/attackWords';
-import { MatchEngine } from './match/MatchEngine';
+import { MATCH_FLIGHT, MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
 import { MetricsTracker } from './metrics/MetricsTracker';
 import { clientInfo, createReporter } from './metrics/reporter';
@@ -25,6 +26,7 @@ import { howtoScreen } from './screens/howtoScreen';
 import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
 import { placeholderOnline } from './screens/content';
+import { opponentLeftScreen } from './screens/opponentLeftScreen';
 import { simpleScreens } from './screens/simpleScreens';
 import { waitingScreen } from './screens/waitingScreen';
 import { AsciiGameView } from './view/AsciiGameView';
@@ -81,7 +83,7 @@ const onlineCounts = (t: number) => (presence ? (presence.counts() ?? { en: 0, e
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen() };
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow) };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
@@ -100,7 +102,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
   const opponent = online?.currentMatch();
   if (!opponent) {
     const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
-    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 })));
+    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8, flightRamp: MATCH_FLIGHT })));
   }
   const list = wordLists[opponent.lang];
   const played = matchesPlayed.get(opponent.matchId) ?? 0;
@@ -123,11 +125,17 @@ const createMatch = (mode: 'versus' | 'practice') => {
     verifyShot: (shot, arrivedAt) => verifier.verify(shot, arrivedAt).ok,
     bulletFlightSeconds: 8,
     shotFlightSeconds: 8,
+    flightRamp: MATCH_FLIGHT,
   });
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
-new AppShell(view, host, input).start();
+const shell = new AppShell(view, host, input);
+shell.start();
+// F toggles fullscreen on every screen but the Match, where it is a letter being typed (Esc also leaves fullscreen).
+window.addEventListener('keydown', (e) => {
+  if (isFullscreenKey(e) && host.screenShown !== 'match') void shell.toggleFullscreen();
+});
 
 // Online only: `?fake` plays against a stand-in, nothing worth counting.
 if (online) {

@@ -750,6 +750,29 @@ describe('details for the metrics', () => {
   });
 });
 
+describe('the online flight ramp', () => {
+  const ramp = { start: 10, end: 6, rampSeconds: 180 };
+  test('Word bullets fly for less time later in the Match, then stay at the end value', async () => {
+    const { flightAt } = await import('./MatchEngine');
+    expect(flightAt(ramp, 0)).toBe(10);
+    expect(flightAt(ramp, 90)).toBe(8);
+    expect(flightAt(ramp, 180)).toBe(6);
+    expect(flightAt(ramp, 999)).toBe(6);
+  });
+
+  test("an incoming Shot takes the flight of the moment it arrives; my Shot on the Radar takes the moment I fire", () => {
+    const m = engine({ flightRamp: ramp });
+    advance(m, 90); // flight is 8 s now
+    m.drainOutgoing();
+    m.receive({ type: 'shot', i: 0, t: 0, word: 'nebula' });
+    advance(m, 4);
+    expect(m.state().wordBullets[0].flight).toBeCloseTo(4 / 8, 1); // half way
+    m.submit('rocket');
+    advance(m, 1);
+    expect(m.state().shots[0].flight).toBeCloseTo(1 / (10 - (4 * 94) / 180), 2); // fired at 94 s
+  });
+});
+
 describe('Held while the opponent is away', () => {
   test('time stands still: Word bullets stay where they are and nothing arrives, however long it lasts', () => {
     const m = engine();

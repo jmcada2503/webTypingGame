@@ -177,7 +177,6 @@ gui.add({ fs: () => void shell.toggleFullscreen() }, 'fs').name('⛶ fullscreen'
 gui.foldersRecursive().forEach((f) => f.close());
 
 const stats = new Stats();
-stats.dom.style.left = '72px'; // next to the fullscreen button
 document.body.append(stats.dom);
 (function poll() {
   live.typed = input.typedWord;

@@ -26,6 +26,12 @@ export type NetEvent =
   /** Both of us were Idle for too long: the Match is over, nobody wins. */
   | { type: 'peace' };
 
+export interface FlightRamp {
+  start: number;
+  end: number;
+  rampSeconds: number;
+}
+
 export interface MatchConfig {
   mode: MatchMode;
   attackWords: AttackWordSource;
@@ -33,6 +39,12 @@ export interface MatchConfig {
   startIndex?: number;
   /** Seconds for a Word bullet to go from Flight 0 to 1. */
   bulletFlightSeconds: number;
+  /**
+   * Online: the opponent's Word bullets fly for `start` seconds at the beginning, shortening in a straight line
+   * to `end` at `rampSeconds` (then stay), so long even Matches get decided. Overrides `bulletFlightSeconds` and
+   * `shotFlightSeconds` (my Shot on the Radar takes as long as it will as a Word bullet on their screen).
+   */
+  flightRamp?: FlightRamp;
   /** Seconds a Shot takes to reach the Enemy ship on the Radar (display only). */
   shotFlightSeconds: number;
   /**
