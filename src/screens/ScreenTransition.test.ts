@@ -89,7 +89,7 @@ describe('which effect plays between two flow states', () => {
   const waiting: FlowState = { screen: 'waiting', kind: 'public', phase: 'searching' };
   const countdown: FlowState = { screen: 'countdown', mode: 'versus', secondsLeft: 5 };
   const starting: FlowState = { screen: 'starting', mode: 'versus' };
-  const match: FlowState = { screen: 'match', mode: 'versus' };
+  const match: FlowState = { screen: 'match', mode: 'versus', link: { status: 'ok' } };
   const end: FlowState = { screen: 'end', mode: 'practice', result: 'practiceOver' };
 
   test('the starting gap is drawn as the Match scene', () => {

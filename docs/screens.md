@@ -37,4 +37,4 @@ The flow's `starting` gap (the TV effect) draws the game scene idle (nothing fly
 
 ## Running it
 
-`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Ctrl+F plays "opponent found", Ctrl+E / Ctrl+V ends the Match as lost / won, Ctrl+D makes the opponent leave, Ctrl+M / Ctrl+A / Ctrl+X make them propose, accept or decline a Rematch, Ctrl+R toggles "servers resting".
+`npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Ctrl+F plays "opponent found", Ctrl+E / Ctrl+V ends the Match as lost / won, Ctrl+D makes the opponent leave, Ctrl+L / Ctrl+B make their signal drop / come back (a held Match, no animation yet), Ctrl+M / Ctrl+A / Ctrl+X make them propose, accept or decline a Rematch, Ctrl+R toggles "servers resting".

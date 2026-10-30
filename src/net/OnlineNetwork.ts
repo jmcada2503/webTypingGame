@@ -73,6 +73,9 @@ interface Attempt {
  * the host sets a common start so both Countdowns begin together (`connected` fires at that moment on each
  * side). Match events, Rematch messages and liveness then travel over the channel only.
  */
+/** After a signal loss, the Match resumes this many seconds after the signal is back. */
+const RESUME_SECONDS = 5;
+
 export class OnlineNetwork implements FlowNetwork {
   private readonly api: MatchApi;
   private readonly timers: Timers;
@@ -315,11 +318,21 @@ export class OnlineNetwork implements FlowNetwork {
     link.onEvent((event) => {
       if (a.cancelled) return;
       if (event.type === 'signalLost') this.emit({ type: 'opponentDisconnected' });
-      else if (event.type === 'signalBack') this.emit({ type: 'opponentReconnected' });
-      else this.emit({ type: 'opponentLeft' });
+      else if (event.type === 'signalBack') {
+        // The host picks the moment the Match resumes, so both Countdowns end together; the guest waits for it.
+        if (a.role === 'host') {
+          link.resumeIn(RESUME_SECONDS * 1000);
+          this.emit({ type: 'opponentReconnected', resumeIn: RESUME_SECONDS });
+        }
+      } else this.emit({ type: 'opponentLeft' });
     });
     link.onMessage((message) => {
-      if (!a.cancelled && message.type === 'rematch') this.emit({ type: 'rematch', message: message.message });
+      if (a.cancelled) return;
+      if (message.type === 'rematch') this.emit({ type: 'rematch', message: message.message });
+      else if (message.type === 'resumeAt') {
+        const resumeIn = Math.max(0, (link.toLocalTime(message.at) - this.timers.now()) / 1000);
+        this.emit({ type: 'opponentReconnected', resumeIn });
+      }
     });
     this.startTogether(a, link);
   }

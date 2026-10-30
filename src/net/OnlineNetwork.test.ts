@@ -320,6 +320,8 @@ describe('after connecting', () => {
     return t;
   }
 
+  const reconnected = (events: Array<NetworkEvent & { at: number }>) => events.filter((e) => e.type === 'opponentReconnected') as Array<{ type: 'opponentReconnected'; resumeIn: number; at: number }>;
+
   it('a lost signal is opponentDisconnected, and opponentReconnected when it returns', async () => {
     const { timers, net, a } = await connected();
     net.cut();
@@ -329,10 +331,41 @@ describe('after connecting', () => {
     expect(a.types().slice(2)).toEqual(['opponentDisconnected', 'opponentReconnected']);
   });
 
-  it('silence past the grace is opponentLeft', async () => {
+  it('when the signal returns both sides get one opponentReconnected, and the resume ends at the same moment', async () => {
+    const { timers, net, a, b } = await connected();
+    net.cut();
+    await timers.advanceAsync(5000);
+    net.heal();
+    await timers.advanceAsync(4000);
+
+    const [ra] = reconnected(a.events);
+    const [rb] = reconnected(b.events);
+    expect(reconnected(a.events)).toHaveLength(1);
+    expect(reconnected(b.events)).toHaveLength(1);
+    expect(Math.max(ra.resumeIn, rb.resumeIn)).toBeCloseTo(5, 5); // the host's full countdown
+    expect(Math.min(ra.resumeIn, rb.resumeIn)).toBeLessThan(5); // the guest joins a little later, same end
+    expect(ra.at + ra.resumeIn * 1000).toBeCloseTo(rb.at + rb.resumeIn * 1000, -1);
+  });
+
+  it('the guest stays away until the host says the Match resumes', async () => {
+    const { timers, net, a, b } = await connected();
+    net.cut();
+    await timers.advanceAsync(5000);
+    net.heal();
+    await timers.advanceAsync(1);
+    // Nothing has crossed yet: neither side has been told the signal is back.
+    expect([...reconnected(a.events), ...reconnected(b.events)]).toEqual([]);
+    await timers.advanceAsync(4000);
+    expect(reconnected(a.events)).toHaveLength(1);
+    expect(reconnected(b.events)).toHaveLength(1);
+  });
+
+  it('silence past the grace (the 4 s to notice plus the 10 s of the Match) is opponentLeft', async () => {
     const { timers, net, a } = await connected();
     net.cut();
-    await timers.advanceAsync(12_000);
+    await timers.advanceAsync(13_000);
+    expect(a.types().slice(2)).toEqual(['opponentDisconnected']);
+    await timers.advanceAsync(3000);
     expect(a.types().slice(2)).toEqual(['opponentDisconnected', 'opponentLeft']);
   });
 
