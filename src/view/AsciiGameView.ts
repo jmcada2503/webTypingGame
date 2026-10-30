@@ -105,8 +105,13 @@ export class AsciiGameView implements GameView {
   }
 
   /** Apply the ending's frame to the scene: the Enemy ship. (The dimming is added after the hit flash fades.) */
+  private rumble = 0;
   private applyEnding(frame: EndingFrame | null) {
     this.enemy.root.visible = frame ? frame.enemyVisible : true;
+    if (frame && frame.shake > 0 && (this.rumble -= 1 / 60) <= 0) {
+      this.hitFx.shake();
+      this.rumble = 0.3 - 0.2 * frame.shake;
+    }
     this.enemy.endingOffset.set(frame?.enemyOffset.x ?? 0, frame?.enemyOffset.y ?? 0, frame?.enemyOffset.z ?? 0);
   }
 
