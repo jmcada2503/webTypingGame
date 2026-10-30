@@ -724,3 +724,28 @@ describe('Match numbers', () => {
     expect(m.stats()).toMatchObject({ shotsFired: 2, shotsHit: 1, shotsDefended: 1, correctWords: 2, correctLetters: 12 });
   });
 });
+
+describe('details for the metrics', () => {
+  test('keeps the words that got through, my Shots and how they ended, and the peak Pace', () => {
+    const m = engine();
+    m.receive({ type: 'shot', i: 0, t: 0, word: 'nebula' });
+    advance(m, 8); // it reaches me
+    m.submit('rocket'); // Shot 0
+    advance(m, 1);
+    m.submit('meteor'); // Shot 1
+    m.submit('comet'); // Shot 2, still flying at the end
+    m.receive({ type: 'hit', i: 0, lives: 2 });
+    m.receive({ type: 'defended', i: 1 });
+    const d = m.details();
+    expect(d.missed).toEqual(['nebula']);
+    expect(d.lives).toBe(2);
+    expect(d.attacks.map((a) => [a.i, a.w, a.o])).toEqual([
+      [0, 'rocket', 'hit'],
+      [1, 'meteor', 'defended'],
+      [2, 'comet', 'flying'],
+    ]);
+    expect(d.attacks[0].t).toBe(8);
+    advance(m, 1);
+    expect(m.details().peakPace).toBeGreaterThan(0);
+  });
+});

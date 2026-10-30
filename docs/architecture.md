@@ -43,10 +43,10 @@ The draw.io source is embedded below — paste it into draw.io ([app.diagrams.ne
         <mxCell id="api" value="&lt;b&gt;Lambda: api&lt;/b&gt;&#10;Function URL + OAC&#10;Node arm64, esbuild&#10;reserved concurrency 10&#8211;20 (rate cap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="740" y="130" width="210" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="ddb" value="&lt;b&gt;DynamoDB&lt;/b&gt; (provisioned 25/25, free)&#10;&#8226; matches&#160;&#160;Q#&lt;lang&gt; pointer + M#&lt;id&gt;&#10;&#8226; presence&#160;&#160;P#&lt;lang&gt;#&lt;30s bucket&gt;&#10;&#8226; match_details&#160;&#160;pk pid, sk endedAt#id&#10;TTL = cleanup only; liveness via lastSeen" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="ddb" value="&lt;b&gt;DynamoDB&lt;/b&gt; (provisioned 25/25, free)&#10;&#8226; matches&#160;&#160;Q#&lt;lang&gt; pointer + M#&lt;id&gt;&#10;&#8226; presence&#160;&#160;P#&lt;lang&gt;#&lt;60s bucket&gt;&#10;&#8226; match_details&#160;&#160;pk pid, sk at#id#n&#10;TTL = cleanup only; liveness via lastSeen" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="740" y="290" width="250" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="cw" value="&lt;b&gt;CloudWatch Logs&lt;/b&gt;&#10;1 JSON line / match&#10;+ Logs Insights saved queries&#10;(analytics / time-range metrics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="cw" value="&lt;b&gt;CloudWatch Logs&lt;/b&gt;&#10;1 JSON line / record&#10;+ Logs Insights saved queries&#10;(analytics / time-range metrics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="740" y="490" width="250" height="90" as="geometry" />
         </mxCell>
         <mxCell id="eb" value="&lt;b&gt;EventBridge&lt;/b&gt;&#10;every 15 min" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
@@ -137,19 +137,32 @@ for 10 s is gone (polls write liveness at most every 4 s). Errors are `{error}` 
 
 **DynamoDB** (provisioned 25/25 in total, always-free, shared per region; `matches` has 10/10):
 - `matches` — `Q#<lang>` single pointer (≤1 waiter/language) + `M#<id>` match items (seeds, SDP, status, `*Seen`).
-- `presence` — `P#<lang>#<60s bucket>` counters (2 R / 10 W); online = last complete bucket. Every open tab
+- `presence` — `P#<lang>#<60s bucket>` counters (2 R / 3 W); online = last complete bucket. Every open tab
   (`src/net/presence.ts`) beats once per wall-clock window at a fixed random offset (2–55 s in), which also keeps
   `api` warm. Above 50 tabs online it's **sampled**: `GET online` publishes `sample = 50 / total`, each tab beats
   with that probability, and the server adds `1 / sample` per beat (the rate it derives itself from the window
   before, cached per window), so ~50 heartbeats per minute however many players. `GET online` returns both
   languages with `Cache-Control: max-age=30` (CloudFront caches it) and logs `online_count` for the peak-players
   query. A throttled heartbeat is dropped, never billed.
-- `match_details` — one item per player per Match (incl. Practice), keyed `pid` / `endedAt#matchId`; accounts-ready.
+- `match_details` — one item per player per Match (incl. Practice), keyed `pid` / `<at>#<matchId>#<n>` (Practice:
+  `<at>#<runId>`); 10 R / 12 W, no TTL, accounts-ready. Written with `attribute_not_exists` (a retry is a
+  duplicate); over capacity the item is dropped (no SDK retries) and the log line says `dropped: 1`.
 
 TTL is cleanup only (deletes can lag ~48 h); liveness is checked in code via `lastSeen`/`*Seen`.
 
-**CloudWatch Logs.** `POST report` writes the `match_details` item *and* emits one JSON log line;
-Logs Insights saved queries (CDK `CfnQueryDefinition`) serve time-range analytics DynamoDB can't do cheaply.
+**Metrics** (`infra/lambda/api/metrics.ts`, client `src/metrics/`). The browser sends `POST report` with one
+record: `match` (my side of a Match, every Rematch its own, incl. the attack list), `practice`, `p2p` (every
+connection attempt: ICE timeline, path type, time to connect, failure, candidates each side offered), `mm`
+(Matchmaking given up, with the wait) and `rematch` (how the offer was settled). `MetricsTracker` derives them
+from `ScreenFlow.onChange` (every state, also in background tabs); a tab closing mid-Match reports `quit` via a
+`keepalive` fetch. The server validates strictly (unknown fields dropped, sizes capped), adds `cc` from
+`CloudFront-Viewer-Country` (forwarded by the `/api/*` origin request policy), never the IP or full UA, writes
+`match`/`practice` to `match_details`, and emits one pure-JSON stdout line per record (no `console.log` prefix,
+so Logs Insights sees the fields; booleans as 0/1, `fail: "none"` on success; the attack list stays out of the
+log). Retention 180 days. Saved queries (`infra/lib/metrics-queries.ts`, folder `typing-game/`) include
+**P2P failure rate by browser/country** (the TURN / WebSocket-fallback decision). Kill switch:
+`METRICS_SAMPLE_RATE` in `infra/lib/backend-stack.ts` (0 = off; below 1, lines carry weight `w`). Faked stats
+are possible (collect-only).
 
 **Cost guardrails** (own CDK stack `Guardrails`, after `Backend` and `Static`). `guardrails` Lambda,
 three triggers: EventBridge (15 min) sums month-to-date CloudWatch usage (CloudFront requests/bytes,

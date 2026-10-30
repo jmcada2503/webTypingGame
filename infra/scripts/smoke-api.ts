@@ -59,6 +59,11 @@ check("private: create and join", await (async () => {
   return joined.body.status === "paired" && third.body.error === "full";
 })());
 
+// A connection record is log only (no history item). Browser "Smoke" so queries can leave these out.
+const p2p = { t: "p2p", br: "Smoke", os: "Other", ret: false, mid: id, kind: "public", role: "host", ok: true, fail: null, pair: "host", ms: 1, gather: 1, ice: [], cand: { lh: 0, ls: 0, lr: 0, rh: 0, rs: 0, rr: 0 } };
+check("a metrics report is accepted", (await call("POST", "/api/report", { pid: A, r: p2p })).status === 200);
+check("a bad metrics report is refused", (await call("POST", "/api/report", { pid: A, r: { ...p2p, t: "nope" } })).status === 400);
+
 await call("POST", `/api/match/${id}/leave`, { pid: A });
 check("left matches are gone", (await call("GET", `/api/match/${id}?pid=${B}`)).status === 404);
 

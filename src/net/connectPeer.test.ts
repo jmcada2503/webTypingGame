@@ -132,3 +132,18 @@ describe('browserName', () => {
     expect(browserName(ua)).toBe(expected);
   });
 });
+
+describe('countCandidates', () => {
+  it('counts the candidates in a description by type', async () => {
+    const { countCandidates } = await import('./rtc');
+    const sdp = [
+      'v=0',
+      'a=candidate:1 1 udp 2122260223 192.168.1.2 54321 typ host generation 0',
+      'a=candidate:2 1 udp 2122260223 fd00::1 54322 typ host',
+      'a=candidate:3 1 udp 1686052607 203.0.113.5 54321 typ srflx raddr 192.168.1.2 rport 54321',
+      'a=candidate:4 1 udp 41885439 198.51.100.7 3478 typ relay raddr 203.0.113.5 rport 54321',
+    ].join('\r\n');
+    expect(countCandidates(sdp)).toEqual({ host: 2, srflx: 1, relay: 1 });
+    expect(countCandidates(undefined)).toEqual({ host: 0, srflx: 0, relay: 0 });
+  });
+});

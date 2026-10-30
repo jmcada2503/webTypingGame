@@ -1,4 +1,4 @@
-import type { FlowNetwork, Language, NetworkEvent } from '../flow/types';
+import type { FlowNetwork, Language, MatchKind, NetworkEvent } from '../flow/types';
 import type { MatchTransport } from '../match/types';
 import { ApiError, type MatchApi, type MatchView } from './api';
 import { TransportError, type ConnectionRecord } from './errors';
@@ -28,7 +28,7 @@ export interface OnlineNetworkOptions {
   /** Passed through to `connectPeer` (tests use it for fake WebRTC). */
   connectOptions?: Partial<ConnectOptions>;
   /** Every connection attempt, success or failure, for the metrics. */
-  onRecord?: (record: ConnectionRecord) => void;
+  onRecord?: (record: ConnectionRecord, match: { matchId: string; kind: MatchKind }) => void;
   log?: (entry: Record<string, unknown>) => void;
   /**
    * Runs right before each search or join; resolving false stops it quietly (e.g. the page is reloading
@@ -287,7 +287,7 @@ export class OnlineNetwork implements FlowNetwork {
       (error: unknown) => {
         if (error instanceof TransportError) {
           if (error.kind === 'aborted') return;
-          this.config.onRecord?.(error.record);
+          this.config.onRecord?.(error.record, { matchId: a.matchId!, kind: a.view!.kind });
         }
         if (a.cancelled) return;
         this.log({ event: 'connect_failed', reason: error instanceof TransportError ? error.kind : String(error) });
@@ -297,7 +297,7 @@ export class OnlineNetwork implements FlowNetwork {
   }
 
   private opened(a: Attempt, connection: PeerConnection) {
-    this.config.onRecord?.(connection.record);
+    this.config.onRecord?.(connection.record, { matchId: a.matchId!, kind: a.view!.kind });
     if (a.cancelled) return connection.close();
     a.connection = connection;
     const { link } = connection;

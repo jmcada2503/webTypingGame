@@ -116,3 +116,19 @@ describe('presence and the online count', () => {
     expect((await route({ method: 'GET', path: '/api/presence', query: {}, body: undefined })).status).toBe(405);
   });
 });
+
+describe("POST /api/report", () => {
+  it("logs the record with the viewer's country", async () => {
+    const { MemoryDetailsStore, Metrics } = await import("./metrics");
+    const P2P = {
+      t: "p2p", br: "Chrome", os: "Mac", ret: false, mid: "abc123", kind: "public", role: "host", ok: true, fail: null, pair: "srflx",
+      ms: 900, gather: 300, ice: [{ s: "connected", ms: 800 }], cand: { lh: 2, ls: 1, lr: 0, rh: 2, rs: 1, rr: 0 },
+    };
+    const lines: Record<string, unknown>[] = [];
+    const route = createRouter(new Matchmaker(new MemoryStore()), undefined, new Metrics({ store: new MemoryDetailsStore(), log: (l) => lines.push(l), sampleRate: 1 }));
+    expect((await route({ method: "POST", path: "/api/report", query: {}, body: { pid: A, r: P2P }, country: "MX" })).status).toBe(200);
+    expect(lines[0]).toMatchObject({ t: "p2p", pid: A, cc: "MX" });
+    expect((await route({ method: "POST", path: "/api/report", query: {}, body: { pid: "x", r: P2P } })).status).toBe(400);
+    expect((await route({ method: "GET", path: "/api/report", query: {} , body: undefined })).status).toBe(405);
+  });
+});

@@ -20,6 +20,14 @@ export interface ConnectionRecord {
   connectMs: number | null;
   failure: TransportErrorKind | null;
   browser: string;
+  /** Candidates each side offered, by type: tells "STUN blocked" (no srflx) from "no path between them". */
+  candidates: { local: CandidateCount; remote: CandidateCount };
+}
+
+export interface CandidateCount {
+  host: number;
+  srflx: number;
+  relay: number;
 }
 
 export class TransportError extends Error {
