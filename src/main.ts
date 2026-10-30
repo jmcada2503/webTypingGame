@@ -26,6 +26,7 @@ import { howtoScreen } from './screens/howtoScreen';
 import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
 import { placeholderOnline } from './screens/content';
+import { inviteCodeFromHash } from './app/inviteLink';
 import { opponentLeftScreen } from './screens/opponentLeftScreen';
 import { simpleScreens } from './screens/simpleScreens';
 import { waitingScreen } from './screens/waitingScreen';
@@ -156,12 +157,16 @@ if (online) {
   addEventListener('pagehide', () => tracker.pageHidden());
 }
 
-// An Invite link (`#/m/<id>`) skips the menu. Clear it so a reload doesn't try to join again.
-const invite = /^#\/m\/([a-z0-9]{3,32})$/.exec(location.hash);
-if (invite) {
+// An Invite link (`#/m/<id>`) skips the menu, on load and also when it is entered in a page that is already open
+// (that only changes the hash, it does not reload). Clear it so a reload doesn't try to join again.
+const openInvite = () => {
+  const code = inviteCodeFromHash(location.hash);
+  if (!code) return;
   history.replaceState(null, '', location.pathname + location.search);
-  flow.joinInvite(invite[1]);
-}
+  flow.joinInvite(code);
+};
+openInvite();
+addEventListener('hashchange', openInvite);
 
 // The cost guardrails publish whether online play is resting; check on load and every 30 s.
 if (online) {
