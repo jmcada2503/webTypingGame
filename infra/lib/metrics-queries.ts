@@ -60,6 +60,6 @@ export const METRICS_QUERIES: Record<string, string> = {
 | sort hour desc`,
 
   "Metrics dropped from the history (over capacity)": `filter dropped = 1
-| stats count(*) as dropped by t, bin(1h) as hour
+| stats count(*) as items by t, bin(1h) as hour
 | sort hour desc`,
 };
