@@ -8,7 +8,7 @@ import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { GO_SECONDS, goFlash } from './content';
 import { bigNumber } from './countdownScreen';
-import { ENDINGS, endingFrame, endingMoments, type EndingResult } from './endings';
+import { ENDINGS, endingFrame, endingMoments, rematchClockStart, type EndingResult } from './endings';
 import type { ScreenSet } from './Screen';
 import { ScreenTransition, type ScreenId, transitionFor, visualOf } from './ScreenTransition';
 
@@ -38,7 +38,9 @@ export class ScreenHost implements GameSession {
   private matchTime = 0;
   /** The GO flash is showing over the Match scene. */
   private goOn = false;
-  /** An online Match just ended: its ending scene plays (`t` seconds in) before the screen changes. */
+  /** Seconds until the Rematch clock may start, counted from the result (null: not holding). */
+  private rematchHoldLeft: number | null = null;
+  /** A Match or Practice run just ended: its ending scene plays (`t` seconds in) before the screen changes. */
   private ending: { result: EndingResult; t: number; started: boolean } | null = null;
 
   constructor(
@@ -69,6 +71,10 @@ export class ScreenHost implements GameSession {
   }
 
   update(dt: number): ViewEvent[] {
+    if (this.rematchHoldLeft !== null && (this.rematchHoldLeft -= dt) <= 0) {
+      this.rematchHoldLeft = null;
+      this.flow.holdRematch(false);
+    }
     this.flow.update(dt);
     this.transition.update(dt);
     this.screenTime += dt;
@@ -140,11 +146,13 @@ export class ScreenHost implements GameSession {
     if (this.ending) return;
     this.flow.matchEnded(result);
     const online = this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus';
-    this.flow.holdRematch(online); // its clocks start when the end screen is up
-    // Online Matches play their ending first; Practice (no opponent, no result) goes straight to its screen.
-    if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus') {
-      this.ending = { result, t: 0, started: false };
-      this.view.setEnding(endingFrame(result, 0));
+    this.flow.holdRematch(online); // its clocks start together on both sides, see rematchClockStart
+    this.rematchHoldLeft = online ? rematchClockStart(result) : null;
+    // The scene plays its ending before the end screen. Practice only ends when the last Life goes: the Lose ending.
+    if (this.flow.state().screen === 'end' && this.shown.screen === 'match') {
+      const shownResult = this.shown.mode === 'practice' ? 'lost' : result;
+      this.ending = { result: shownResult, t: 0, started: false };
+      this.view.setEnding(endingFrame(shownResult, 0));
     }
   }
 
@@ -170,7 +178,6 @@ export class ScreenHost implements GameSession {
     this.displayed = visualOf(this.shown);
     this.screenTime = 0;
     this.ending = null;
-    this.flow.holdRematch(false);
     this.view.setEnding(null);
     if (this.displayed !== 'match') this.endSession();
     this.screens[this.displayed].enter?.(this.shown);

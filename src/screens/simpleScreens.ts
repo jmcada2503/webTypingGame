@@ -1,15 +1,15 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { PracticeResult } from '../practice/PracticeSession';
-import { practiceResultLines, practiceScore } from './content';
 import { blink, centered, formatClock, twoTone } from './draw';
 import { onlineEndScreen, type OnlineStats } from './endScreens';
+import { practiceEndScreen } from './practiceEndScreen';
 import type { Screen, ScreenSet } from './Screen';
 
 /**
  * Plain, readable versions of every screen so the whole flow can be walked end to end. Screens that have an
- * approved design (menu, how-to, waiting, Countdown) get replaced by the real ones; the end, Opponent-left and
- * error screens stay like this until their prototypes are done.
+ * approved design (menu, how-to, waiting, Countdown) get replaced by the real ones; the end screen hands off to the
+ * approved Practice and online designs; Opponent-left and error stay like this until their builds.
  */
 const lines = (text: TextGrid, start: number, rows: string[], color: 'fg' | 'dim' = 'fg') => rows.forEach((r, i) => centered(text, start + i, r, color));
 
@@ -71,32 +71,20 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
   const match: Screen = { draw() {} }; // the Match is the game scene itself
 
   const onlineEnd = onlineEndScreen(flow, onlineStats);
+  const practiceEnd = practiceEndScreen(flow, practiceResult);
   const end: Screen = {
+    enter(s) {
+      if (s.screen === 'end') practiceEnd.enter(s);
+    },
     draw(text, t, s) {
       if (s.screen !== 'end') return;
-      if (s.mode === 'practice') {
-        twoTone(text, 6, 'GAME ', 'OVER', 3);
-        const result = practiceResult();
-        if (result) {
-          // One left-aligned block, centered as a whole, so the numbers line up.
-          const score = `SCORE ${practiceScore(result)}`;
-          text.writeScaled((128 - score.length * 3) / 2, 11.5, score, 3, 'yellow');
-          const rows = practiceResultLines(result);
-          const col = (128 - Math.max(...rows.map((l) => l.length))) / 2;
-          rows.forEach((l, i) => text.write(Math.round(col), 17 + i, l, 'fg'));
-        }
-        lines(text, 25, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
-        return;
-      }
-      onlineEnd.draw(text, t, s);
+      if (s.mode === 'practice') practiceEnd.draw(text, t, s);
+      else onlineEnd.draw(text, t, s);
     },
     onKey(e, s) {
       if (s.screen !== 'end') return;
-      const k = e.key.toLowerCase();
-      if (s.mode === 'practice') {
-        if (k === 'enter') flow.playAgain();
-      } else return onlineEnd.onKey(e, s);
-      if (k === 'q') flow.backToMenu();
+      if (s.mode === 'practice') practiceEnd.onKey(e, s);
+      else onlineEnd.onKey(e, s);
     },
   };
 
