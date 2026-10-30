@@ -777,6 +777,96 @@ describe('Invite links', () => {
   });
 });
 
+describe('An Invite link opened while the page is already open', () => {
+  const taken = (flow: ScreenFlow) => expect(flow.state()).toMatchObject({ screen: 'howto', kind: 'private' });
+
+  test('from the how-to, it replaces the match the player was about to look for', () => {
+    const { flow, network } = setup();
+    flow.choose('public');
+    flow.joinInvite('NEWCODE1');
+    taken(flow);
+    flow.confirm();
+    expect(network.calls).toEqual(['joinPrivate:NEWCODE1']);
+  });
+
+  test('while searching for a Public match, it leaves the queue first', () => {
+    const { flow, network } = searching();
+    flow.joinInvite('NEWCODE1');
+    taken(flow);
+    expect(network.calls.at(-1)).toBe('leave');
+  });
+
+  test('while waiting for a friend on a Private match of their own, it leaves that match first', () => {
+    const { flow, network } = setup();
+    flow.choose('private');
+    flow.confirm();
+    network.emit({ type: 'inviteCreated', link: 'https://x.test/#/m/MINE0001' });
+    flow.joinInvite('NEWCODE1');
+    taken(flow);
+    expect(network.calls.at(-1)).toBe('leave');
+  });
+
+  test('from an end screen (online or Practice), the error screen and Opponent left', () => {
+    const online = ended();
+    online.flow.joinInvite('NEWCODE1');
+    taken(online.flow);
+    expect(online.network.calls.at(-1)).toBe('leave');
+
+    const practice = setup();
+    practice.flow.choose('practice');
+    practice.flow.update(1.8);
+    practice.flow.matchEnded('lost');
+    practice.flow.joinInvite('NEWCODE1');
+    taken(practice.flow);
+
+    const failed = searching();
+    failed.network.emit({ type: 'connectFailed' });
+    expect(screen(failed.flow)).toBe('error');
+    failed.flow.joinInvite('NEWCODE1');
+    taken(failed.flow);
+
+    const left = searching();
+    left.network.emit({ type: 'matched' });
+    left.network.emit({ type: 'opponentLeft' });
+    expect(screen(left.flow)).toBe('opponentLeft');
+    left.flow.joinInvite('NEWCODE1');
+    taken(left.flow);
+  });
+
+  test('never while connecting, in the Countdown, in the starting gap, in a Match or in Practice', () => {
+    const connecting = searching();
+    connecting.network.emit({ type: 'matched' });
+    connecting.flow.joinInvite('NEWCODE1');
+    expect(connecting.flow.state()).toMatchObject({ screen: 'waiting', phase: 'connecting' });
+
+    const countdown = counting();
+    countdown.flow.joinInvite('NEWCODE1');
+    expect(screen(countdown.flow)).toBe('countdown');
+
+    const starting = counting();
+    starting.flow.update(5);
+    starting.flow.joinInvite('NEWCODE1');
+    expect(screen(starting.flow)).toBe('starting');
+
+    const match = playing();
+    match.flow.joinInvite('NEWCODE1');
+    expect(screen(match.flow)).toBe('match');
+
+    const practice = setup();
+    practice.flow.choose('practice');
+    practice.flow.update(1.8);
+    practice.flow.joinInvite('NEWCODE1');
+    expect(practice.flow.state()).toMatchObject({ screen: 'match', mode: 'practice' });
+  });
+
+  test('not while the servers are resting', () => {
+    const { flow } = setup();
+    flow.setServersResting(true);
+    flow.joinInvite('NEWCODE1');
+    expect(screen(flow)).toBe('menu');
+  });
+});
+
 describe('Servers resting', () => {
   test('online matches are blocked on the menu, Practice still works', () => {
     const { flow } = setup();

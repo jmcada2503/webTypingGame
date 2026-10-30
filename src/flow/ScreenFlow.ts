@@ -74,9 +74,18 @@ export class ScreenFlow {
     }
   }
 
-  /** The player opened an Invite link: no menu, straight to the how-to. */
+  /**
+   * The player opened an Invite link: no menu, straight to the how-to. It also works from a page that is already
+   * open and between matches (how-to, searching, end screens, errors), leaving what they were doing; it is ignored
+   * while connecting, in the Countdown, in a Match and in Practice, so a link never drops a game in progress.
+   */
   joinInvite(code: string) {
-    if (this.s.screen !== 'menu' || this.resting) return;
+    const s = this.s;
+    if (this.resting) return;
+    const searching = s.screen === 'waiting' && s.phase === 'searching';
+    const between = s.screen === 'menu' || s.screen === 'howto' || s.screen === 'end' || s.screen === 'opponentLeft' || s.screen === 'error';
+    if (!searching && !between) return;
+    if (searching || (s.screen === 'end' && s.mode === 'versus')) this.network.leave();
     this.joinCode = code;
     this.kind = 'private';
     this.s = { screen: 'howto', kind: 'private', secondsLeft: this.config.howToAutoStartSeconds };
