@@ -19,6 +19,7 @@ export const WORD_LOOK = {
  * - B: the next word glows; the others are slightly dimmed.
  * - C: a bar under the next word; brightness untouched.
  * - D: A + B.
+ * - E: the next word is painted pale yellow.
  * "Next" = the nearest Word bullet that isn't the one being typed (the Target matching the Typed word);
  * with nothing typed, the nearest one.
  */
@@ -30,7 +31,10 @@ export const NEAREST_PROTO = {
   others: 0.7,
 };
 
-type Mark = 'none' | 'glow' | 'bar';
+/** E: the next word's letters. */
+const PALE_YELLOW = '#fff1a8';
+
+type Mark = 'none' | 'glow' | 'bar' | 'yellow';
 
 /** Which bullet is "next", and how bright each one is, for the current variant. */
 function nearestLook(state: GameViewState): Map<string, { light: number; mark: Mark }> {
@@ -49,6 +53,7 @@ function nearestLook(state: GameViewState): Map<string, { light: number; mark: M
     if (v === 'A') light = isTarget ? 1 : byFlight;
     if (v === 'B') [light, mark] = isTarget || isNext ? [1, isNext ? 'glow' : 'none'] : [NEAREST_PROTO.others, 'none'];
     if (v === 'C') mark = isNext ? 'bar' : 'none';
+    if (v === 'E') mark = isNext ? 'yellow' : 'none';
     if (v === 'D') [light, mark] = isTarget || isNext ? [1, isNext ? 'glow' : 'none'] : [byFlight, 'none'];
     out.set(b.id, { light, mark });
   }
@@ -166,11 +171,12 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, co
   const border = WORD_LOOK.border * EM_PX;
   const pad = border * 1.6;
   canvas.width = Math.ceil(advance * letters.length + 2 * pad);
-  canvas.height = Math.ceil(EM_PX + 2 * pad + (mark === 'bar' ? EM_PX * 0.35 : 0));
+  // The bar needs room below the word; the same room above keeps the word centred where it flies.
+  canvas.height = Math.ceil(EM_PX + 2 * pad + (mark === 'bar' ? EM_PX * 0.7 : 0));
   g.font = FONT; // resizing the canvas resets context state
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
-  const y = (mark === 'bar' ? canvas.height - EM_PX * 0.35 : canvas.height) / 2 + EM_PX * 0.05;
+  const y = canvas.height / 2 + EM_PX * 0.05;
   const x = (i: number) => pad + i * advance;
   g.strokeStyle = ASCII_STYLE.palette.bg;
   g.lineWidth = border * 2;
@@ -190,7 +196,7 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, co
     g.shadowBlur = EM_PX * 0.35;
   }
   letters.forEach((_, i) => {
-    g.fillStyle = i < matched ? ASCII_STYLE.palette.green : color;
+    g.fillStyle = i < matched ? ASCII_STYLE.palette.green : mark === 'yellow' ? PALE_YELLOW : color;
     draw(i, (ch, px, py) => g.fillText(ch, px, py));
   });
   g.shadowBlur = 0;

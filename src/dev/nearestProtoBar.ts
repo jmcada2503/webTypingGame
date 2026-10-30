@@ -8,6 +8,7 @@ const VARIANTS: [string, string][] = [
   ['B', 'next one glows'],
   ['C', 'bar under the next one'],
   ['D', 'A + B'],
+  ['E', 'next one pale yellow'],
 ];
 
 export function installNearestProtoBar() {
