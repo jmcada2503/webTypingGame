@@ -2,13 +2,14 @@ import { describe, expect, test } from 'vitest';
 import type { GameSession, SessionStatus } from '../app/GameSession';
 import { FakeBackend } from '../flow/FakeNetwork';
 import { ScreenFlow } from '../flow/ScreenFlow';
-import type { PlayMode } from '../flow/types';
+import { RESUME_SECONDS, type PlayMode } from '../flow/types';
 import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
 import { endingFrame, type EndingFrame } from './endings';
 import type { Screen, ScreenSet } from './Screen';
+import type { LinkFx } from './linkFx';
 import { ScreenHost } from './ScreenHost';
 
 class FakeView implements GameView {
@@ -24,6 +25,10 @@ class FakeView implements GameView {
   }
   setOverlay(draw: ((text: TextGrid, dt: number) => void) | null) {
     this.overlayDraw = draw;
+  }
+  linkFx: LinkFx | null = null;
+  setLinkFx(fx: LinkFx | null) {
+    this.linkFx = fx;
   }
   ending: EndingFrame | null = null;
   setEnding(frame: EndingFrame | null) {
@@ -432,14 +437,44 @@ describe("While the opponent's signal is lost", () => {
     expect(ctx.input.enabled.at(-1)).toBe(false);
 
     ctx.run(3);
-    ctx.backend.reconnect(ctx.otherEndpoint); // the resume countdown (5 s) starts: still held
-    ctx.run(4.5);
+    ctx.backend.reconnect(ctx.otherEndpoint); // the resume countdown (5.8 s) starts: still held
+    ctx.run(5.5);
     expect(ctx.made[0].held).toBe(true);
     expect(ctx.input.enabled.at(-1)).toBe(false);
 
-    ctx.run(0.7);
+    ctx.run(0.5);
     expect(ctx.made[0].held).toBe(false);
     expect(ctx.input.enabled.at(-1)).toBe(true);
+  });
+
+  test('the view is told how long the signal has been lost, and starts again from 0 with each new loss', () => {
+    const ctx = intoOnlineMatch();
+    expect(ctx.view.linkFx).toBeNull();
+
+    ctx.backend.drop(ctx.otherEndpoint);
+    ctx.run(2);
+    expect(ctx.view.linkFx).toMatchObject({ kind: 'away', losses: 1 });
+    expect((ctx.view.linkFx as { t: number }).t).toBeCloseTo(2, 0);
+    expect((ctx.view.linkFx as { secondsLeft: number }).secondsLeft).toBeCloseTo(8, 0);
+
+    ctx.backend.reconnect(ctx.otherEndpoint);
+    ctx.run(1);
+    expect(ctx.view.linkFx).toMatchObject({ kind: 'back' });
+    expect((ctx.view.linkFx as { secondsLeft: number }).secondsLeft).toBeLessThan(RESUME_SECONDS);
+
+    ctx.backend.drop(ctx.otherEndpoint); // the second loss
+    ctx.run(0.3);
+    expect(ctx.view.linkFx).toMatchObject({ kind: 'away', losses: 2 });
+    expect((ctx.view.linkFx as { t: number }).t).toBeLessThan(0.6);
+  });
+
+  test('after the resume countdown the effect is gone', () => {
+    const ctx = intoOnlineMatch();
+    ctx.backend.drop(ctx.otherEndpoint);
+    ctx.run(1);
+    ctx.backend.reconnect(ctx.otherEndpoint);
+    ctx.run(RESUME_SECONDS + 0.3);
+    expect(ctx.view.linkFx).toBeNull();
   });
 
   test('Practice is never held', () => {

@@ -1,4 +1,4 @@
-import type { FlowNetwork, Language, MatchKind, NetworkEvent } from '../flow/types';
+import { RESUME_SECONDS, type FlowNetwork, type Language, type MatchKind, type NetworkEvent } from '../flow/types';
 import type { MatchTransport } from '../match/types';
 import { ApiError, type MatchApi, type MatchView } from './api';
 import { TransportError, type ConnectionRecord } from './errors';
@@ -73,9 +73,6 @@ interface Attempt {
  * the host sets a common start so both Countdowns begin together (`connected` fires at that moment on each
  * side). Match events, Rematch messages and liveness then travel over the channel only.
  */
-/** After a signal loss, the Match resumes this many seconds after the signal is back. */
-const RESUME_SECONDS = 5;
-
 export class OnlineNetwork implements FlowNetwork {
   private readonly api: MatchApi;
   private readonly timers: Timers;

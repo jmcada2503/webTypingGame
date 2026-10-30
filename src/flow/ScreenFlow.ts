@@ -1,9 +1,7 @@
-import { DEFAULT_FLOW_CONFIG, type FlowConfig, type FlowNetwork, type FlowState, type Language, type MatchKind, type MatchLink, type MenuChoice, type NetworkEvent, type RematchState } from './types';
+import { DEFAULT_FLOW_CONFIG, MAX_SIGNAL_LOSSES, type FlowConfig, type FlowNetwork, type FlowState, type Language, type MatchKind, type MatchLink, type MenuChoice, type NetworkEvent, type RematchState } from './types';
 
 /** Floating-point slack when a timer is compared with zero. */
 const EPS = 1e-9;
-/** The third signal loss in a Match is too many: the connection can't be played, so no grace. */
-const MAX_SIGNAL_LOSSES = 3;
 
 /**
  * Which screen the player is on, and how they move between screens: menu, how-to, waiting, Countdown, Match,
