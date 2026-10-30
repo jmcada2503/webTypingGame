@@ -125,6 +125,9 @@ and the HTTP signaling client. Practice runs fully in-browser with no backend.
 and the `api` Lambda Function URL via Origin Access Control. `/api/*` is same-origin (no CORS). POST to
 a Function URL origin must send `x-amz-content-sha256` (client hashes the body with `crypto.subtle`).
 Shield Standard (L3/L4) is free; no WAF.
+The game is served from **typewing.net** (registered in Route 53; the stack's `ZONE_ID` is its hosted zone). An ACM
+certificate (us-east-1, DNS-validated) covers the apex and `www`; A/AAAA alias records point both at the distribution,
+and a viewer-request CloudFront Function answers `www` with a 301 to the apex. The `*.cloudfront.net` URL keeps working.
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,

@@ -1,4 +1,5 @@
 import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import { Certificate, CertificateValidation } from "aws-cdk-lib/aws-certificatemanager";
 import {
   AllowedMethods,
   CacheCookieBehavior,
@@ -6,14 +7,25 @@ import {
   CachePolicy,
   CacheQueryStringBehavior,
   Distribution,
+  Function as CdnFunction,
+  FunctionCode,
+  FunctionEventType,
+  FunctionRuntime,
   OriginRequestPolicy,
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { FunctionUrlOrigin, S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
+import { AaaaRecord, ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
+import { CloudFrontTarget } from "aws-cdk-lib/aws-route53-targets";
 import type { FunctionUrl } from "aws-cdk-lib/aws-lambda";
 import { BlockPublicAccess, Bucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+
+/** The game's own domain, registered in Route 53 (its hosted zone came with the registration). */
+const DOMAIN = "typewing.net";
+const WWW = `www.${DOMAIN}`;
+const ZONE_ID = "Z02230451DTTTY9A30LCV";
 
 interface StaticStackProps extends StackProps {
   apiUrl: FunctionUrl;
@@ -46,7 +58,35 @@ export class StaticStack extends Stack {
       cookieBehavior: CacheCookieBehavior.none(),
     });
 
+    const zone = HostedZone.fromHostedZoneAttributes(this, "Zone", { hostedZoneId: ZONE_ID, zoneName: DOMAIN });
+    // CloudFront only reads certificates from us-east-1, which is where this stack lives.
+    const certificate = new Certificate(this, "Cert", {
+      domainName: DOMAIN,
+      subjectAlternativeNames: [WWW],
+      validation: CertificateValidation.fromDns(zone),
+    });
+
+    // www is only an alias: send it to the apex with a permanent redirect.
+    const wwwToApex = new CdnFunction(this, "WwwToApex", {
+      runtime: FunctionRuntime.JS_2_0,
+      code: FunctionCode.fromInline(`function handler(event) {
+  var r = event.request;
+  if (r.headers.host.value !== "${WWW}") return r;
+  var qs = Object.keys(r.querystring).map(function (k) {
+    var q = r.querystring[k];
+    return q.value === "" ? k : k + "=" + q.value;
+  }).join("&");
+  return {
+    statusCode: 301,
+    statusDescription: "Moved Permanently",
+    headers: { location: { value: "https://${DOMAIN}" + r.uri + (qs ? "?" + qs : "") } },
+  };
+}`),
+    });
+
     const distribution = new Distribution(this, "Cdn", {
+      domainNames: [DOMAIN, WWW],
+      certificate,
       // The game is at /; the visual sandbox stays reachable at /sandbox/.
       defaultRootObject: "index.html",
       defaultBehavior: {
@@ -54,6 +94,7 @@ export class StaticStack extends Stack {
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: CachePolicy.CACHING_OPTIMIZED,
         compress: true,
+        functionAssociations: [{ function: wwwToApex, eventType: FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
         // Order matters: the specific path before the /api/* catch-all.
@@ -74,6 +115,12 @@ export class StaticStack extends Stack {
       },
     });
     this.distribution = distribution;
+
+    for (const recordName of [undefined, "www"]) {
+      const target = RecordTarget.fromAlias(new CloudFrontTarget(distribution));
+      new ARecord(this, `A${recordName ?? "Apex"}`, { zone, recordName, target });
+      new AaaaRecord(this, `Aaaa${recordName ?? "Apex"}`, { zone, recordName, target });
+    }
 
     // Vite hashes everything under assets/, so those never change: cache them for a year.
     const hashedAssets = new BucketDeployment(this, "HashedAssets", {
@@ -99,6 +146,7 @@ export class StaticStack extends Stack {
     });
     pages.node.addDependency(hashedAssets);
 
-    new CfnOutput(this, "SiteUrl", { value: `https://${distribution.distributionDomainName}` });
+    new CfnOutput(this, "SiteUrl", { value: `https://${DOMAIN}` });
+    new CfnOutput(this, "CdnUrl", { value: `https://${distribution.distributionDomainName}` });
   }
 }
