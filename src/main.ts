@@ -8,7 +8,7 @@ import { FakeBackend } from './flow/FakeNetwork';
 import { ScreenFlow } from './flow/ScreenFlow';
 import { KeyboardTypingInput } from './input/KeyboardTypingInput';
 import { REMATCH_INDEX_STRIDE, createAttackWordSource } from './match/attackWords';
-import { MatchEngine } from './match/MatchEngine';
+import { MATCH_FLIGHT, MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
 import { MetricsTracker } from './metrics/MetricsTracker';
 import { clientInfo, createReporter } from './metrics/reporter';
@@ -100,7 +100,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
   const opponent = online?.currentMatch();
   if (!opponent) {
     const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
-    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 })));
+    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8, flightRamp: MATCH_FLIGHT })));
   }
   const list = wordLists[opponent.lang];
   const played = matchesPlayed.get(opponent.matchId) ?? 0;
@@ -123,6 +123,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
     verifyShot: (shot, arrivedAt) => verifier.verify(shot, arrivedAt).ok,
     bulletFlightSeconds: 8,
     shotFlightSeconds: 8,
+    flightRamp: MATCH_FLIGHT,
   });
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
