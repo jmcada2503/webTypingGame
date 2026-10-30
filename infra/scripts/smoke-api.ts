@@ -1,5 +1,5 @@
 // Live check of matchmaking and signaling through CloudFront, against the deployed DynamoDB table:
-//   npm run smoke:api -- https://<distribution>.cloudfront.net
+//   npm run smoke:api -- https://typewing.net
 // Two fake players queue, pair, trade an offer and an answer, confirm, and leave.
 import { createHash, randomBytes } from "node:crypto";
 
