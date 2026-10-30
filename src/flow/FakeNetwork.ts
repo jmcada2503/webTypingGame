@@ -1,4 +1,4 @@
-import type { FlowNetwork, Language, NetworkEvent } from './types';
+import { RESUME_SECONDS, type FlowNetwork, type Language, type NetworkEvent } from './types';
 
 /**
  * An in-memory stand-in for matchmaking plus the P2P channel, for tests and for building screens before
@@ -23,7 +23,7 @@ export class FakeBackend {
 
   /** Test helper: a dropped connection comes back. */
   reconnect(endpoint: FakeEndpoint) {
-    endpoint.peer?.deliver({ type: 'opponentReconnected', resumeIn: 5 });
+    endpoint.peer?.deliver({ type: 'opponentReconnected', resumeIn: RESUME_SECONDS });
   }
 
   // ---- used by the endpoints ----

@@ -83,6 +83,13 @@ const FULLSCREEN_VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0);
  *  4. optional overlay scene drawn on top with no ASCII treatment
  *  5. screen filters (scanlines, glow, vignette) over the whole frame, only when any is on
  */
+/** The "text in front" layer: a soft dark oval centered on `row` (grid rows), `radiusRows` tall, at `alpha` darkness. */
+export interface FrontLayer {
+  row: number;
+  radiusRows: number;
+  alpha: number;
+}
+
 export class GpuAsciiRenderer implements AsciiRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly textGrid: DataTextGrid;
@@ -98,6 +105,13 @@ export class GpuAsciiRenderer implements AsciiRenderer {
   private readonly runMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   private readonly runScene = new THREE.Scene();
   private runSignature = '';
+  /** The "text in front" layer: scaled runs drawn over the Word-bullet overlay, with a soft dark oval between. */
+  private front: FrontLayer | null = null;
+  private ovalCanvas = document.createElement('canvas');
+  private ovalTexture = new THREE.CanvasTexture(this.ovalCanvas);
+  private readonly ovalMaterial = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
+  private readonly ovalScene = new THREE.Scene();
+  private ovalSignature = '';
   private fit: ViewportFit | null = null;
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly quad = new THREE.PlaneGeometry(2, 2);
@@ -170,6 +184,7 @@ export class GpuAsciiRenderer implements AsciiRenderer {
 
     this.filters = new ScreenFilters(this.quad, this.ortho);
     this.runScene.add(new THREE.Mesh(this.quad, this.runMaterial));
+    this.ovalScene.add(new THREE.Mesh(this.quad, this.ovalMaterial));
 
     this.compositePass = this.pass(
       /* glsl */ `
@@ -232,6 +247,46 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     this.runMaterial.map = this.runTexture;
     this.runMaterial.needsUpdate = true;
     this.runSignature = ''; // repaint at the new size
+    this.ovalTexture.dispose();
+    this.ovalCanvas = document.createElement('canvas');
+    this.ovalCanvas.width = fit.canvasW;
+    this.ovalCanvas.height = fit.canvasH;
+    this.ovalTexture = new THREE.CanvasTexture(this.ovalCanvas);
+    this.ovalMaterial.map = this.ovalTexture;
+    this.ovalMaterial.needsUpdate = true;
+    this.ovalSignature = '';
+  }
+
+  /**
+   * While set, the scaled text runs are drawn in front of the Word-bullet overlay (normally the words cover text),
+   * over a soft dark oval that dims the words behind it. For text that must never be covered (the back-countdown).
+   */
+  setFront(front: FrontLayer | null) {
+    this.front = front;
+  }
+
+  /** Paint the dark oval, only when it changed. */
+  private paintOval(front: FrontLayer) {
+    const fit = this.fit;
+    if (!fit) return;
+    const sig = `${fit.canvasW}x${fit.canvasH}|${front.row}|${front.radiusRows}|${front.alpha}`;
+    if (sig === this.ovalSignature) return;
+    this.ovalSignature = sig;
+    const ctx = this.ovalCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, this.ovalCanvas.width, this.ovalCanvas.height);
+    const top = this.ovalCanvas.height - ASCII_STYLE.grid.rows * fit.cellH; // the grid sits at the bottom-left
+    const radius = front.radiusRows * fit.cellH;
+    ctx.save();
+    ctx.translate((ASCII_STYLE.grid.cols / 2) * fit.cellW, top + front.row * fit.cellH);
+    ctx.scale(2, 1); // wide, not round
+    const g = ctx.createRadialGradient(0, 0, radius * 0.2, 0, 0, radius);
+    g.addColorStop(0, `rgba(0,0,0,${front.alpha})`);
+    g.addColorStop(0.65, `rgba(0,0,0,${front.alpha * 0.9})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+    ctx.restore();
+    this.ovalTexture.needsUpdate = true;
   }
 
   /** One row of glyphs, each drawn into a cellW×cellH slot at the real device font size. */
@@ -289,13 +344,17 @@ export class GpuAsciiRenderer implements AsciiRenderer {
     gl.render(this.compositePass.scene, this.ortho);
     this.paintRuns();
     gl.autoClear = false;
-    gl.render(this.runScene, this.ortho);
-    gl.autoClear = true;
-    if (overlay) {
-      gl.autoClear = false;
-      gl.render(overlay.scene, overlay.camera);
-      gl.autoClear = true;
+    if (this.front) {
+      // Words first, then the dark oval over them, then the text over both.
+      if (overlay) gl.render(overlay.scene, overlay.camera);
+      this.paintOval(this.front);
+      gl.render(this.ovalScene, this.ortho);
+      gl.render(this.runScene, this.ortho);
+    } else {
+      gl.render(this.runScene, this.ortho);
+      if (overlay) gl.render(overlay.scene, overlay.camera);
     }
+    gl.autoClear = true;
     if (filtered) this.filters.apply(gl);
   }
 

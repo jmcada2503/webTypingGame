@@ -112,3 +112,10 @@ export const DEFAULT_FLOW_CONFIG: FlowConfig = {
   rematchAnswerSeconds: 10,
   rematchNoticeSeconds: 2.4,
 };
+
+/** After a signal loss, the Match resumes this long after the signal is back: a beat showing their held words, then the digits. */
+export const RESUME_BEAT_SECONDS = 0.8;
+export const RESUME_COUNT_SECONDS = 5;
+export const RESUME_SECONDS = RESUME_BEAT_SECONDS + RESUME_COUNT_SECONDS;
+/** The third signal loss in a Match is too many: the connection can't be played, so there is no grace. */
+export const MAX_SIGNAL_LOSSES = 3;

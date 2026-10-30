@@ -342,8 +342,8 @@ describe('after connecting', () => {
     const [rb] = reconnected(b.events);
     expect(reconnected(a.events)).toHaveLength(1);
     expect(reconnected(b.events)).toHaveLength(1);
-    expect(Math.max(ra.resumeIn, rb.resumeIn)).toBeCloseTo(5, 5); // the host's full countdown
-    expect(Math.min(ra.resumeIn, rb.resumeIn)).toBeLessThan(5); // the guest joins a little later, same end
+    expect(Math.max(ra.resumeIn, rb.resumeIn)).toBeCloseTo(5.8, 5); // the host's full window: a 0.8 s beat, then 5 s of digits
+    expect(Math.min(ra.resumeIn, rb.resumeIn)).toBeLessThan(5.8); // the guest joins a little later, same end
     expect(ra.at + ra.resumeIn * 1000).toBeCloseTo(rb.at + rb.resumeIn * 1000, -1);
   });
 

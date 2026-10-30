@@ -17,8 +17,10 @@ import { PlayerDamageFx } from './juice/PlayerDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
 import { PaceMotion } from './juice/PaceMotion';
-import { SCREEN_HIT } from '../render/ScreenFilters';
+import { SCREEN_HIT, SCREEN_TRANSITION } from '../render/ScreenFilters';
 import type { EndingFrame } from '../screens/endings';
+import { awayFrame, type LinkFx } from '../screens/linkFx';
+import { BACK_OVAL, drawAway, drawBack } from './linkFxDraw';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
 
@@ -100,6 +102,13 @@ export class AsciiGameView implements GameView {
     this.overlayDraw = draw;
   }
 
+  /** The opponent's link effect (reconnecting animation / back-countdown), or null. */
+  private linkFx: LinkFx | null = null;
+
+  setLinkFx(fx: LinkFx | null) {
+    this.linkFx = fx;
+  }
+
   /** The ending being applied (Win / Lose / Peace), or null. */
   private ending: EndingFrame | null = null;
 
@@ -125,6 +134,7 @@ export class AsciiGameView implements GameView {
     this.scene.visible = true;
     this.overlay.visible = true;
     this.applyEnding(this.ending, dt);
+    this.applyLinkFx();
     this.enemy.update(dt);
     this.stars.update(dt);
     // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
@@ -152,8 +162,23 @@ export class AsciiGameView implements GameView {
     this.playerDamage.drawAfter(text);
     if (this.debugEventLabel && this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
     this.overlayDraw?.(text, dt);
+    if (this.linkFx?.kind === 'away') drawAway(text, this.linkFx);
+    else if (this.linkFx?.kind === 'back') drawBack(text, this.linkFx);
+    this.ascii.setFront(this.linkFx?.kind === 'back' ? BACK_OVAL : null); // the countdown is drawn in front of the held words
 
     this.ascii.render(this.scene, this.camera, { scene: this.overlay, camera: this.camera });
+  }
+
+  /** The link effect on the scene: while away the held words flicker out and the ship breaks up; back shows them again. */
+  private applyLinkFx() {
+    const fx = this.linkFx;
+    const f = fx?.kind === 'away' ? awayFrame(fx.t, fx) : null;
+    this.words.scene.visible = f ? f.wordsVisible : true;
+    if (f) this.enemy.root.visible = f.enemyVisible;
+    if (f && f.glitch > 0 && SCREEN_TRANSITION.level === 0) {
+      SCREEN_TRANSITION.mode = 4; // a quick glitch burst when the signal drops
+      SCREEN_TRANSITION.level = f.glitch;
+    }
   }
 
   /** The black flash from losing a Life fades with time, on the game scene and on text screens alike. */
@@ -162,6 +187,7 @@ export class AsciiGameView implements GameView {
   }
 
   private renderScreen(draw: (text: TextGrid, dt: number) => void, dt: number) {
+    this.ascii.setFront(null);
     this.fadeHitFlash(dt); // the last Life lost starts a flash; it must not outlast the Match and dim the next screens
     this.scene.visible = false;
     this.overlay.visible = false;
