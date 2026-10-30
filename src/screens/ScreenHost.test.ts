@@ -283,11 +283,11 @@ describe('Online endings', () => {
     expect(events.filter((e) => e.type === 'enemyDestroyed')).toHaveLength(1);
   });
 
-  test('a Lose waits 3.8 s, then the TV goes off, stays black for 1 s, and comes on at the end screen', () => {
+  test('a Lose waits 5.2 s, then the TV goes off, stays black for 1 s, and comes on at the end screen', () => {
     const ctx = intoOnlineMatch();
     ctx.made[0].status = 'lost';
 
-    ctx.run(3.7);
+    ctx.run(5.1);
     expect(sceneIsShown(ctx)).toBe(true);
 
     ctx.run(0.5 + 0.9); // TV off has swapped the screen, it is black for the 1 s hold
@@ -323,6 +323,26 @@ describe('Online endings', () => {
     const left = (ctx.flow.state() as { rematch: { secondsLeft: number } }).rematch.secondsLeft;
     expect(left).toBeGreaterThan(7.5);
     expect(left).toBeLessThan(9);
+  });
+
+  test('after a Win and after a Lose the Rematch window starts at the same moment: when the loser\'s end screen is up', () => {
+    const left = (ctx: ReturnType<typeof intoOnlineMatch>) => (ctx.flow.state() as { rematch: { secondsLeft: number } }).rematch.secondsLeft;
+    const win = intoOnlineMatch();
+    win.made[0].status = 'won';
+    win.run(4); // the winner's end screen has been up for a while, but the clock waits
+    expect(win.flow.state()).toMatchObject({ screen: 'end', result: 'won' });
+    expect(left(win)).toBe(10);
+
+    const lose = intoOnlineMatch();
+    lose.made[0].status = 'lost';
+    lose.run(5.3);
+    expect(left(lose)).toBe(10);
+
+    win.run(2.5); // 6.5 s after the result on both sides
+    lose.run(1.2);
+    expect(left(win)).toBeCloseTo(left(lose), 1);
+    expect(left(win)).toBeLessThan(10);
+    expect(left(win)).toBeGreaterThan(8.5);
   });
 
   test('typing stays off during the ending, and the Match session is not updated any more', () => {
