@@ -135,6 +135,7 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
     connectMs: null,
     failure: null,
     browser: browserName(userAgent),
+    candidates: { local: emptyCount(), remote: emptyCount() },
   };
 
   const pc = createConnection();
@@ -209,22 +210,26 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
       if (role === 'host') {
         stops.push(
           signaling.onMessage((message) => {
+            if (message.type === 'answer') record.candidates.remote = countCandidates(message.sdp);
             if (message.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: message.sdp }).catch(() => fail('iceFailed'));
           }),
         );
         bind(pc.createDataChannel('game', { ordered: true }));
         await pc.setLocalDescription();
         await gathered();
+        record.candidates.local = countCandidates(pc.localDescription?.sdp);
         if (!settled) await signaling.send({ type: 'offer', sdp: pc.localDescription!.sdp! });
       } else {
         pc.ondatachannel = (event) => bind(event.channel);
         stops.push(
           signaling.onMessage((message) => {
             if (message.type !== 'offer') return;
+            record.candidates.remote = countCandidates(message.sdp);
             void (async () => {
               await pc.setRemoteDescription({ type: 'offer', sdp: message.sdp });
               await pc.setLocalDescription();
               await gathered();
+              record.candidates.local = countCandidates(pc.localDescription?.sdp);
               if (!settled) await signaling.send({ type: 'answer', sdp: pc.localDescription!.sdp! });
             })().catch(() => fail('iceFailed'));
           }),
@@ -235,6 +240,18 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
   });
 
   return { done, abort: () => fail('aborted') };
+}
+
+const emptyCount = () => ({ host: 0, srflx: 0, relay: 0 });
+
+/** Candidates in a description, by type (no trickle: they are all in it). No srflx = STUN didn't answer. */
+export function countCandidates(sdp: string | undefined) {
+  const count = emptyCount();
+  for (const match of (sdp ?? '').matchAll(/^a=candidate:.* typ (host|srflx|prflx|relay)/gm)) {
+    const type = match[1] === 'prflx' ? 'srflx' : (match[1] as keyof typeof count);
+    count[type]++;
+  }
+  return count;
 }
 
 /** The kind of network path in use. Relay beats srflx beats host; null if the browser won't say. */

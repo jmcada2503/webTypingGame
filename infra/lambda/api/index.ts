@@ -1,19 +1,34 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
+import { DynamoDetailsStore } from "./dynamoDetailsStore";
 import { DynamoPresenceStore } from "./dynamoPresenceStore";
 import { DynamoStore } from "./dynamoStore";
 import { MemoryStore } from "./memoryStore";
+import { MemoryDetailsStore, Metrics } from "./metrics";
 import { MemoryPresenceStore, Presence } from "./presence";
 import { createRouter } from "./routes";
 import { Matchmaker } from "./service";
 
-/** Requests are tiny (a pid, a language, at most one 8 KB description). */
+/** Requests are small (a pid, a language, at most one 8 KB description or one Match report). */
 const MAX_BODY_BYTES = 16 * 1024;
+
+/**
+ * One log event that is pure JSON. `console.log` adds a timestamp / request id / level prefix that hides the
+ * fields from Logs Insights; a raw stdout line keeps them (queries use `t`, `pid`, ... directly).
+ */
+const logLine = (line: Record<string, unknown>) => void process.stdout.write(`${JSON.stringify(line)}\n`);
 
 const matches = process.env.MATCHES_TABLE;
 const presence = process.env.PRESENCE_TABLE;
+const details = process.env.MATCH_DETAILS_TABLE;
+const sampleRate = Number(process.env.METRICS_SAMPLE_RATE ?? "1");
 const route = createRouter(
   new Matchmaker(matches ? new DynamoStore(matches) : new MemoryStore()),
-  new Presence(presence ? new DynamoPresenceStore(presence) : new MemoryPresenceStore()),
+  new Presence(presence ? new DynamoPresenceStore(presence) : new MemoryPresenceStore(), { log: logLine }),
+  new Metrics({
+    store: details ? new DynamoDetailsStore(details) : new MemoryDetailsStore(),
+    log: logLine,
+    sampleRate: Number.isFinite(sampleRate) ? sampleRate : 1,
+  }),
 );
 
 const reply = (status: number, body: unknown, headers: Record<string, string> = {}): APIGatewayProxyResultV2 => ({
@@ -36,6 +51,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     }
   }
 
-  const { status, body: out, headers } = await route({ method, path, query: event.queryStringParameters ?? {}, body });
+  const country = event.headers?.["cloudfront-viewer-country"];
+  const { status, body: out, headers } = await route({ method, path, query: event.queryStringParameters ?? {}, body, country });
   return reply(status, out, headers);
 };

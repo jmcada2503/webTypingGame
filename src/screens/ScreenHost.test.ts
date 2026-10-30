@@ -7,7 +7,7 @@ import type { TypingInput } from '../input/TypingInput';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { GameView } from '../view/GameView';
 import { NOT_IDLE, type GameViewState, type ViewEvent } from '../view/GameViewState';
-import type { EndingFrame } from './endings';
+import { endingFrame, type EndingFrame } from './endings';
 import type { Screen, ScreenSet } from './Screen';
 import { ScreenHost } from './ScreenHost';
 
@@ -190,7 +190,7 @@ describe('The Match screen', () => {
     const ctx = setup();
     intoPracticeMatch(ctx);
     ctx.made[0].status = 'lost';
-    ctx.run(1); // glitch to the end screen
+    ctx.run(3.8 + 1.8 + 0.2); // the Lose ending, then TV off / black / on to the end screen
 
     ctx.flow.playAgain();
     ctx.run(1.8 + 0.5);
@@ -372,13 +372,22 @@ describe('Online endings', () => {
     expect(lose.host.state().pace.player).toBeCloseTo(0, 5);
   });
 
-  test('Practice has no ending: it goes straight to its results with just the glitch', () => {
+  test('Practice plays the online Lose ending: 5.2 s of the Enemy ship flying over, then TV off / black / on', () => {
     const ctx = setup();
     intoPracticeMatch(ctx);
+    ctx.made[0].paceNow = 2;
     ctx.made[0].status = 'lost';
 
-    ctx.run(0.5);
+    ctx.run(2);
+    expect(ctx.flow.state()).toMatchObject({ screen: 'end', mode: 'practice' }); // the flow already knows
+    expect(sceneIsShown(ctx)).toBe(true);
+    expect(ctx.view.ending?.dim).toBeCloseTo(endingFrame('lost', 2).dim, 5); // the same frames as the online Lose
+    expect(ctx.host.state().pace.player).toBeCloseTo(0, 5); // the stars have stopped
 
+    ctx.run(3.1);
+    expect(sceneIsShown(ctx)).toBe(true);
+
+    ctx.run(0.5 + 0.9); // TV off has swapped the screen, black for the 1 s hold
     expect(ctx.view.ending).toBeNull();
     expect(sceneIsShown(ctx)).toBe(false);
   });

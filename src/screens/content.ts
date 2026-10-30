@@ -120,18 +120,61 @@ export function practiceScore(r: Pick<PracticeResult, 'currentLevel'>): number {
   return Math.round(Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) * POINTS_PER_LEVEL_SECOND);
 }
 
-/** The lines of the Practice results screen. */
-export function practiceResultLines(r: Pick<PracticeResult, 'survivedSeconds' | 'wordsTyped' | 'accuracy' | 'averagePace' | 'peakPace' | 'wpm' | 'currentLevel'>): string[] {
-  const pad = (label: string) => label.padEnd(20);
-  const difficulty = r.currentLevel === null ? '-' : `${Math.round((Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) / PRACTICE_RAMP.rampSeconds) * 100)}%`;
+/** How far up the difficulty ramp the run got, 0..1 (capped at the top); null if it was never placed on the ramp. */
+export function practiceDifficulty(r: Pick<PracticeResult, 'currentLevel'>): number | null {
+  if (r.currentLevel === null) return null;
+  return Math.min(r.currentLevel, PRACTICE_RAMP.rampSeconds) / PRACTICE_RAMP.rampSeconds;
+}
+
+/** One encouraging word for the Practice game over, by the difficulty reached (Practice is about getting better). */
+export function practiceVerdict(difficulty: number | null): string {
+  const d = difficulty ?? 0;
+  if (d < 0.2) return 'WARMING UP';
+  if (d < 0.4) return 'STEADY HANDS';
+  if (d < 0.6) return 'QUICK FINGERS';
+  if (d < 0.8) return 'ACE TYPIST';
+  return 'UNSTOPPABLE';
+}
+
+/** The Practice game over's 3×2 stat grid as label / value cells, read row by row. */
+export function practiceStatCells(r: Pick<PracticeResult, 'survivedSeconds' | 'wordsTyped' | 'accuracy' | 'peakPace' | 'wpm' | 'currentLevel'>): [string, string][] {
+  const pct = (x: number | null) => (x === null ? '-' : `${Math.round(x * 100)}%`);
   return [
-    `${pad('TIME SURVIVED')}${formatClock(r.survivedSeconds)}`,
-    `${pad('DIFFICULTY REACHED')}${difficulty}`,
-    `${pad('WORDS TYPED')}${r.wordsTyped}`,
-    `${pad('ACCURACY')}${r.accuracy === null ? '-' : `${Math.round(r.accuracy * 100)}%`}`,
-    `${pad('PACE')}${r.averagePace.toFixed(1)} LETTERS/S (${Math.round(r.wpm)} WPM)`,
-    `${pad('BEST PACE')}${r.peakPace.toFixed(1)} LETTERS/S`,
+    ['TIME', formatClock(r.survivedSeconds)],
+    ['DIFFICULTY', pct(practiceDifficulty(r))],
+    ['WORDS', String(r.wordsTyped)],
+    ['WPM', String(Math.round(r.wpm))],
+    ['ACCURACY', pct(r.accuracy)],
+    ['BEST PACE', `${r.peakPace.toFixed(1)} L/S`],
   ];
+}
+
+/** Seconds the Practice score takes to count up on the game over screen. */
+export const SCORE_COUNT_SECONDS = 1.2;
+
+/** The score shown `t` seconds into the game over screen: it counts up from 0. */
+export function countingScore(score: number, t: number): number {
+  return Math.round(score * Math.min(1, Math.max(0, t / SCORE_COUNT_SECONDS)));
+}
+
+const PRACTICE_BEST_KEY = 'practice.best';
+
+/**
+ * Check a finished run against the best score of this browser session (sessionStorage until there are accounts)
+ * and save it if it beats it. The best is read before saving, so `bestBefore` is the one this run was up against.
+ * A score of 0 is never a best. Storage that is missing or throws (private mode, full) just means no best.
+ */
+export function settlePracticeBest(score: number, storage: () => Pick<Storage, 'getItem' | 'setItem'>): { bestBefore: number | null; newBest: boolean } {
+  try {
+    const store = storage();
+    const stored = Number(store.getItem(PRACTICE_BEST_KEY) ?? NaN);
+    const bestBefore = Number.isFinite(stored) ? stored : null;
+    const newBest = score > 0 && (bestBefore === null || score > bestBefore);
+    if (newBest) store.setItem(PRACTICE_BEST_KEY, String(score));
+    return { bestBefore, newBest };
+  } catch {
+    return { bestBefore: null, newBest: false };
+  }
 }
 
 /** The stats block of the online end screens. `enemyDamage` (0..1) is added on a Lose. */
