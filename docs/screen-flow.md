@@ -36,6 +36,7 @@ Which screen the player is on and how they move between screens: menu, how-to, w
   - **Declined** (they deny mine, or I deny theirs) → a `declined` notice, then **Public: closed** (only Search new match / Menu), **Private: the options again**.
   - **Cancel** (`cancelRematch()`, only while `waiting`) tells the opponent and returns to the options (their `incoming` disappears).
   - **Opponent leaves** → `opponentLeft`. A proposal that arrived in time stays open past the window.
+  - **Hold:** `holdRematch(true)` pauses all Rematch clocks; the host holds them while an ending scene plays and releases them when the end screen swaps in, so the player gets the full window.
   - Timings are `FlowConfig` (`rematchWindowSeconds`, `rematchAnswerSeconds`, `rematchNoticeSeconds`). Network messages: `propose`, `accept`, `decline`, `cancel`.
 - **Servers resting:** `setServersResting(true)` blocks Public, Private and invite joining on the menu (Practice works) and sends a how-to or a still-searching wait back to the menu. A Countdown, Match or Rematch already under way is not interrupted.
 
