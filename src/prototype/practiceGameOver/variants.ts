@@ -4,7 +4,7 @@
 // (or ?go=A..D). Each variant pairs an ending scene with a screen; mixing is fine.
 //   A Freeze + stamp  -> Arcade score (big counting score, best, verdict, stat grid)
 //   B Power down      -> Run report (a log that types itself out, with your session best next to each number)
-//   C Snap off        -> Difficulty chart (how far up the ramp you got over time, where you fell)
+//   C Power down      -> Big GAME OVER, small difficulty chart + the report typing itself out (round 2: the user's mix)
 //   D Calm fade       -> Three big numbers (time, WPM, accuracy)
 // The personal best lives in this browser tab only (sessionStorage) until there are accounts.
 import type { ScreenFlow } from '../../flow/ScreenFlow';
@@ -19,8 +19,8 @@ import type { Screen } from '../../screens/Screen';
 import { GLITCH, MATCH_START_HOLD, TV_OFF_ON } from '../../screens/ScreenTransition';
 
 const params = new URLSearchParams(location.search);
-const NAMES = ['A  FREEZE + ARCADE SCORE', 'B  POWER DOWN + RUN REPORT', 'C  SNAP OFF + DIFFICULTY CHART', 'D  CALM FADE + THREE BIG NUMBERS'];
-export let variant = Math.max(0, 'ABCD'.indexOf((params.get('go') ?? 'A').toUpperCase()));
+const NAMES = ['A  FREEZE + ARCADE SCORE', 'B  POWER DOWN + RUN REPORT', 'C  POWER DOWN + SMALL CHART AND REPORT (CHOSEN MIX)', 'D  CALM FADE + THREE BIG NUMBERS'];
+export let variant = Math.max(0, 'ABCD'.indexOf((params.get('go') ?? 'C').toUpperCase()));
 
 // ---------------------------------------------------------------- the ending scene (after the last Life)
 
@@ -61,8 +61,11 @@ export function practiceEnding(): PracticeEnding {
     };
   }
   if (variant === 2) {
-    // C: no scene at all: the picture snaps off at once (TV off, a short black, on).
-    return { plan: { sceneSeconds: 0.25, effect: TV_OFF_ON, hold: 0.4 }, frame: () => base() };
+    // C (round 2, user's pick): B's power down, then TV off / on.
+    return {
+      plan: { sceneSeconds: 2.8, effect: TV_OFF_ON, hold: MATCH_START_HOLD },
+      frame: (t) => ({ ...base(), paceScale: 1 - clamp01((t - 0.3) / 1), dim: Math.min(0.85, Math.max(0, (t - 0.4) * 0.5)) }),
+    };
   }
   // D: calm: the stars keep drifting slowly while the picture fades a little, then the glitch.
   return {
@@ -198,14 +201,19 @@ function drawReport(text: TextGrid, t: number) {
   if (shownLines >= lines.length) optionsRow(text, 30, t);
 }
 
-/** C: how far up the ramp the run climbed over time, with where it fell; the key numbers beside it. */
+/** C (round 2): a big GAME OVER, a small chart of the ramp climb, and the report typing itself out beside it. */
 function drawChart(text: TextGrid, t: number) {
   const s = shown!;
-  twoTone(text, 2, 'GAME ', 'OVER', 2.4);
-  const c0 = 12;
-  const r0 = 8;
-  const w = 70;
-  const h = 20;
+  const b = s.bestBefore;
+  // A big title on top.
+  const titleScale = 6;
+  twoTone(text, 2, 'GAME ', 'OVER', titleScale);
+
+  // A small chart on the left: how far up the ramp the run climbed over time, and where it fell.
+  const c0 = 16;
+  const r0 = 15;
+  const w = 38;
+  const h = 10;
   for (let r = 0; r <= h; r++) put(text, c0 - 1, r0 + r, r === h ? '+' : '|', 'dim');
   put(text, c0, r0 + h, '-'.repeat(w), 'dim');
   put(text, c0 - 6, r0, '100%', 'dim');
@@ -213,9 +221,9 @@ function drawChart(text: TextGrid, t: number) {
   put(text, c0, r0 + h + 1, '0:00', 'dim');
   const end = formatClock(s.r.survivedSeconds);
   put(text, c0 + w - end.length, r0 + h + 1, end, 'dim');
-  centered(text, r0 + h + 2.5, 'DIFFICULTY OVER THE RUN', 'dim');
-  if (s.bestBefore) {
-    const by = r0 + h - Math.round(s.bestBefore.difficulty * h);
+  put(text, c0, r0 - 1.5, 'DIFFICULTY OVER THE RUN', 'dim');
+  if (b) {
+    const by = r0 + h - Math.round(b.difficulty * h);
     for (let c = 0; c < w; c += 2) put(text, c0 + c, by, '.', 'green');
     put(text, c0 + w + 1, by, 'BEST', 'green');
   }
@@ -229,19 +237,23 @@ function drawChart(text: TextGrid, t: number) {
     const last = history[history.length - 1];
     put(text, c0 + w - 1, r0 + h - Math.round(last.d * h), 'X', 'red');
   }
-  const side: [string, string, PaletteColor][] = [
-    ['SCORE', fmt(s.score), 'yellow'],
-    ['TIME', formatClock(s.r.survivedSeconds), 'fg'],
-    ['WPM', String(Math.round(s.r.wpm)), 'fg'],
-    ['ACCURACY', pct(s.r.accuracy), 'fg'],
+
+  // The report on the right types itself out line by line, with the session best next to the numbers.
+  const lines: [string, PaletteColor][] = [
+    [`> TIME SURVIVED      ${formatClock(s.r.survivedSeconds)}${b ? `   (BEST ${formatClock(b.survived)})` : ''}`, 'fg'],
+    [`> DIFFICULTY REACHED ${Math.round(s.difficulty * 100)}%${b ? `   (BEST ${Math.round(b.difficulty * 100)}%)` : ''}`, 'fg'],
+    [`> WORDS TYPED        ${s.r.wordsTyped}`, 'fg'],
+    [`> ACCURACY           ${pct(s.r.accuracy)}`, 'fg'],
+    [`> PACE               ${Math.round(s.r.wpm)} WPM${b ? `   (BEST ${Math.round(b.wpm)})` : ''}`, 'fg'],
+    [`> SCORE              ${fmt(s.score)}${s.newBest ? '   NEW BEST' : b ? `   (BEST ${fmt(b.score)})` : ''}`, s.newBest ? 'green' : 'yellow'],
+    ['', 'fg'],
+    [`> ${verdict(s.difficulty)}`, 'fg'],
   ];
-  side.forEach(([k, v, c], i) => {
-    put(text, 96, r0 + 1 + i * 4, k, 'dim');
-    put(text, 96, r0 + 2 + i * 4, v, c);
-  });
-  if (s.newBest && t > 1.2) put(text, 96, r0 + 17, blink(t, 2) ? 'NEW BEST!' : '', 'green');
-  put(text, 96, r0 + 19, verdict(s.difficulty), 'fg');
-  optionsRow(text, 36, t);
+  const lc = 66;
+  const shownLines = Math.min(lines.length, Math.floor(t / 0.22));
+  lines.slice(0, shownLines).forEach(([l, c], i) => put(text, lc, r0 - 1 + i * 2, l, c));
+  if (shownLines < lines.length && blink(t, 4)) put(text, lc, r0 - 1 + shownLines * 2, '_', 'fg');
+  if (shownLines >= lines.length) optionsRow(text, 32, t);
 }
 
 /** D: three big numbers and little else. */
