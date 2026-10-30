@@ -105,8 +105,14 @@ export class AsciiGameView implements GameView {
   }
 
   /** Apply the ending's frame to the scene: the Enemy ship. (The dimming is added after the hit flash fades.) */
-  private applyEnding(frame: EndingFrame | null) {
+  private rumbleIn = 0;
+  private applyEnding(frame: EndingFrame | null, dt = 0) {
     this.enemy.root.visible = frame ? frame.enemyVisible : true;
+    // Lose: the camera rumbles, faster the stronger it gets (the shake itself decays, so it is re-triggered).
+    if (frame && frame.shake > 0 && (this.rumbleIn -= dt) <= 0) {
+      this.hitFx.shake();
+      this.rumbleIn = 0.3 - 0.2 * frame.shake;
+    }
     this.enemy.endingOffset.set(frame?.enemyOffset.x ?? 0, frame?.enemyOffset.y ?? 0, frame?.enemyOffset.z ?? 0);
   }
 
@@ -114,7 +120,7 @@ export class AsciiGameView implements GameView {
     if (this.screenDraw) return this.renderScreen(this.screenDraw, dt);
     this.scene.visible = true;
     this.overlay.visible = true;
-    this.applyEnding(this.ending);
+    this.applyEnding(this.ending, dt);
     this.enemy.update(dt);
     this.stars.update(dt);
     // Word bullets leave from the Enemy ship's center (its resting spot, so bobbing doesn't jerk words in flight).
