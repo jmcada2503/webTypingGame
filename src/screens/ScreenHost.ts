@@ -38,7 +38,7 @@ export class ScreenHost implements GameSession {
   private matchTime = 0;
   /** The GO flash is showing over the Match scene. */
   private goOn = false;
-  /** An online Match just ended: its ending scene plays (`t` seconds in) before the screen changes. */
+  /** A Match or Practice run just ended: its ending scene plays (`t` seconds in) before the screen changes. */
   private ending: { result: EndingResult; t: number; started: boolean } | null = null;
 
   constructor(
@@ -141,10 +141,11 @@ export class ScreenHost implements GameSession {
     this.flow.matchEnded(result);
     const online = this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus';
     this.flow.holdRematch(online); // its clocks start when the end screen is up
-    // Online Matches play their ending first; Practice (no opponent, no result) goes straight to its screen.
-    if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus') {
-      this.ending = { result, t: 0, started: false };
-      this.view.setEnding(endingFrame(result, 0));
+    // The scene plays its ending before the end screen. Practice only ends when the last Life goes: the Lose ending.
+    if (this.flow.state().screen === 'end' && this.shown.screen === 'match') {
+      const shownResult = this.shown.mode === 'practice' ? 'lost' : result;
+      this.ending = { result: shownResult, t: 0, started: false };
+      this.view.setEnding(endingFrame(shownResult, 0));
     }
   }
 

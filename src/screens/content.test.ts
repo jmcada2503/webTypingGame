@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countdownDisplay, practiceResultLines, matchStatsLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
+import { countdownDisplay, countingScore, practiceDifficulty, practiceStatCells, practiceVerdict, settlePracticeBest, matchStatsLines, practiceScore, goFlash, howToDemo, moveSelection, usableSelection, placeholderOnline, typedTip, waitingLogLine, TIPS } from './content';
 
 describe('online counts (placeholder until the presence endpoint exists)', () => {
   test('are stale on purpose: they only change every 30 seconds', () => {
@@ -139,24 +139,108 @@ describe('GO flash', () => {
   });
 });
 
-describe('Practice results', () => {
-  const run = { survivedSeconds: 83.4, wordsTyped: 12, wrongSubmits: 1, accuracy: 12 / 13, averagePace: 3.14, peakPace: 4.5, wpm: 37.7, currentLevel: 210 };
+describe('Practice stat grid', () => {
+  const run = { survivedSeconds: 83.4, wordsTyped: 12, accuracy: 12 / 13, peakPace: 4.5, wpm: 37.7, currentLevel: 210 };
 
-  test('show the time survived, words, accuracy, difficulty and pace', () => {
-    expect(practiceResultLines(run)).toEqual([
-      'TIME SURVIVED       01:23',
-      'DIFFICULTY REACHED  50%',
-      'WORDS TYPED         12',
-      'ACCURACY            92%',
-      'PACE                3.1 LETTERS/S (38 WPM)',
-      'BEST PACE           4.5 LETTERS/S',
+  test('is six label / value cells, read row by row: time, difficulty, words, then WPM, accuracy, best pace', () => {
+    expect(practiceStatCells(run)).toEqual([
+      ['TIME', '01:23'],
+      ['DIFFICULTY', '50%'],
+      ['WORDS', '12'],
+      ['WPM', '38'],
+      ['ACCURACY', '92%'],
+      ['BEST PACE', '4.5 L/S'],
     ]);
   });
 
-  test('show a dash for accuracy when nothing was submitted, and for difficulty before the run was placed', () => {
-    const lines = practiceResultLines({ ...run, accuracy: null, wordsTyped: 0, currentLevel: null });
-    expect(lines).toContain('ACCURACY            -');
-    expect(lines).toContain('DIFFICULTY REACHED  -');
+  test('shows a dash for accuracy when nothing was submitted, and for difficulty before the run was placed', () => {
+    const cells = new Map(practiceStatCells({ ...run, accuracy: null, wordsTyped: 0, currentLevel: null }));
+    expect(cells.get('ACCURACY')).toBe('-');
+    expect(cells.get('DIFFICULTY')).toBe('-');
+  });
+});
+
+describe('Practice difficulty reached', () => {
+  test('is the ramp second reached as a share of the whole ramp, capped at the top', () => {
+    expect(practiceDifficulty({ currentLevel: 0 })).toBe(0);
+    expect(practiceDifficulty({ currentLevel: 210 })).toBe(0.5);
+    expect(practiceDifficulty({ currentLevel: 9999 })).toBe(1);
+  });
+
+  test('is unknown before the run was placed on the ramp', () => {
+    expect(practiceDifficulty({ currentLevel: null })).toBeNull();
+  });
+});
+
+describe('Practice verdict', () => {
+  test('is one word by the difficulty reached, at 20 / 40 / 60 / 80 %', () => {
+    expect(practiceVerdict(0)).toBe('WARMING UP');
+    expect(practiceVerdict(0.199)).toBe('WARMING UP');
+    expect(practiceVerdict(0.2)).toBe('STEADY HANDS');
+    expect(practiceVerdict(0.4)).toBe('QUICK FINGERS');
+    expect(practiceVerdict(0.6)).toBe('ACE TYPIST');
+    expect(practiceVerdict(0.8)).toBe('UNSTOPPABLE');
+    expect(practiceVerdict(1)).toBe('UNSTOPPABLE');
+  });
+
+  test('is WARMING UP for a run that was never placed on the ramp', () => {
+    expect(practiceVerdict(null)).toBe('WARMING UP');
+  });
+});
+
+describe('Practice session best', () => {
+  /** A stand-in for sessionStorage. */
+  const memory = () => {
+    const items = new Map<string, string>();
+    return { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v) };
+  };
+
+  test('the first scoring run is a new best, with no best before it', () => {
+    const storage = memory();
+    expect(settlePracticeBest(1200, () => storage)).toEqual({ bestBefore: null, newBest: true });
+  });
+
+  test('a higher score is a new best; it reports the best it beat', () => {
+    const storage = memory();
+    settlePracticeBest(1200, () => storage);
+    expect(settlePracticeBest(1500, () => storage)).toEqual({ bestBefore: 1200, newBest: true });
+    expect(settlePracticeBest(1300, () => storage)).toEqual({ bestBefore: 1500, newBest: false });
+  });
+
+  test('a run that only ties the best is not a new best', () => {
+    const storage = memory();
+    settlePracticeBest(1200, () => storage);
+    expect(settlePracticeBest(1200, () => storage)).toEqual({ bestBefore: 1200, newBest: false });
+  });
+
+  test('a score of 0 is never a best', () => {
+    const storage = memory();
+    expect(settlePracticeBest(0, () => storage)).toEqual({ bestBefore: null, newBest: false });
+    expect(storage.getItem('practice.best')).toBeNull();
+  });
+
+  test('without storage (blocked, private mode) every run just has no best', () => {
+    const blocked = () => {
+      throw new Error('SecurityError');
+    };
+    expect(settlePracticeBest(1200, blocked)).toEqual({ bestBefore: null, newBest: false });
+    const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
+    expect(settlePracticeBest(1200, () => full)).toEqual({ bestBefore: null, newBest: false });
+  });
+
+  test('ignores a stored value that is not a number', () => {
+    const storage = memory();
+    storage.setItem('practice.best', 'oops');
+    expect(settlePracticeBest(1200, () => storage)).toEqual({ bestBefore: null, newBest: true });
+  });
+});
+
+describe('the counting score', () => {
+  test('counts up from 0 to the score over 1.2 s, then stays', () => {
+    expect(countingScore(4200, 0)).toBe(0);
+    expect(countingScore(4200, 0.6)).toBe(2100);
+    expect(countingScore(4200, 1.2)).toBe(4200);
+    expect(countingScore(4200, 5)).toBe(4200);
   });
 });
 
