@@ -29,8 +29,9 @@ type Boom = { age: number; pieces: Piece[] };
  * - the arriving Word bullet vanishes and **red debris** bursts at the impact point. The debris
  *   lives in the main 3D scene beyond the Cockpit, so the Cockpit hides part of it and the ASCII
  *   pass turns it into red glyphs;
- * - on a life lost, the **camera jitters** with a small roll, decaying fast (everything shakes,
- *   Word bullets included: they're placed with the camera at rest, see resetCamera()).
+ * - `shake()`: the **camera jitters** with a small roll, decaying fast (everything shakes, Word bullets
+ *   included: they're placed with the camera at rest, see resetCamera()). Used for the Enemy ship destroyed
+ *   and the Lose ending's rumble; a Life lost no longer shakes the camera (see PlayerDamageFx).
  * The lost lamp's flicker lives in Cockpit.
  */
 export class HitFx {
@@ -70,7 +71,7 @@ export class HitFx {
     this.noAge = 0;
   }
 
-  /** A life was lost: shake the camera. */
+  /** Shake the camera (the Enemy ship destroyed, the Lose ending's rumble). */
   shake() {
     this.shakeAge = 0;
     this.shakeSeed = Math.random() * 100;
