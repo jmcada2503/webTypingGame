@@ -23,7 +23,7 @@ export class FakeBackend {
 
   /** Test helper: a dropped connection comes back. */
   reconnect(endpoint: FakeEndpoint) {
-    endpoint.peer?.deliver({ type: 'opponentReconnected' });
+    endpoint.peer?.deliver({ type: 'opponentReconnected', resumeIn: 5 });
   }
 
   // ---- used by the endpoints ----

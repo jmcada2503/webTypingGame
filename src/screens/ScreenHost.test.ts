@@ -43,7 +43,11 @@ class FakeMatch implements GameSession {
   next: ViewEvent[] = [];
   lives = 3;
   paceNow = 0;
+  held = false;
   constructor(readonly mode: PlayMode) {}
+  hold(held: boolean) {
+    this.held = held;
+  }
   start() {
     this.started = true;
     this.status = 'running';
@@ -400,5 +404,48 @@ describe('Online endings', () => {
     expect(ctx.flow.state()).toMatchObject({ screen: 'opponentLeft' });
     expect(ctx.view.ending).toBeNull();
     expect(sceneIsShown(ctx)).toBe(false);
+  });
+});
+
+describe("While the opponent's signal is lost", () => {
+  const intoOnlineMatch = () => {
+    const ctx = setup();
+    const otherEndpoint = ctx.backend.connect();
+    const other = new ScreenFlow(otherEndpoint);
+    other.choose('public');
+    other.confirm();
+    ctx.flow.choose('public');
+    ctx.flow.confirm();
+    ctx.run(5 + 1.8 + 0.3);
+    expect(ctx.made[0].mode).toBe('versus');
+    return { ...ctx, otherEndpoint };
+  };
+
+  test('the Match is held and typing is off, from the drop until the resume countdown is over', () => {
+    const ctx = intoOnlineMatch();
+    expect(ctx.made[0].held).toBe(false);
+    expect(ctx.input.enabled.at(-1)).toBe(true);
+
+    ctx.backend.drop(ctx.otherEndpoint);
+    ctx.run(0.1);
+    expect(ctx.made[0].held).toBe(true);
+    expect(ctx.input.enabled.at(-1)).toBe(false);
+
+    ctx.run(3);
+    ctx.backend.reconnect(ctx.otherEndpoint); // the resume countdown (5 s) starts: still held
+    ctx.run(4.5);
+    expect(ctx.made[0].held).toBe(true);
+    expect(ctx.input.enabled.at(-1)).toBe(false);
+
+    ctx.run(0.7);
+    expect(ctx.made[0].held).toBe(false);
+    expect(ctx.input.enabled.at(-1)).toBe(true);
+  });
+
+  test('Practice is never held', () => {
+    const ctx = setup();
+    intoPracticeMatch(ctx);
+    ctx.run(1);
+    expect(ctx.made[0].held).toBe(false);
   });
 });

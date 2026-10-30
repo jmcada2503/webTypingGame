@@ -122,6 +122,7 @@ export class ScreenHost implements GameSession {
     if (s.screen !== 'match') return [];
     if (!this.match) this.beginMatch(s.mode);
     const match = this.match!;
+    match.hold?.(s.link.status !== 'ok'); // the opponent's signal is lost, or the resume countdown runs
     let events: ViewEvent[] = [];
     if (match.status === 'running') {
       this.matchTime += dt;
@@ -202,7 +203,8 @@ export class ScreenHost implements GameSession {
 
   /** Typing is only for the Match: elsewhere the hidden field is switched off so letters don't pile up in it. */
   private syncInput() {
-    const on = this.displayed === 'match' && !this.transition.active && this.match?.status === 'running';
+    const held = this.shown.screen === 'match' && this.shown.link.status !== 'ok';
+    const on = this.displayed === 'match' && !this.transition.active && !held && this.match?.status === 'running';
     if (on !== this.inputOn) {
       this.inputOn = on;
       this.input?.setEnabled(on);

@@ -13,6 +13,7 @@ import { WordDestroyFx } from './juice/WordDestroyFx';
 import { HIT_LOOK, HitFx } from './juice/HitFx';
 import { ShotHitFx } from './juice/ShotHitFx';
 import { EnemyDamageFx } from './juice/EnemyDamageFx';
+import { PlayerDamageFx } from './juice/PlayerDamageFx';
 import { SparkBursts } from './juice/SparkBursts';
 import { AttackSparks } from './juice/AttackSparks';
 import { PaceMotion } from './juice/PaceMotion';
@@ -46,6 +47,8 @@ export class AsciiGameView implements GameView {
   private readonly shotHitFx: ShotHitFx;
   /** Enemy ship damage: smoke + missing pieces from enemyDamage. */
   private readonly damageFx: EnemyDamageFx;
+  /** Player damage: smoke, failing systems and tremble on the Cockpit, from Lives left. */
+  private readonly playerDamage: PlayerDamageFx;
   /** Yellow firing sparks (Enemy ship fires, Attack word fired). */
   private readonly sparks = new SparkBursts();
   /** Big yellow 3D sparks from behind the Cockpit when the Attack word is fired. */
@@ -77,6 +80,7 @@ export class AsciiGameView implements GameView {
     this.hitFx = new HitFx(this.scene, this.camera);
     this.shotHitFx = new ShotHitFx(this.camera, this.enemy, this.cockpit.radar);
     this.damageFx = new EnemyDamageFx(this.enemy, this.camera);
+    this.playerDamage = new PlayerDamageFx(this.cockpit.damageParts, this.camera, this.sparks);
     this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.paceMotion = new PaceMotion(this.enemy);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
@@ -143,7 +147,9 @@ export class AsciiGameView implements GameView {
     this.damageFx.update(state.enemyDamage, dt, text);
     this.sparks.update(dt, text);
     this.attackSparks.update(dt);
+    this.playerDamage.update(state.lives, dt, text);
     this.cockpit.update(state, dt, text);
+    this.playerDamage.drawAfter(text);
     if (this.debugEventLabel && this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
     this.overlayDraw?.(text, dt);
 
@@ -194,7 +200,8 @@ export class AsciiGameView implements GameView {
       if (snap) this.hitFx.explode(snap.center);
     }
     if (event.type === 'lifeLost') {
-      this.hitFx.shake();
+      // The black flash. No camera shake: the Attack word and the Typed word must stay still to be read; the
+      // structure around and below them jolts instead (PlayerDamageFx, from `lives` dropping).
       SCREEN_HIT.level = 1;
     }
     if (event.type === 'shotHit') this.shotHitFx.hit();
@@ -234,6 +241,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.dispose();
     this.shotHitFx.dispose();
     this.damageFx.dispose();
+    this.playerDamage.dispose();
     this.attackSparks.dispose();
     this.enemy.dispose();
     this.stars.dispose();

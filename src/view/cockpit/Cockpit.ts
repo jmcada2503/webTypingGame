@@ -21,6 +21,18 @@ const LAMP_FLICKER_HZ = 14;
 const PEACE_LABEL_ROWS_UP = 10;
 
 /**
+ * The Cockpit parts the player damage effect works on (`PlayerDamageFx`): it moves and recolours them each frame
+ * from their resting state. The Typed word screen, its bezel and the readouts above it are not here: they never move.
+ */
+export interface CockpitDamageParts {
+  /** The side consoles (Lives, Radar), their body materials, and their 5 switches each, left to right. */
+  consoles: Record<'lives' | 'radar', { group: THREE.Group; body: THREE.MeshLambertMaterial; switches: THREE.Mesh[]; label: THREE.Object3D }>;
+  radarScreen: THREE.Mesh;
+  /** Yoke column, bar and the two grips beside the Typed word screen. */
+  yoke: THREE.Mesh[];
+}
+
+/**
  * The player's Cockpit ("Cockpit design": pilot controls), built from primitives in camera-local
  * space (a group that sits at the camera, looking down -z):
  * - center: control yoke with the Typed word screen between the grips; just above its top edge,
@@ -55,6 +67,8 @@ export class Cockpit {
   readonly centerCell = { col: 0, row: 0 };
   /** Lamp index → seconds of flicker left. */
   private readonly flicker = new Map<number, number>();
+  /** The parts the player damage effect trembles and flickers (see `CockpitDamageParts`). */
+  readonly damageParts: CockpitDamageParts;
 
   constructor(
     scene: THREE.Scene,
@@ -71,10 +85,12 @@ export class Cockpit {
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, -0.48, -1.35);
     this.root.add(column, bar);
+    const yoke = [column, bar];
     for (const x of [-0.36, 0.36]) {
       const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
       grip.position.set(x, -0.4, -1.35);
       this.root.add(grip);
+      yoke.push(grip);
     }
     this.typedBezel = box(0.56, 0.12, 0.03, gray(0.45));
     this.typedBezel.position.set(0, -0.4, -1.37);
@@ -84,12 +100,15 @@ export class Cockpit {
 
     // Side consoles, angled toward the pilot.
     let radarScreen!: THREE.Mesh;
+    const consoles: Partial<CockpitDamageParts['consoles']> = {};
     for (const side of [-1, 1]) {
       const panel = new THREE.Group();
       panel.position.set(side * 0.8, -0.5, -1.6);
       panel.rotation.set(-0.7, -side * 0.4, 0);
-      panel.add(box(0.62, 0.42, 0.06, gray(0.28)));
-      this.addLabel(panel, side < 0 ? 'LIVES' : 'RADAR');
+      const body = gray(0.28);
+      panel.add(box(0.62, 0.42, 0.06, body));
+      const label = this.addLabel(panel, side < 0 ? 'LIVES' : 'RADAR');
+      const switches: THREE.Mesh[] = [];
 
       if (side < 0) {
         for (let i = 0; i < MAX_LIVES; i++) {
@@ -114,10 +133,13 @@ export class Cockpit {
         const sw = box(0.04, 0.07, 0.04, gray(0.85));
         sw.position.set(-0.2 + i * 0.1, -0.17, 0.06);
         panel.add(sw);
+        switches.push(sw);
       }
       this.root.add(panel);
+      consoles[side < 0 ? 'lives' : 'radar'] = { group: panel, body, switches, label };
     }
     this.radar = new Radar(radarScreen);
+    this.damageParts = { consoles: consoles as CockpitDamageParts['consoles'], radarScreen, yoke };
 
     const overhead = box(3, 0.12, 0.5, gray(0.4));
     overhead.position.set(0, 0.68, -1.3);
@@ -129,7 +151,7 @@ export class Cockpit {
     this.typedShake = TYPED_SHAKE_SECONDS;
   }
 
-  /** A label plate on the panel's top edge, in the panel's plane; drawn in the overlay. */
+  /** A label plate on the panel's top edge, in the panel's plane; drawn in the overlay. Returns the plate. */
   private addLabel(panel: THREE.Object3D, str: string) {
     const plate = labelPlate(str, 0.05);
     plate.position.set(0, 0.21 + 0.035, 0.035);
@@ -138,6 +160,7 @@ export class Cockpit {
     anchor.add(plate);
     this.overlay.add(anchor);
     this.labelAnchors.push({ panel, anchor });
+    return plate;
   }
 
   update(state: GameViewState, dt: number, text: TextGrid) {

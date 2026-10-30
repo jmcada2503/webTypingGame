@@ -59,7 +59,7 @@ view.render(session.state(), dt);               // ...then the snapshot
 
 | Field | Type | Drawn as |
 |---|---|---|
-| `lives` | `0..3` | Three red lamps on the Cockpit's left console (a lost life is a dim lamp). A lamp that just went out flickers for 1.2 s. |
+| `lives` | `0..3` | Three red lamps on the Cockpit's left console (a lost life is a dim lamp). A lamp that just went out flickers for 1.2 s. Also the **player damage** (`PlayerDamageFx`): at 2 Lives smoke and sparks from the Lives console, it flickers, 2 switches die, a yellow `HULL DAMAGED`, rare Radar glitches and a light tremble; at 1 Life (and 0) both consoles, thicker smoke with embers, 5 dead switches, a blinking red `!! HULL CRITICAL !!`, frequent glitches, a stronger tremble and stuttering console labels. When a level is reached: a spark burst from the console that broke, a console blackout, a Radar glitch and a hard jolt. Only the side consoles and the yoke (column, bar, grips) move: the Typed word screen and everything above it never do. |
 | `typedWord` | `string` | The Typed word in the Cockpit's input screen (1.2× size, blinking cursor). |
 | `attackWord` | `string` | The Attack word, red, at the right end of the Cockpit's `ATTACK` bar (1.2× size). Its already-typed letters turn white. |
 | `wordBullets` | `{ id, word, flight }[]` | The Word bullets: outlined real-font words flying from the Enemy ship to the Cockpit. `flight` 0 → 1 is the whole path. |
@@ -88,7 +88,7 @@ One-off moments that start an animation. They are not state: send each once, at 
 |---|---|---|
 | `{ type: 'wordBulletDestroyed', id }` | The player destroyed a Word bullet | The word's letters fly apart, with a green ring on the grid. |
 | `{ type: 'wordBulletArrived', id }` | A Word bullet reached the Cockpit | The word vanishes and a red explosion goes off at the impact point. |
-| `{ type: 'lifeLost' }` | Lives went down | Big camera shake and tilt, black screen flash with color fringes (the lamp flicker comes from `lives` dropping). |
+| `{ type: 'lifeLost' }` | Lives went down | Black screen flash with color fringes. No camera shake, so the Attack word and the Typed word stay still; the lamp flicker and the damage jolt come from `lives` dropping. |
 | `{ type: 'attackFired', id, word }` | The player fired the Attack word (a Shot starts) | Many tiny yellow sparks burst from behind the Cockpit's center toward the Enemy ship. |
 | `{ type: 'shotHit', id }` | A Shot reached the Enemy ship | `HIT!!` on the Radar, a big green explosion on the ship, which sags. |
 | `{ type: 'shotDefended', id }` | The opponent destroyed a Shot | A dim `x` stays on the Radar where the Shot was for 0.5 s. |
@@ -131,7 +131,8 @@ Each effect has a `*_LOOK` object of numbers (sizes, times, strengths), exported
 |---|---|---|
 | `ENEMY_LOOK` | `src/view/enemy/EnemyShip.ts` | Enemy ship position, size, idle bob / sway / bank. |
 | `WORD_FLIGHT`, `WORD_LOOK` | `src/view/words/` | Word bullet path and size. |
-| `HIT_LOOK` | `src/view/juice/HitFx.ts` | Life-lost shake, debris, flash; wrong-key shake. |
+| `HIT_LOOK` | `src/view/juice/HitFx.ts` | Camera shake (Enemy ship destroyed, Lose rumble), debris, flash; wrong-key shake. |
+| `PLAYER_DAMAGE_LOOK` | `src/view/juice/PlayerDamageFx.ts` | Smoke amount, tremble, the jolt and blackout when a Life goes (per-level settings: `DAMAGE_LEVELS` in `playerDamage.ts`). |
 | `DESTROY_LOOK` | `src/view/juice/WordDestroyFx.ts` | Destroy effect. |
 | `SHOT_HIT_LOOK` | `src/view/juice/ShotHitFx.ts` | Explosion on the Enemy ship. |
 | `DAMAGE_LOOK` | `src/view/juice/EnemyDamageFx.ts` | Smoke and when parts break. |

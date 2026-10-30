@@ -74,6 +74,7 @@ export function flightAt(ramp: FlightRamp, t: number): number {
 
 export class MatchEngine {
   status: MatchStatus = 'running';
+  private held = false;
   private lives = STARTING_LIVES;
   private bullets: Bullet[] = [];
   private pending: ViewEvent[] = [];
@@ -159,8 +160,13 @@ export class MatchEngine {
     return out;
   }
 
+  /** Hold or release the Match: while held time stands still (the opponent's signal is lost or just back). */
+  hold(held: boolean) {
+    this.held = held;
+  }
+
   update(dt: number): ViewEvent[] {
-    if (this.status !== 'running') return this.flush(); // the Match is over: only deliver what is still pending
+    if (this.status !== 'running' || this.held) return this.flush(); // over or held: only deliver what is still pending
     this.time += dt;
     this.updatePace(dt);
     if (this.config.mode === 'versus' && this.status === 'running' && this.time >= this.nextPresenceAt) {

@@ -153,11 +153,11 @@ describe('heartbeat, signal and grace', () => {
     expect(eventsA).toEqual([{ type: 'signalLost' }, { type: 'signalBack' }]);
   });
 
-  it('gives up with graceExpired after 10 s of silence', () => {
+  it('gives up with graceExpired after 14 s of silence (4 s to notice, 10 s of grace)', () => {
     const { timers, net, a, eventsA } = setup();
     timers.advance(1000);
     net.cut();
-    timers.advance(10_500);
+    timers.advance(14_500);
     expect(eventsA.at(-1)).toEqual({ type: 'closed', error: 'graceExpired' });
     expect(() => a.send(shot(0))).not.toThrow();
   });
@@ -176,7 +176,7 @@ describe('heartbeat, signal and grace', () => {
       net.loseIf = (_data, from) => from === 'a';
     });
     a.send(shot(0));
-    timers.advance(11_000);
+    timers.advance(15_000);
     expect(eventsA.at(-1)).toEqual({ type: 'closed', error: 'graceExpired' });
   });
 
