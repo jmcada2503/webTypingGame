@@ -19,7 +19,7 @@ Run the reference client: `npm run sandbox`. Its tweak panel can trigger every s
 | `TypingInput` | `src/input/TypingInput.ts` | The Typed word as the game understands it (see [Typing input](#typing-input)). |
 | `GameSession` | `src/app/GameSession.ts` | **What the game implements.** Advances the game, hands the view a snapshot and one-off events. |
 | `GameView` | `src/view/GameView.ts` | **What the game calls.** Draws a snapshot, plays events. Implementation: `AsciiGameView`. |
-| `AppShell` | `src/app/AppShell.ts` | Mounts the canvas, runs the loop, re-fits on resize / fullscreen, fullscreen button. |
+| `AppShell` | `src/app/AppShell.ts` | Mounts the canvas, runs the loop, re-fits on resize / fullscreen, `toggleFullscreen()`. |
 
 The future `MatchSession` (real mechanics + networking) implements `GameSession`; nothing else changes. The sandbox's `SandboxSession` is the reference implementation.
 
@@ -30,7 +30,7 @@ const view = await AsciiGameView.create();      // async: waits for the font bef
 const input = new KeyboardTypingInput();
 const session = new MatchSession(/* ... */);     // yours, implements GameSession
 const shell = new AppShell(view, session, input);
-shell.start();                                  // mounts canvas + fullscreen button, attaches input, starts the loop
+shell.start();                                  // mounts the canvas, attaches input, starts the loop
 // ... later
 shell.dispose();                                // stops the loop, disposes session, input and view
 ```
@@ -51,7 +51,7 @@ view.render(session.state(), dt);               // ...then the snapshot
 
 - Fixed **128×45 character grid** on every screen (`ASCII_STYLE.grid`), so layout is identical for every player. Cells scale to the window (largest integer cell, letterboxed on black); the glyph atlas is rebuilt at the real cell size on every resize.
 - Palette (`ASCII_STYLE.palette`): monochrome white / gray on black, plus `red` (Attack word, damage), `green` (typed-prefix match, hits on the enemy), `yellow` (firing sparks), `dim`.
-- Fullscreen: the shell's ⛶ button (a key would collide with typing). Esc exits.
+- Fullscreen: `shell.toggleFullscreen()`. The game binds it to **F** on every screen but the Match (there F is a letter being typed; `isFullscreenKey` in `src/app/fullscreen.ts`); the menu shows the key at the top right. The sandbox has a panel button. Esc exits.
 
 ## The snapshot: `GameViewState`
 
@@ -59,10 +59,10 @@ view.render(session.state(), dt);               // ...then the snapshot
 
 | Field | Type | Drawn as |
 |---|---|---|
-| `lives` | `0..3` | Three red lamps on the Cockpit's left console (a lost life is a dim lamp). A lamp that just went out flickers for 1.2 s. |
+| `lives` | `0..3` | Three red lamps on the Cockpit's left console (a lost life is a dim lamp). A lamp that just went out flickers for 1.2 s. Also the **player damage** (`PlayerDamageFx`): at 2 Lives smoke and sparks from the Lives console, it flickers, 2 switches die, a yellow `HULL DAMAGED`, rare Radar glitches and a light tremble; at 1 Life (and 0) both consoles, thicker smoke with embers, 5 dead switches, a blinking red `!! HULL CRITICAL !!`, frequent glitches, a stronger tremble and stuttering console labels. When a level is reached: a spark burst from the console that broke, a console blackout, a Radar glitch and a hard jolt. Only the side consoles and the yoke (column, bar, grips) move: the Typed word screen and everything above it never do. |
 | `typedWord` | `string` | The Typed word in the Cockpit's input screen (1.2× size, blinking cursor). |
 | `attackWord` | `string` | The Attack word, red, at the right end of the Cockpit's `ATTACK` bar (1.2× size). Its already-typed letters turn white. |
-| `wordBullets` | `{ id, word, flight }[]` | The Word bullets: outlined real-font words flying from the Enemy ship to the Cockpit. `flight` 0 → 1 is the whole path. |
+| `wordBullets` | `{ id, word, flight }[]` | The Word bullets: outlined real-font words flying from the Enemy ship to the Cockpit. `flight` 0 → 1 is the whole path. The next word to type (the nearest one that isn't the Target, `src/view/words/nextWord.ts`) gets a bar under it; the word itself doesn't move. |
 | `shots` | `{ id, word, flight }[]` | The player's own Shots, shown as marks on the Radar. `flight` 0 = just fired, 1 = reaching the Enemy ship. |
 | `enemyDamage` | `0..1` | Enemy ship damage: smoke grows with it; the left wing loses its tip from 0.4; from 0.75 the right engine is gone and the right wing is shortened. |
 | `pace` | `{ player, enemy }` | Both Paces in letters per second (see [Pace](#pace)). Drives the stars and the Enemy ship's size. |
@@ -88,7 +88,7 @@ One-off moments that start an animation. They are not state: send each once, at 
 |---|---|---|
 | `{ type: 'wordBulletDestroyed', id }` | The player destroyed a Word bullet | The word's letters fly apart, with a green ring on the grid. |
 | `{ type: 'wordBulletArrived', id }` | A Word bullet reached the Cockpit | The word vanishes and a red explosion goes off at the impact point. |
-| `{ type: 'lifeLost' }` | Lives went down | Big camera shake and tilt, black screen flash with color fringes (the lamp flicker comes from `lives` dropping). |
+| `{ type: 'lifeLost' }` | Lives went down | Black screen flash with color fringes. No camera shake, so the Attack word and the Typed word stay still; the lamp flicker and the damage jolt come from `lives` dropping. |
 | `{ type: 'attackFired', id, word }` | The player fired the Attack word (a Shot starts) | Many tiny yellow sparks burst from behind the Cockpit's center toward the Enemy ship. |
 | `{ type: 'shotHit', id }` | A Shot reached the Enemy ship | `HIT!!` on the Radar, a big green explosion on the ship, which sags. |
 | `{ type: 'shotDefended', id }` | The opponent destroyed a Shot | A dim `x` stays on the Radar where the Shot was for 0.5 s. |
@@ -131,7 +131,8 @@ Each effect has a `*_LOOK` object of numbers (sizes, times, strengths), exported
 |---|---|---|
 | `ENEMY_LOOK` | `src/view/enemy/EnemyShip.ts` | Enemy ship position, size, idle bob / sway / bank. |
 | `WORD_FLIGHT`, `WORD_LOOK` | `src/view/words/` | Word bullet path and size. |
-| `HIT_LOOK` | `src/view/juice/HitFx.ts` | Life-lost shake, debris, flash; wrong-key shake. |
+| `HIT_LOOK` | `src/view/juice/HitFx.ts` | Camera shake (Enemy ship destroyed, Lose rumble), debris, flash; wrong-key shake. |
+| `PLAYER_DAMAGE_LOOK` | `src/view/juice/PlayerDamageFx.ts` | Smoke amount, tremble, the jolt and blackout when a Life goes (per-level settings: `DAMAGE_LEVELS` in `playerDamage.ts`). |
 | `DESTROY_LOOK` | `src/view/juice/WordDestroyFx.ts` | Destroy effect. |
 | `SHOT_HIT_LOOK` | `src/view/juice/ShotHitFx.ts` | Explosion on the Enemy ship. |
 | `DAMAGE_LOOK` | `src/view/juice/EnemyDamageFx.ts` | Smoke and when parts break. |

@@ -196,7 +196,7 @@ behind (an Invite link survives the reload). `npm run dev` serves `/api` from th
 real matchmaking code over the in-memory store (`vite.devApi.ts`); `?fake` uses the in-memory flow fake instead.
 
 **In-Match (hot path, no AWS).** Events flow Browser↔Browser over the reliable+ordered DataChannel, each
-with seq+id (ignore dupes); a 2 s heartbeat carries a cumulative ack, and silence past the 5 s grace = disconnect.
+with seq+id (ignore dupes); a 2 s heartbeat carries a cumulative ack, and 4 s of silence is a signal loss (`signalLost`) and 14 s ends the connection (4 s to notice plus the Match's 10 s grace). When the signal returns the host sends `resumeAt {at}` so both sides' resume countdown ends together (the guest converts with the clock offset).
 Attack words come from each player's seed; a Shot carries `{i, t_i, word}` and the opponent recomputes the
 word and checks `t_i` against the previous Shot's arrival time (mismatch → ignore + log `invalid_attack`).
 Rematch reuses the open channel and the same seeds (`i` continues) — it works even while the backend rests.

@@ -105,7 +105,7 @@ describe('the ramp', () => {
   test('is never impossible: the end of the ramp still leaves time to type a word', () => {
     const end = rampAt(PRACTICE_RAMP.rampSeconds);
     expect(end.flightSeconds).toBeGreaterThanOrEqual(4);
-    expect(end.spawnEvery).toBeGreaterThanOrEqual(0.8);
+    expect(end.spawnEvery).toBeGreaterThanOrEqual(0.5);
   });
 });
 

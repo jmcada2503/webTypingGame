@@ -1,4 +1,4 @@
-import type { FlowNetwork, Language, MatchKind, NetworkEvent } from '../flow/types';
+import { RESUME_SECONDS, type FlowNetwork, type Language, type MatchKind, type NetworkEvent } from '../flow/types';
 import type { MatchTransport } from '../match/types';
 import { ApiError, type MatchApi, type MatchView } from './api';
 import { TransportError, type ConnectionRecord } from './errors';
@@ -315,11 +315,21 @@ export class OnlineNetwork implements FlowNetwork {
     link.onEvent((event) => {
       if (a.cancelled) return;
       if (event.type === 'signalLost') this.emit({ type: 'opponentDisconnected' });
-      else if (event.type === 'signalBack') this.emit({ type: 'opponentReconnected' });
-      else this.emit({ type: 'opponentLeft' });
+      else if (event.type === 'signalBack') {
+        // The host picks the moment the Match resumes, so both Countdowns end together; the guest waits for it.
+        if (a.role === 'host') {
+          link.resumeIn(RESUME_SECONDS * 1000);
+          this.emit({ type: 'opponentReconnected', resumeIn: RESUME_SECONDS });
+        }
+      } else this.emit({ type: 'opponentLeft' });
     });
     link.onMessage((message) => {
-      if (!a.cancelled && message.type === 'rematch') this.emit({ type: 'rematch', message: message.message });
+      if (a.cancelled) return;
+      if (message.type === 'rematch') this.emit({ type: 'rematch', message: message.message });
+      else if (message.type === 'resumeAt') {
+        const resumeIn = Math.max(0, (link.toLocalTime(message.at) - this.timers.now()) / 1000);
+        this.emit({ type: 'opponentReconnected', resumeIn });
+      }
     });
     this.startTogether(a, link);
   }

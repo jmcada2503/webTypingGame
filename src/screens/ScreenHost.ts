@@ -38,6 +38,9 @@ export class ScreenHost implements GameSession {
   private matchTime = 0;
   /** The GO flash is showing over the Match scene. */
   private goOn = false;
+  /** The link effect now playing, as a key (status and loss count), and how long it has been on. */
+  private linkFxKey = '';
+  private linkFxT = 0;
   /** Seconds until the Rematch clock may start, counted from the result (null: not holding). */
   private rematchHoldLeft: number | null = null;
   /** A Match or Practice run just ended: its ending scene plays (`t` seconds in) before the screen changes. */
@@ -53,6 +56,11 @@ export class ScreenHost implements GameSession {
     this.displayed = visualOf(this.shown);
     this.screens[this.displayed].enter?.(this.shown);
     this.applyView();
+  }
+
+  /** The screen on view (it lags the flow while a screen-change effect or an ending plays). */
+  get screenShown(): ScreenId {
+    return this.displayed;
   }
 
   start() {
@@ -86,6 +94,7 @@ export class ScreenHost implements GameSession {
     }
     SCREEN_TRANSITION.mode = this.transition.mode;
     SCREEN_TRANSITION.level = this.transition.level;
+    this.tickLinkFx(dt);
     const events = [...this.runMatch(dt), ...this.tickEnding(dt)];
     this.syncInput();
     return events;
@@ -99,6 +108,18 @@ export class ScreenHost implements GameSession {
     const pace = f.pace ?? base.pace.player * f.paceScale;
     const idle = this.ending.result === 'peace' ? { nudging: false, opponentIdle: false, peaceIn: 0 } : base.idle;
     return { ...base, idle, pace: { player: pace, enemy: f.pace ?? base.pace.enemy * f.paceScale } };
+  }
+
+  /** Tell the view how the opponent's link is doing: the reconnecting animation, the back-countdown, or nothing. */
+  private tickLinkFx(dt: number) {
+    const s = this.flow.state();
+    const link = s.screen === 'match' ? s.link : { status: 'ok' as const };
+    const key = link.status === 'away' ? `away${link.losses}` : link.status;
+    if (key !== this.linkFxKey) {
+      this.linkFxKey = key;
+      this.linkFxT = 0;
+    } else this.linkFxT += dt;
+    this.view.setLinkFx(link.status === 'away' ? { kind: 'away', t: this.linkFxT, secondsLeft: link.secondsLeft, losses: link.losses } : link.status === 'back' ? { kind: 'back', secondsLeft: link.secondsLeft } : null);
   }
 
   /** The ending scene of a Win / Lose / Peace: apply it, play its one-off moments, then change screen. */
@@ -122,6 +143,7 @@ export class ScreenHost implements GameSession {
     if (s.screen !== 'match') return [];
     if (!this.match) this.beginMatch(s.mode);
     const match = this.match!;
+    match.hold?.(s.link.status !== 'ok'); // the opponent's signal is lost, or the resume countdown runs
     let events: ViewEvent[] = [];
     if (match.status === 'running') {
       this.matchTime += dt;
@@ -202,7 +224,8 @@ export class ScreenHost implements GameSession {
 
   /** Typing is only for the Match: elsewhere the hidden field is switched off so letters don't pile up in it. */
   private syncInput() {
-    const on = this.displayed === 'match' && !this.transition.active && this.match?.status === 'running';
+    const held = this.shown.screen === 'match' && this.shown.link.status !== 'ok';
+    const on = this.displayed === 'match' && !this.transition.active && !held && this.match?.status === 'running';
     if (on !== this.inputOn) {
       this.inputOn = on;
       this.input?.setEnabled(on);

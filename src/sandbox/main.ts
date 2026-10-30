@@ -13,6 +13,7 @@ import { DESTROY_LOOK } from '../view/juice/WordDestroyFx';
 import { HIT_LOOK } from '../view/juice/HitFx';
 import { SHOT_HIT_LOOK } from '../view/juice/ShotHitFx';
 import { DAMAGE_LOOK } from '../view/juice/EnemyDamageFx';
+import { PLAYER_DAMAGE_LOOK } from '../view/juice/PlayerDamageFx';
 import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
 import { PACE_LOOK } from '../view/juice/PaceMotion';
 import { SCREEN_FILTERS } from '../render/ScreenFilters';
@@ -91,6 +92,22 @@ dmg.add(DAMAGE_LOOK, 'smoke', 0, 6, 0.1).name('smoke amount');
 dmg.add(DAMAGE_LOOK, 'wingTipAt', 0, 1, 0.05).name('wing tip lost at');
 dmg.add(DAMAGE_LOOK, 'engineAt', 0, 1, 0.05).name('engine lost at');
 
+const pd = gui.addFolder('Player damage effect');
+const setLives = (n: number) => () => {
+  const lost = n < session.lives;
+  session.lives = n;
+  if (lost) session.emit({ type: 'lifeLost' });
+};
+pd.add({ l3: setLives(3) }, 'l3').name('Lives 3 (intact)');
+pd.add({ l2: setLives(2) }, 'l2').name('Lives 2 (light)');
+pd.add({ l1: setLives(1) }, 'l1').name('Lives 1 (bad)');
+pd.add({ lose: () => setLives(Math.max(0, session.lives - 1))() }, 'lose').name('lose a Life');
+pd.add(PLAYER_DAMAGE_LOOK, 'smoke', 0, 3, 0.1).name('smoke amount');
+pd.add(PLAYER_DAMAGE_LOOK, 'tremble', 0, 4, 0.1).name('tremble');
+pd.add(PLAYER_DAMAGE_LOOK, 'jolt', 0, 0.15, 0.005).name('jolt strength');
+pd.add(PLAYER_DAMAGE_LOOK, 'joltSeconds', 0.1, 2, 0.05).name('jolt time (s)');
+pd.add(PLAYER_DAMAGE_LOOK, 'blackoutSeconds', 0, 1.5, 0.05).name('blackout time (s)');
+
 const ask = gui.addFolder('Attack sparks');
 ask.add(ATTACK_SPARKS_LOOK, 'count', 1, 40, 1);
 ask.add(ATTACK_SPARKS_LOOK, 'seconds', 0.1, 3, 0.05).name('sparks time (s)');
@@ -160,7 +177,6 @@ gui.add({ fs: () => void shell.toggleFullscreen() }, 'fs').name('⛶ fullscreen'
 gui.foldersRecursive().forEach((f) => f.close());
 
 const stats = new Stats();
-stats.dom.style.left = '72px'; // next to the fullscreen button
 document.body.append(stats.dom);
 (function poll() {
   live.typed = input.typedWord;

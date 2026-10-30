@@ -1,6 +1,6 @@
 import { matchPrefix } from '../utils/matchPrefix';
 import type { GameViewState, IdleViewState, ShotState, ViewEvent, WordBulletState } from '../view/GameViewState';
-import type { MatchConfig, MatchStatus, NetEvent } from './types';
+import type { MatchConfig, MatchStatus, NetEvent, FlightRamp } from './types';
 
 const STARTING_LIVES = 3;
 /** Each hit on the opponent adds this much Enemy ship damage (0..1, capped at 1). */
@@ -63,8 +63,18 @@ export interface MatchDetails {
 const MAX_MISSED = 10;
 const MAX_ATTACKS = 120;
 
+/** Online Word bullet flight: 10 s at the start down to 6 s at 1 min (chosen by play-testing). */
+export const MATCH_FLIGHT: FlightRamp = { start: 10, end: 6, rampSeconds: 60 };
+
+/** The flight time at Match time `t` (seconds) on a ramp. */
+export function flightAt(ramp: FlightRamp, t: number): number {
+  const f = Math.min(Math.max(t / ramp.rampSeconds, 0), 1);
+  return ramp.start + (ramp.end - ramp.start) * f;
+}
+
 export class MatchEngine {
   status: MatchStatus = 'running';
+  private held = false;
   private lives = STARTING_LIVES;
   private bullets: Bullet[] = [];
   private pending: ViewEvent[] = [];
@@ -76,7 +86,7 @@ export class MatchEngine {
   private attackIndex: number;
   private attackPickedAt = 0;
   private attackWord = '';
-  private shots: (ShotState & { firedAt: number })[] = [];
+  private shots: (ShotState & { firedAt: number; flightSeconds: number })[] = [];
   /** How many of my Shots have hit the opponent. */
   private hitsOnEnemy = 0;
   /** What the player has typed so far, and when they last typed (Idle = no typing). */
@@ -128,7 +138,8 @@ export class MatchEngine {
   receive(event: NetEvent) {
     if (this.status !== 'running') return;
     if (event.type === 'shot' && (this.config.verifyShot?.(event, this.time) ?? true)) {
-      this.addBullet(`e${event.i}`, event.word, event.i);
+      const ramp = this.config.flightRamp;
+      this.addBullet(`e${event.i}`, event.word, event.i, ramp && flightAt(ramp, this.time));
     }
     if (event.type === 'presence') {
       this.opponentIdle = { idleFor: event.idleFor, at: this.time };
@@ -149,8 +160,13 @@ export class MatchEngine {
     return out;
   }
 
+  /** Hold or release the Match: while held time stands still (the opponent's signal is lost or just back). */
+  hold(held: boolean) {
+    this.held = held;
+  }
+
   update(dt: number): ViewEvent[] {
-    if (this.status !== 'running') return this.flush(); // the Match is over: only deliver what is still pending
+    if (this.status !== 'running' || this.held) return this.flush(); // over or held: only deliver what is still pending
     this.time += dt;
     this.updatePace(dt);
     if (this.config.mode === 'versus' && this.status === 'running' && this.time >= this.nextPresenceAt) {
@@ -183,7 +199,7 @@ export class MatchEngine {
       typedWord: this.typedWord,
       attackWord: this.attackWord,
       wordBullets: this.bullets.map((b) => ({ id: b.id, word: b.word, flight: b.flight })),
-      shots: this.shots.map((s) => ({ id: s.id, word: s.word, flight: Math.min(1, (this.time - s.firedAt) / this.config.shotFlightSeconds) })),
+      shots: this.shots.map((s) => ({ id: s.id, word: s.word, flight: Math.min(1, (this.time - s.firedAt) / s.flightSeconds) })),
       enemyDamage: Math.min(1, this.hitsOnEnemy * DAMAGE_PER_HIT),
       pace: { player: this.pace, enemy: this.opponentPace },
       idle: this.idleState(),
@@ -289,7 +305,9 @@ export class MatchEngine {
   private fire() {
     const i = this.attackIndex;
     const id = `s${i}`;
-    this.shots.push({ id, word: this.attackWord, flight: 0, firedAt: this.time });
+    const ramp = this.config.flightRamp;
+    const flightSeconds = ramp ? flightAt(ramp, this.time) : this.config.shotFlightSeconds;
+    this.shots.push({ id, word: this.attackWord, flight: 0, firedAt: this.time, flightSeconds });
     this.pending.push({ type: 'attackFired', id, word: this.attackWord });
     this.count.shotsFired++;
     if (this.attacks.length < MAX_ATTACKS) this.attacks.push({ i, w: this.attackWord, t: Math.round(this.time * 1000) / 1000, o: 'flying' });

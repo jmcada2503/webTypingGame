@@ -18,8 +18,8 @@ const howto = (secondsLeft: number): FlowState => ({ screen: 'howto', kind: 'pub
 const searching: FlowState = { screen: 'waiting', kind: 'public', phase: 'searching' };
 const connecting: FlowState = { screen: 'waiting', kind: 'public', phase: 'connecting' };
 const countdown: FlowState = { screen: 'countdown', mode: 'versus', secondsLeft: 5 };
-const versus: FlowState = { screen: 'match', mode: 'versus' };
-const practice: FlowState = { screen: 'match', mode: 'practice' };
+const versus: FlowState = { screen: 'match', mode: 'versus', link: { status: 'ok' } };
+const practice: FlowState = { screen: 'match', mode: 'practice', link: { status: 'ok' } };
 const end = (result: 'won' | 'lost' | 'peace', rematch: RematchState = { status: 'available', secondsLeft: 10 }): FlowState => ({ screen: 'end', mode: 'versus', result, kind: 'public', rematch });
 
 function setup() {
@@ -66,7 +66,7 @@ describe('a Match', () => {
 
   it('the opponent leaving mid-Match, and closing the tab, are endings too', () => {
     const left = setup();
-    left.go(menu, howto(5), searching, countdown, versus, { screen: 'opponentLeft', during: 'match', youWin: true, kind: 'public' });
+    left.go(menu, howto(5), searching, countdown, versus, { screen: 'opponentLeft', during: 'match', youWin: true, keptDropping: false, kind: 'public' });
     expect(left.reports[0]).toMatchObject({ end: 'opponentLeft' });
 
     const quit = setup();

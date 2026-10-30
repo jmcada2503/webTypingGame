@@ -1,15 +1,20 @@
 import { TIERS, type Tier, type WordList } from '../words/wordLists';
 
 /**
- * How Practice gets harder. Everything moves in a straight line from `start` (0 s) to `end` (at
- * `rampSeconds`) and then stays: words come faster, fly faster and get longer. Tunable by playing.
+ * How Practice gets harder: two stages, each a straight line between its points, then it stays at the top.
+ * Up to `peakAt` it is the original ramp (words every 4 s down to 1 s, mostly short words to half long ones);
+ * the second stage, up to `rampSeconds`, keeps going for fast typists. Flight times are long so the screen
+ * can fill up (and late saves are possible). Tunable by playing.
  */
 export const PRACTICE_RAMP = {
   /** Seconds before the first Word bullet, and before the first one after the player is placed. */
   firstSpawnAt: 1.5,
-  rampSeconds: 420,
-  start: { spawnEvery: 4, flightSeconds: 10, weights: { short: 0.7, medium: 0.28, long: 0.02 } },
-  end: { spawnEvery: 1, flightSeconds: 5.5, weights: { short: 0.1, medium: 0.4, long: 0.5 } },
+  /** Where the first stage ends and the second begins. */
+  peakAt: 420,
+  rampSeconds: 600,
+  start: { spawnEvery: 4, flightSeconds: 12, weights: { short: 0.7, medium: 0.28, long: 0.02 } },
+  peak: { spawnEvery: 1, flightSeconds: 7, weights: { short: 0.1, medium: 0.4, long: 0.5 } },
+  end: { spawnEvery: 0.6, flightSeconds: 6, weights: { short: 0.05, medium: 0.35, long: 0.6 } },
   /** The gap to the next word varies by up to this share either way, so it isn't a metronome. */
   jitter: 0.2,
 } as const;
@@ -39,7 +44,7 @@ export const PRACTICE_PLACEMENT = {
 /** After placement, the ramp climbs faster while the player has nothing to type, so it never gets boring. */
 export const PRACTICE_ACCELERATION = {
   /** Seconds of ramp that pass per real second while no Word bullet is on screen (1 = no speed-up). */
-  emptyScreenRate: 3,
+  emptyScreenRate: 5,
 } as const;
 
 export interface RampStep {
@@ -53,16 +58,17 @@ export interface RampStep {
 
 /** The difficulty at ramp time `t` (seconds). */
 export function rampAt(t: number): RampStep {
-  const f = Math.min(Math.max(t / PRACTICE_RAMP.rampSeconds, 0), 1);
-  const { start, end } = PRACTICE_RAMP;
+  const { start, peak, end, peakAt, rampSeconds } = PRACTICE_RAMP;
+  const clamped = Math.min(Math.max(t, 0), rampSeconds);
+  const [from, to, f] = clamped <= peakAt ? [start, peak, clamped / peakAt] : [peak, end, (clamped - peakAt) / (rampSeconds - peakAt)];
   const mix = (a: number, b: number) => a + (b - a) * f;
   return {
-    spawnEvery: mix(start.spawnEvery, end.spawnEvery),
-    flightSeconds: mix(start.flightSeconds, end.flightSeconds),
+    spawnEvery: mix(from.spawnEvery, to.spawnEvery),
+    flightSeconds: mix(from.flightSeconds, to.flightSeconds),
     weights: {
-      short: mix(start.weights.short, end.weights.short),
-      medium: mix(start.weights.medium, end.weights.medium),
-      long: mix(start.weights.long, end.weights.long),
+      short: mix(from.weights.short, to.weights.short),
+      medium: mix(from.weights.medium, to.weights.medium),
+      long: mix(from.weights.long, to.weights.long),
     },
   };
 }

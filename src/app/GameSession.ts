@@ -18,6 +18,8 @@ export interface GameSession {
   dispose(): void;
   /** The session reads typedWord / onSubmit from here. */
   attachInput(input: TypingInput): void;
+  /** Online Matches only: hold time while the opponent's signal is lost. */
+  hold?(held: boolean): void;
   /** Advance by dt seconds; returns the one-off events that happened. */
   update(dt: number): ViewEvent[];
   state(): GameViewState;

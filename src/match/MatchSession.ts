@@ -35,6 +35,11 @@ export class MatchSession implements GameSession {
     return this.engine.details();
   }
 
+  /** Hold or release the Match (the opponent's signal is lost or just back). */
+  hold(held: boolean) {
+    this.engine.hold(held);
+  }
+
   start() {
     this.started = true;
   }
