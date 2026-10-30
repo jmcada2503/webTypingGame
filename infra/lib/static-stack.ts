@@ -66,12 +66,12 @@ export class StaticStack extends Stack {
       validation: CertificateValidation.fromDns(zone),
     });
 
-    // www is only an alias: send it to the apex with a permanent redirect.
-    const wwwToApex = new CdnFunction(this, "WwwToApex", {
+    // Only typewing.net serves the game: www and the *.cloudfront.net address redirect to it (301).
+    const toApex = new CdnFunction(this, "ToApex", {
       runtime: FunctionRuntime.JS_2_0,
       code: FunctionCode.fromInline(`function handler(event) {
   var r = event.request;
-  if (r.headers.host.value !== "${WWW}") return r;
+  if (r.headers.host.value === "${DOMAIN}") return r;
   var qs = Object.keys(r.querystring).map(function (k) {
     var q = r.querystring[k];
     return q.value === "" ? k : k + "=" + q.value;
@@ -84,6 +84,8 @@ export class StaticStack extends Stack {
 }`),
     });
 
+    const functionAssociations = [{ function: toApex, eventType: FunctionEventType.VIEWER_REQUEST }];
+
     const distribution = new Distribution(this, "Cdn", {
       domainNames: [DOMAIN, WWW],
       certificate,
@@ -94,7 +96,7 @@ export class StaticStack extends Stack {
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: CachePolicy.CACHING_OPTIMIZED,
         compress: true,
-        functionAssociations: [{ function: wwwToApex, eventType: FunctionEventType.VIEWER_REQUEST }],
+        functionAssociations,
       },
       additionalBehaviors: {
         // Order matters: the specific path before the /api/* catch-all.
@@ -104,6 +106,7 @@ export class StaticStack extends Stack {
           allowedMethods: AllowedMethods.ALLOW_GET_HEAD,
           cachePolicy: onlineCache,
           originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations,
         },
         "/api/*": {
           origin: api,
@@ -111,6 +114,7 @@ export class StaticStack extends Stack {
           allowedMethods: AllowedMethods.ALLOW_ALL,
           cachePolicy: CachePolicy.CACHING_DISABLED,
           originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations,
         },
       },
     });
@@ -147,6 +151,5 @@ export class StaticStack extends Stack {
     pages.node.addDependency(hashedAssets);
 
     new CfnOutput(this, "SiteUrl", { value: `https://${DOMAIN}` });
-    new CfnOutput(this, "CdnUrl", { value: `https://${distribution.distributionDomainName}` });
   }
 }

@@ -127,7 +127,7 @@ a Function URL origin must send `x-amz-content-sha256` (client hashes the body w
 Shield Standard (L3/L4) is free; no WAF.
 The game is served from **typewing.net** (registered in Route 53; the stack's `ZONE_ID` is its hosted zone). An ACM
 certificate (us-east-1, DNS-validated) covers the apex and `www`; A/AAAA alias records point both at the distribution,
-and a viewer-request CloudFront Function answers `www` with a 301 to the apex. The `*.cloudfront.net` URL keeps working.
+and a viewer-request CloudFront Function (on every behavior) answers any other host, `www` and the `*.cloudfront.net` address, with a 301 to the apex.
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,
