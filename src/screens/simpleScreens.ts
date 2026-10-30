@@ -2,6 +2,7 @@ import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import type { PracticeResult } from '../practice/PracticeSession';
 import { blink, centered, formatClock, twoTone } from './draw';
+import { GAME_NAME } from './content';
 import { onlineEndScreen, type OnlineStats } from './endScreens';
 import { practiceEndScreen } from './practiceEndScreen';
 import type { Screen, ScreenSet } from './Screen';
@@ -17,7 +18,7 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
   const menu: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'menu') return;
-      twoTone(text, 3, 'TYPING ', 'GAME', 3);
+      twoTone(text, 3, GAME_NAME[0], GAME_NAME[1], 3);
       lines(text, 14, ['[1] PRACTICE', '[2] PUBLIC MATCH', '[3] PRIVATE MATCH']);
       centered(text, 22, `[TAB] LANGUAGE: ${s.language === 'en' ? 'ENGLISH' : 'SPANISH'}`, 'dim');
       if (s.serversResting) centered(text, 26, 'SERVERS RESTING: ONLINE MATCHES ARE PAUSED', 'fg');

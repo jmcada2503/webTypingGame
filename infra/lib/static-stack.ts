@@ -67,11 +67,18 @@ export class StaticStack extends Stack {
     });
 
     // Only typewing.net serves the game: www and the *.cloudfront.net address redirect to it (301).
+    // Pages are folders: /es gets its slash (301), and /es/ is served from es/index.html.
     const toApex = new CdnFunction(this, "ToApex", {
       runtime: FunctionRuntime.JS_2_0,
       code: FunctionCode.fromInline(`function handler(event) {
   var r = event.request;
-  if (r.headers.host.value === "${DOMAIN}") return r;
+  var page = r.uri.indexOf("/api/") !== 0;
+  var last = r.uri.split("/").pop();
+  var bare = page && last !== "" && last.indexOf(".") === -1;
+  if (r.headers.host.value === "${DOMAIN}" && !bare) {
+    if (page && last === "") r.uri += "index.html";
+    return r;
+  }
   var qs = Object.keys(r.querystring).map(function (k) {
     var q = r.querystring[k];
     return q.value === "" ? k : k + "=" + q.value;
@@ -79,7 +86,7 @@ export class StaticStack extends Stack {
   return {
     statusCode: 301,
     statusDescription: "Moved Permanently",
-    headers: { location: { value: "https://${DOMAIN}" + r.uri + (qs ? "?" + qs : "") } },
+    headers: { location: { value: "https://${DOMAIN}" + r.uri + (bare ? "/" : "") + (qs ? "?" + qs : "") } },
   };
 }`),
     });

@@ -27,6 +27,7 @@ import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
 import { placeholderOnline } from './screens/content';
 import { inviteCodeFromHash } from './app/inviteLink';
+import { syncLanguageWithAddress } from './app/languageAddress';
 import { opponentLeftScreen } from './screens/opponentLeftScreen';
 import { simpleScreens } from './screens/simpleScreens';
 import { waitingScreen } from './screens/waitingScreen';
@@ -76,6 +77,8 @@ const online = backend
       },
     });
 const flow = new ScreenFlow(online ?? backend!.connect());
+// / plays in English and /es/ in Spanish; Tab in the menu moves between the two addresses.
+syncLanguageWithAddress(flow);
 
 // Every open tab counts as online (menu, queue, Match); the menu and waiting screens show the count.
 const presenceApi = online ? createPresenceApi(pid) : null;
@@ -132,6 +135,8 @@ const createMatch = (mode: 'versus' | 'practice') => {
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 const shell = new AppShell(view, host, input);
+// The page's crawlable text (title, how to play) gives way to the game.
+document.documentElement.classList.add('game-ready');
 shell.start();
 // F toggles fullscreen on every screen but the Match, where it is a letter being typed (Esc also leaves fullscreen).
 window.addEventListener('keydown', (e) => {

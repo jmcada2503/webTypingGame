@@ -33,3 +33,39 @@ body {
 [hidden] {
   display: none !important;
 }
+
+/* The page's crawlable text: shown on a black page until the game is up, then kept for screen readers only. */
+.seo-text {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 44em;
+  height: fit-content;
+  padding: 24px;
+  color: #9a9a9a;
+  font: 14px/1.6 ui-monospace, Menlo, Consolas, monospace;
+}
+.seo-text h1 {
+  color: #ffd400;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.seo-text h2 {
+  color: #e6e6e6;
+  font-size: 1em;
+  text-transform: uppercase;
+}
+.seo-text a {
+  color: #ffd400;
+}
+.game-ready .seo-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
