@@ -56,7 +56,7 @@ export class Cockpit {
   /** Lamp index → seconds of flicker left. */
   private readonly flicker = new Map<number, number>();
   /** PROTOTYPE (Prototype: Player damage): the parts the damage variants bend, break and flicker. */
-  readonly protoParts = { root: this.root, panels: [] as THREE.Group[], panelMats: [] as THREE.MeshLambertMaterial[], switches: [] as THREE.Mesh[], radarScreen: null as THREE.Mesh | null, bezel: null as THREE.Mesh | null, yoke: [] as THREE.Mesh[], labels: [] as THREE.Object3D[] };
+  readonly protoParts = { root: this.root, panels: [] as THREE.Group[], panelMats: [] as THREE.MeshLambertMaterial[], switches: [] as THREE.Mesh[], radarScreen: null as THREE.Mesh | null, bezel: null as THREE.Mesh | null, yoke: [] as THREE.Mesh[], grips: [] as THREE.Mesh[], labels: [] as THREE.Object3D[] };
   /** PROTOTYPE: the ATTACK label is blanked this frame (a failing light), the Attack word itself never is. */
   protoLabelOff = false;
 
@@ -80,6 +80,7 @@ export class Cockpit {
       const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
       grip.position.set(x, -0.4, -1.35);
       this.root.add(grip);
+      this.protoParts.grips.push(grip);
     }
     this.typedBezel = box(0.56, 0.12, 0.03, gray(0.45));
     this.typedBezel.position.set(0, -0.4, -1.37);

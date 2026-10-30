@@ -7,7 +7,8 @@
 //   D Broken structure    consoles knocked loose, missing switches, a swinging cable, floating debris
 //   E A + C (round 2, the user's mix): smoke and sparks, plus the failing systems; round 3: the central
 //     panel stays quiet (no ATTACK label stutter, no tremble): damage lives on the side consoles only;
-//     round 4: the structure below the Typed word panel trembles and stutters, the panel and above stay still
+//     round 4: the structure below the Typed word panel trembles and stutters, the panel and above stay still;
+//     round 5: the yoke grips beside the panel tremble too
 //     (a lost Life jolts the lower structure instead of shaking the camera; the black flash stays)
 // Every variant: damage stays until the Match ends, 0 Lives keeps the 1-Life look (the Lose ending dims it),
 // and each new level is marked the moment the Life goes. Words and the Typed word are never covered.
@@ -70,7 +71,7 @@ export class PlayerDamageProto {
     const p = cockpit.protoParts;
     this.base = p.panels.map((g) => ({ pos: g.position.clone(), rot: g.rotation.clone() }));
     this.baseColors = p.panelMats.map((m) => m.color.clone());
-    this.yokeBase = p.yoke.map((m) => ({ pos: m.position.clone(), rot: m.rotation.clone() }));
+    this.yokeBase = [...p.yoke, ...p.grips].map((m) => ({ pos: m.position.clone(), rot: m.rotation.clone() }));
     this.quietCenter = this.variant === 'E';
     if (this.variant === 'B') this.buildCracks();
     if (this.variant === 'D') this.buildStructure();
@@ -108,7 +109,7 @@ export class PlayerDamageProto {
     });
     p.panelMats.forEach((m, i) => m.color.copy(this.baseColors[i]));
     p.switches.forEach((s) => (s.visible = true));
-    p.yoke.forEach((m, i) => {
+    [...p.yoke, ...p.grips].forEach((m, i) => {
       m.position.copy(this.yokeBase[i].pos);
       m.rotation.copy(this.yokeBase[i].rot);
     });
@@ -117,8 +118,8 @@ export class PlayerDamageProto {
   }
 
   /**
-   * E: the structure below the Typed word panel trembles and stutters (the side consoles, their LIVES / RADAR
-   * labels, the yoke column and bar); the panel and everything above it stay still. A Life lost jolts it hard,
+   * E: the structure around and below the Typed word panel trembles and stutters (the side consoles, their LIVES /
+   * RADAR labels, the yoke column, bar and grips); the panel and everything above it stay still. A Life lost jolts it hard,
    * in place of the camera shake.
    */
   private lowerTremble() {
@@ -134,6 +135,12 @@ export class PlayerDamageProto {
       g.rotation.z += wobble(i + 6) * amp * 2;
     });
     p.yoke.forEach((m, i) => (m.position.x += wobble(i + 9) * amp * 0.6));
+    // The grips beside the panel shake too (each on its own); the panel between them does not.
+    p.grips.forEach((m, i) => {
+      m.position.x += wobble(i + 14) * amp * 0.6;
+      m.position.y += wobble(i + 16) * amp * 0.4;
+      m.rotation.z += wobble(i + 18) * amp * 1.5;
+    });
     // The console labels stutter at 1 Life (and while the jolt runs).
     if (this.level >= 2 || jolt > 0.2) p.labels.forEach((l, i) => (l.visible = wobble(i + 12) < 0.55));
   }
