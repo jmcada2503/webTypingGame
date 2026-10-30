@@ -1,6 +1,8 @@
 // The game: the screen flow, the screens, and the game scene, mounted by the app shell.
 import './app/app.css';
 import { AppShell } from './app/AppShell';
+import { isTouchOnly } from './app/keyboardGate';
+import { runKeyboardGate } from './app/runKeyboardGate';
 import { installDevKeys } from './dev/devKeys';
 import { FakeBackend } from './flow/FakeNetwork';
 import { ScreenFlow } from './flow/ScreenFlow';
@@ -8,6 +10,8 @@ import { KeyboardTypingInput } from './input/KeyboardTypingInput';
 import { REMATCH_INDEX_STRIDE, createAttackWordSource } from './match/attackWords';
 import { MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
+import { MetricsTracker } from './metrics/MetricsTracker';
+import { clientInfo, createReporter } from './metrics/reporter';
 import { ShotVerifier } from './match/ShotVerifier';
 import { createApi, createPresenceApi } from './net/api';
 import { checkFreshness } from './net/freshness';
@@ -26,14 +30,29 @@ import { waitingScreen } from './screens/waitingScreen';
 import { AsciiGameView } from './view/AsciiGameView';
 import { loadWordList } from './words/wordLists';
 
-/** Until the metrics pipeline exists, metric records go to the console as one JSON line each. */
+/** Diagnostics that are not metrics records (errors, version checks, each Shot-check detail): console only. */
 const logMetric = (entry: Record<string, unknown>) => console.info(JSON.stringify(entry));
+
+const view = await AsciiGameView.create();
+// Phones and tablets without a mouse or trackpad get a "needs a physical keyboard" screen until a real key is pressed.
+if (isTouchOnly(window)) await runKeyboardGate(view);
 
 // Word lists are small (about 50 KB each, compressed): load both before the first screen.
 const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
 const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
 
 const pid = playerId();
+const safeStorage = (() => {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+})();
+/** Metrics (`POST /api/report`): Matches, Practice runs, connection attempts, Matchmaking give-ups, Rematches. */
+const report = createReporter(pid, clientInfo(navigator.userAgent, safeStorage, new Date().toISOString().slice(0, 10)));
+// Assigned below, once the flow exists; connection records can only arrive after that.
+let metrics: MetricsTracker | null = null;
 // `?fake` plays against the in-memory stand-in (with the dev keys) instead of the real backend and WebRTC.
 const backend = new URLSearchParams(location.search).has('fake') ? new FakeBackend() : null;
 const online = backend
@@ -42,7 +61,7 @@ const online = backend
       api: createApi(pid),
       listVersion: (lang) => versions[lang],
       inviteLink: (matchId) => `${location.origin}${location.pathname}#/m/${matchId}`,
-      onRecord: (record) => logMetric({ event: 'p2p_connection', ...record }),
+      onRecord: (record, match) => metrics?.connection(record, match),
       log: logMetric,
       // A tab left open across a deploy may hold old word lists: reload onto the new build before joining.
       beforeJoin: async (code) => {
@@ -59,7 +78,6 @@ const flow = new ScreenFlow(online ?? backend!.connect());
 const presenceApi = online ? createPresenceApi(pid) : null;
 const presence = presenceApi ? startPresence({ language: () => flow.language(), beat: presenceApi.beat, fetchOnline: presenceApi.online }) : null;
 const onlineCounts = (t: number) => (presence ? (presence.counts() ?? { en: 0, es: 0, total: 0 }) : placeholderOnline(t));
-const view = await AsciiGameView.create();
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
@@ -93,7 +111,10 @@ const createMatch = (mode: 'versus' | 'practice') => {
     list,
     startIndex,
     oneWayLatency: opponent.oneWaySeconds,
-    report: (audit) => logMetric({ event: audit.kind, matchId: opponent.matchId, ...audit }),
+    report: (audit) => {
+      logMetric({ event: audit.kind, matchId: opponent.matchId, ...audit });
+      metrics?.shotAudit(audit.kind);
+    },
   });
   const engine = new MatchEngine({
     mode,
@@ -107,6 +128,25 @@ const createMatch = (mode: 'versus' | 'practice') => {
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 new AppShell(view, host, input).start();
+
+// Online only: `?fake` plays against a stand-in, nothing worth counting.
+if (online) {
+  const tracker = new MetricsTracker({
+    report,
+    language: () => flow.language(),
+    now: () => Date.now(),
+    match: () => (lastMatch ? { stats: lastMatch.stats(), details: lastMatch.details() } : null),
+    practice: () => (practice ? { result: practice.result(), missed: practice.missedWords() } : null),
+    online: () => {
+      const m = online.currentMatch();
+      return m ? { matchId: m.matchId, lang: m.lang, rttMs: m.oneWaySeconds() * 2000 || null } : null;
+    },
+  });
+  metrics = tracker;
+  tracker.observe(flow.state());
+  flow.onChange((state) => tracker.observe(state));
+  addEventListener('pagehide', () => tracker.pageHidden());
+}
 
 // An Invite link (`#/m/<id>`) skips the menu. Clear it so a reload doesn't try to join again.
 const invite = /^#\/m\/([a-z0-9]{3,32})$/.exec(location.hash);

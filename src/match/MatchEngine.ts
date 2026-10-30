@@ -49,6 +49,20 @@ export interface MatchStats {
   shotsDefended: number;
 }
 
+/** What the metrics keep about a Match beyond the counts. */
+export interface MatchDetails {
+  lives: number;
+  /** Highest Pace reached (letters per second). */
+  peakPace: number;
+  /** Words of the Word bullets that reached me, oldest first (at most the first 10). */
+  missed: string[];
+  /** My Shots: index, word, Match time fired, and how each ended (`flying` = still in the air at the end). */
+  attacks: { i: number; w: string; t: number; o: 'hit' | 'defended' | 'flying' }[];
+}
+
+const MAX_MISSED = 10;
+const MAX_ATTACKS = 120;
+
 export class MatchEngine {
   status: MatchStatus = 'running';
   private lives = STARTING_LIVES;
@@ -76,6 +90,9 @@ export class MatchEngine {
   private pace = 0;
   private opponentPace = 0;
   private nextPresenceAt = PRESENCE_EVERY;
+  private peakPace = 0;
+  private missed: string[] = [];
+  private attacks: MatchDetails['attacks'] = [];
   private count = { correctWords: 0, correctLetters: 0, wrongSubmits: 0, bulletsDestroyed: 0, bulletsArrived: 0, shotsFired: 0, shotsHit: 0, shotsDefended: 0 };
 
   constructor(private readonly config: MatchConfig) {
@@ -155,6 +172,11 @@ export class MatchEngine {
     return { elapsed: this.time, ...this.count };
   }
 
+  /** For the metrics: Lives left, peak Pace, the words that got through, and my Shots. */
+  details(): MatchDetails {
+    return { lives: this.lives, peakPace: this.peakPace, missed: [...this.missed], attacks: this.attacks.map((a) => ({ ...a })) };
+  }
+
   state(): GameViewState {
     return {
       lives: this.lives,
@@ -180,6 +202,7 @@ export class MatchEngine {
     while (this.correctWords.length && this.correctWords[0].t < this.time - PACE_WINDOW) this.correctWords.shift();
     const rate = this.correctWords.reduce((n, w) => n + w.chars, 0) / PACE_WINDOW;
     if (dt > 0) this.pace += (rate - this.pace) * (1 - Math.exp(-dt / PACE_EASE));
+    this.peakPace = Math.max(this.peakPace, this.pace);
   }
 
   /** Who is Idle right now, for the view. Practice has no Attack word to nudge, and nothing is Idle once the Match ends. */
@@ -237,6 +260,8 @@ export class MatchEngine {
     if (!this.shots.some((s) => s.id === id)) return false;
     this.shots = this.shots.filter((s) => s.id !== id);
     this.pending.push({ type, id });
+    const attack = this.attacks.find((a) => a.i === i);
+    if (attack) attack.o = type === 'shotHit' ? 'hit' : 'defended';
     if (type === 'shotHit') this.count.shotsHit++;
     else this.count.shotsDefended++;
     return true;
@@ -255,6 +280,7 @@ export class MatchEngine {
     this.bullets = this.bullets.filter((x) => x.id !== b.id);
     this.lives--;
     this.count.bulletsArrived++;
+    if (this.missed.length < MAX_MISSED) this.missed.push(b.word);
     this.pending.push({ type: 'wordBulletArrived', id: b.id }, { type: 'lifeLost' });
     if (b.shot !== undefined) this.outbox.push({ type: 'hit', i: b.shot, lives: this.lives });
     if (this.lives === 0) this.status = 'lost';
@@ -266,6 +292,7 @@ export class MatchEngine {
     this.shots.push({ id, word: this.attackWord, flight: 0, firedAt: this.time });
     this.pending.push({ type: 'attackFired', id, word: this.attackWord });
     this.count.shotsFired++;
+    if (this.attacks.length < MAX_ATTACKS) this.attacks.push({ i, w: this.attackWord, t: Math.round(this.time * 1000) / 1000, o: 'flying' });
     this.countCorrect(this.attackWord);
     this.outbox.push({ type: 'shot', i, t: this.attackPickedAt, word: this.attackWord });
     this.attackIndex = i + 1;

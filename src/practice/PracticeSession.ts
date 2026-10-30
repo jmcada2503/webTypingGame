@@ -126,6 +126,11 @@ export class PracticeSession implements GameSession {
     };
   }
 
+  /** The words that got through (for the metrics). */
+  missedWords() {
+    return this.engine.details().missed;
+  }
+
   /** Once the first words are typed or missed, measure the player and move the run on to their level. */
   private placePlayerWhenReady() {
     if (this.director.phase !== 'calibrating') return;

@@ -754,3 +754,19 @@ describe('Servers resting', () => {
     expect(screen(b.flow)).toBe('countdown');
   });
 });
+
+describe('watching the flow', () => {
+  test('onChange sees every state, even ones that last no time at all', () => {
+    const { flow, network } = setup();
+    const seen: string[] = [];
+    const stop = flow.onChange((s) => seen.push(s.screen === 'waiting' ? `waiting:${s.phase}` : s.screen));
+    flow.choose('public');
+    flow.confirm();
+    network.emit({ type: 'matched' });
+    network.emit({ type: 'connected' });
+    expect(seen).toEqual(['howto', 'waiting:searching', 'waiting:connecting', 'countdown']);
+    stop();
+    flow.update(1);
+    expect(seen).toHaveLength(4);
+  });
+});

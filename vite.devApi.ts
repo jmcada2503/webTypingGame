@@ -1,5 +1,6 @@
 import type { Plugin } from 'vite';
 import { MemoryStore } from './infra/lambda/api/memoryStore';
+import { MemoryDetailsStore, Metrics } from './infra/lambda/api/metrics';
 import { MemoryPresenceStore, Presence } from './infra/lambda/api/presence';
 import { createRouter } from './infra/lambda/api/routes';
 import { Matchmaker } from './infra/lambda/api/service';
@@ -7,9 +8,11 @@ import { Matchmaker } from './infra/lambda/api/service';
 /**
  * `npm run dev` only: serves `/api/*` from the real matchmaking code over the in-memory store, so two local
  * tabs can find each other and play online with no AWS. `/status.json` is absent (servers open).
+ * Metrics reports are checked like in production and printed to the dev server's terminal as `[metric] {...}`.
  */
 export function devApi(): Plugin {
-  const route = createRouter(new Matchmaker(new MemoryStore()), new Presence(new MemoryPresenceStore(), { log: () => {} }));
+  const metrics = new Metrics({ store: new MemoryDetailsStore(), log: (line) => console.info(`[metric] ${JSON.stringify(line)}`), sampleRate: 1 });
+  const route = createRouter(new Matchmaker(new MemoryStore()), new Presence(new MemoryPresenceStore(), { log: () => {} }), metrics);
   return {
     name: 'dev-api',
     apply: 'serve',

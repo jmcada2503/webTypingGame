@@ -13,7 +13,16 @@ export class ScreenFlow {
   private chosenLanguage: Language = 'en';
   /** The Rematch clocks are paused (an ending scene is playing). */
   private rematchHeld = false;
-  private s: FlowState = { screen: 'menu', serversResting: false, language: 'en' };
+  private current: FlowState = { screen: 'menu', serversResting: false, language: 'en' };
+  private listeners = new Set<(state: FlowState) => void>();
+  /** Every change of state goes through here, so watchers see each one (also while the tab is in the background). */
+  private get s(): FlowState {
+    return this.current;
+  }
+  private set s(next: FlowState) {
+    this.current = next;
+    this.listeners.forEach((cb) => cb({ ...next }));
+  }
   /** Seconds left in the current timed phase (connecting, starting gap). */
   private timer = 0;
   /** The kind of online match the player is in (remembered for the end screens). */
@@ -35,6 +44,12 @@ export class ScreenFlow {
 
   state(): FlowState {
     return { ...this.s };
+  }
+
+  /** Called with every new state (timers ticking included). Returns an unsubscribe function. */
+  onChange(cb: (state: FlowState) => void) {
+    this.listeners.add(cb);
+    return () => void this.listeners.delete(cb);
   }
 
   /** The language the player chose (it drives the word list and who they are matched with). */
