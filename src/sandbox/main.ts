@@ -17,6 +17,7 @@ import { ATTACK_SPARKS_LOOK } from '../view/juice/AttackSparks';
 import { PACE_LOOK } from '../view/juice/PaceMotion';
 import { SCREEN_FILTERS } from '../render/ScreenFilters';
 import { SAMPLE_WORDS, SandboxSession } from './SandboxSession';
+import { PLAYER_DAMAGE_PROTO } from '../prototype/playerDamage/variants';
 
 const session = new SandboxSession();
 const input = new KeyboardTypingInput();
@@ -139,6 +140,19 @@ ev.add(session, 'arrivalCostsLife').name('arrival costs a life');
 ev.add({ refill: () => session.refillLives() }, 'refill').name('refill Lives');
 ev.add({ lifeLost: () => session.emit({ type: 'lifeLost' }) }, 'lifeLost').name('lifeLost');
 
+// PROTOTYPE knobs ("Prototype: Player damage"); the style is ?variant=A..D (the yellow bar at the top).
+const pd = gui.addFolder('Player damage (prototype)');
+const setLives = (n: number) => () => {
+  const lost = n < session.lives;
+  session.lives = n;
+  if (lost) session.emit({ type: 'lifeLost' });
+};
+pd.add({ l3: setLives(3) }, 'l3').name('Lives 3 (intact)');
+pd.add({ l2: setLives(2) }, 'l2').name('Lives 2 (+ lifeLost)');
+pd.add({ l1: setLives(1) }, 'l1').name('Lives 1 (+ lifeLost)');
+pd.add({ lose: () => setLives(Math.max(0, session.lives - 1))() }, 'lose').name('lose a Life');
+pd.add(PLAYER_DAMAGE_PROTO, 'amount', 0, 3, 0.1).name('smoke amount (A)');
+
 const sh = gui.addFolder('Shots (Radar)');
 sh.add({ fire: () => session.fireAttack() }, 'fire').name('fire Attack word');
 sh.add({ defend: () => session.defendOldestShot() }, 'defend').name('enemy defends oldest');
@@ -158,6 +172,7 @@ gui.add({ fs: () => void shell.toggleFullscreen() }, 'fs').name('⛶ fullscreen'
 
 // Every folder starts collapsed; open only what you need.
 gui.foldersRecursive().forEach((f) => f.close());
+pd.open();
 
 const stats = new Stats();
 stats.dom.style.left = '72px'; // next to the fullscreen button

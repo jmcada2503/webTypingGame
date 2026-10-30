@@ -20,6 +20,7 @@ import { SCREEN_HIT } from '../render/ScreenFilters';
 import type { EndingFrame } from '../screens/endings';
 import { worldToGrid } from './cockpit/gridProjection';
 import { matchPrefix } from '../utils/matchPrefix';
+import { PlayerDamageProto } from '../prototype/playerDamage/variants';
 
 const EVENT_LABEL_SECONDS = 1.2;
 
@@ -58,6 +59,8 @@ export class AsciiGameView implements GameView {
   /** Word bullets: real-font sprites over the ASCII frame ("Words in the ASCII world"). */
   /** Word bullets: real-font, outlined, over the ASCII frame. */
   private readonly words = new WordBulletSprites();
+  /** PROTOTYPE (Prototype: Player damage): Cockpit damage by Lives left, ?variant=A..D. */
+  private readonly playerDamage: PlayerDamageProto;
 
   static async create(): Promise<AsciiGameView> {
     return new AsciiGameView(await GpuAsciiRenderer.create());
@@ -80,6 +83,7 @@ export class AsciiGameView implements GameView {
     this.attackSparks = new AttackSparks(this.scene, this.camera);
     this.paceMotion = new PaceMotion(this.enemy);
     this.overlay.add(this.words.scene, this.cockpit.overlay);
+    this.playerDamage = new PlayerDamageProto(this.scene, this.camera, this.cockpit, this.sparks);
   }
 
   /** A text screen to draw instead of the game scene (null = the game scene). */
@@ -137,7 +141,9 @@ export class AsciiGameView implements GameView {
     this.damageFx.update(state.enemyDamage, dt, text);
     this.sparks.update(dt, text);
     this.attackSparks.update(dt);
+    this.playerDamage.update(state.lives, dt, text);
     this.cockpit.update(state, dt, text);
+    this.playerDamage.drawAfter(text);
     if (this.debugEventLabel && this.lastEvent) text.write(8, 2, this.lastEvent.label, 'dim');
     this.overlayDraw?.(text, dt);
 
@@ -228,6 +234,7 @@ export class AsciiGameView implements GameView {
     this.hitFx.dispose();
     this.shotHitFx.dispose();
     this.damageFx.dispose();
+    this.playerDamage.dispose();
     this.attackSparks.dispose();
     this.enemy.dispose();
     this.stars.dispose();

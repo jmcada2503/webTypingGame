@@ -55,6 +55,10 @@ export class Cockpit {
   readonly centerCell = { col: 0, row: 0 };
   /** Lamp index → seconds of flicker left. */
   private readonly flicker = new Map<number, number>();
+  /** PROTOTYPE (Prototype: Player damage): the parts the damage variants bend, break and flicker. */
+  readonly protoParts = { root: this.root, panels: [] as THREE.Group[], panelMats: [] as THREE.MeshLambertMaterial[], switches: [] as THREE.Mesh[], radarScreen: null as THREE.Mesh | null, bezel: null as THREE.Mesh | null };
+  /** PROTOTYPE: the ATTACK label is blanked this frame (a failing light), the Attack word itself never is. */
+  protoLabelOff = false;
 
   constructor(
     scene: THREE.Scene,
@@ -88,7 +92,10 @@ export class Cockpit {
       const panel = new THREE.Group();
       panel.position.set(side * 0.8, -0.5, -1.6);
       panel.rotation.set(-0.7, -side * 0.4, 0);
-      panel.add(box(0.62, 0.42, 0.06, gray(0.28)));
+      const panelMat = gray(0.28);
+      panel.add(box(0.62, 0.42, 0.06, panelMat));
+      this.protoParts.panels.push(panel);
+      this.protoParts.panelMats.push(panelMat);
       this.addLabel(panel, side < 0 ? 'LIVES' : 'RADAR');
 
       if (side < 0) {
@@ -114,10 +121,13 @@ export class Cockpit {
         const sw = box(0.04, 0.07, 0.04, gray(0.85));
         sw.position.set(-0.2 + i * 0.1, -0.17, 0.06);
         panel.add(sw);
+        this.protoParts.switches.push(sw);
       }
       this.root.add(panel);
     }
     this.radar = new Radar(radarScreen);
+    this.protoParts.radarScreen = radarScreen;
+    this.protoParts.bezel = this.typedBezel;
 
     const overhead = box(3, 0.12, 0.5, gray(0.4));
     overhead.position.set(0, 0.68, -1.3);
@@ -179,7 +189,7 @@ export class Cockpit {
     text.fill(edge.c0, row, edge.c1 - edge.c0, 2, ' '); // two rows, so the larger text sits on blank
     const textRow = row + 1 - TEXT_SCALE / 2; // centered on the blank rows
     const look = state.idle.nudging ? nudgeLook(this.nudgeT, state.idle.opponentIdle) : null;
-    text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, look ? 'fg' : 'dim'); // bright while the nudge runs
+    if (!this.protoLabelOff) text.writeScaled(edge.c0 + 1, textRow, 'ATTACK', TEXT_SCALE, look ? 'fg' : 'dim'); // bright while the nudge runs
     // Attack word: the letters already typed turn white as the player writes it.
     const letters = [...state.attackWord];
     // Defending comes first: while the Typed word targets a Word bullet, the Attack word isn't lit.
