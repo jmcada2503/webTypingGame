@@ -16,7 +16,7 @@ import type { PracticeResult } from '../../practice/PracticeSession';
 import type { PaletteColor, TextGrid } from '../../render/AsciiRenderer';
 import { practiceScore } from '../../screens/content';
 import { blink, box, centered, COLS, formatClock, put, twoTone } from '../../screens/draw';
-import type { EndingFrame, EndingPlan } from '../../screens/endings';
+import { ENDINGS, endingFrame, type EndingFrame, type EndingPlan } from '../../screens/endings';
 import type { Screen } from '../../screens/Screen';
 import { GLITCH, MATCH_START_HOLD, TV_OFF_ON } from '../../screens/ScreenTransition';
 
@@ -37,8 +37,12 @@ const base = (): EndingFrame => ({ enemyVisible: true, enemyOffset: { x: 0, y: 0
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
 export function practiceEnding(): PracticeEnding {
-  if (variant === 0 || variant === 1 || variant === 4) {
-    // A, B, E: the cockpit powers down (the stars slow to a stop, the lights dim), then TV off / on.
+  if (variant === 0 || variant === 4) {
+    // A, E (decided): exactly the online Lose ending, from the same code.
+    return { plan: ENDINGS.lost, frame: (t) => endingFrame('lost', t) };
+  }
+  if (variant === 1) {
+    // B: the cockpit powers down (the stars slow to a stop, the lights dim), then TV off / on.
     return {
       plan: { sceneSeconds: 2.8, effect: TV_OFF_ON, hold: MATCH_START_HOLD },
       frame: (t) => ({ ...base(), paceScale: 1 - clamp01((t - 0.3) / 1), dim: Math.min(0.85, Math.max(0, (t - 0.4) * 0.5)) }),
