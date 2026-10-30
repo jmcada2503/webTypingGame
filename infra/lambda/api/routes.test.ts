@@ -96,3 +96,23 @@ describe('routing', () => {
     expect(res).toEqual({ status: 500, body: { error: "internal" } });
   });
 });
+
+describe('presence and the online count', () => {
+  it('takes a heartbeat and answers the count, cacheable for 30 s', async () => {
+    const { MemoryPresenceStore, Presence } = await import('./presence');
+    const route = createRouter(new Matchmaker(new MemoryStore()), new Presence(new MemoryPresenceStore()));
+    const beat = await route({ method: 'POST', path: '/api/presence', query: {}, body: { pid: A, lang: 'es' } });
+    expect(beat.status).toBe(200);
+    const online = await route({ method: 'GET', path: '/api/online', query: {}, body: undefined });
+    expect(online).toMatchObject({ status: 200, headers: { 'cache-control': 'public, max-age=30' } });
+    expect(online.body).toMatchObject({ en: expect.any(Number), es: expect.any(Number), total: expect.any(Number) });
+  });
+
+  it('validates the heartbeat', async () => {
+    const { MemoryPresenceStore, Presence } = await import('./presence');
+    const route = createRouter(new Matchmaker(new MemoryStore()), new Presence(new MemoryPresenceStore()));
+    expect((await route({ method: 'POST', path: '/api/presence', query: {}, body: { pid: A, lang: 'fr' } })).status).toBe(400);
+    expect((await route({ method: 'POST', path: '/api/presence', query: {}, body: { lang: 'en' } })).status).toBe(400);
+    expect((await route({ method: 'GET', path: '/api/presence', query: {}, body: undefined })).status).toBe(405);
+  });
+});

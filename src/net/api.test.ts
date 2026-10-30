@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, createApi, sha256Hex } from './api';
+import { ApiError, createApi, createPresenceApi, sha256Hex } from './api';
 
 const PID = 'player-aaaaaaaaaaaaaaaa';
 
@@ -58,5 +58,22 @@ describe('createApi', () => {
     const fetchFn = (async () => new Response('<html>', { status: 502 })) as typeof fetch;
     const error = await createApi(PID, fetchFn).poll('m1').catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 502, code: 'http_error' });
+  });
+});
+
+describe('createPresenceApi', () => {
+  it('heartbeats with the player id and language, and reads the count letting caches answer', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ en: 1, es: 2, total: 3 }));
+    }) as typeof fetch;
+    const api = createPresenceApi(PID, fetchFn);
+    await api.beat('es');
+    expect(await api.online()).toEqual({ en: 1, es: 2, total: 3 });
+    expect(calls[0].url).toBe('/api/presence');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ pid: PID, lang: 'es' });
+    expect((calls[0].init.headers as Record<string, string>)['x-amz-content-sha256']).toBeDefined();
+    expect(calls[1]).toMatchObject({ url: '/api/online', init: { method: 'GET', cache: 'default' } });
   });
 });

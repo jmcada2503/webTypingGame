@@ -1,7 +1,7 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { blink, box, centered, put, twoTone, wrap } from './draw';
-import { GAME_NAME, MENU_ITEMS, SPONSOR_LINK, moveSelection, placeholderOnline, usableSelection } from './content';
+import { GAME_NAME, MENU_ITEMS, SPONSOR_LINK, moveSelection, placeholderOnline, type OnlineCounts, usableSelection } from './content';
 import type { Screen } from './Screen';
 
 const ICONS: Record<(typeof MENU_ITEMS)[number]['key'], string[]> = {
@@ -12,7 +12,7 @@ const ICONS: Record<(typeof MENU_ITEMS)[number]['key'], string[]> = {
 const COPIED_SECONDS = 1.6;
 
 /** The approved main menu (layout B): three cards, language, online counts, a sponsor note or the resting panel. */
-export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void): Screen {
+export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline): Screen {
   let sel = 0;
   let copiedAt = -99;
   /** Read from the flow, not from the drawn state: that one can lag a frame behind. */
@@ -56,7 +56,7 @@ export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void): Scr
       now = t;
       const resting = s.serversResting;
       sel = usableSelection(sel, resting);
-      const online = placeholderOnline(t);
+      const online = onlineCounts(t);
       const mine = flow.language() === 'en' ? online.en : online.es;
       twoTone(text, 1.5, GAME_NAME[0], GAME_NAME[1], 2.8);
       centered(text, 6, 'TYPE FAST. DEFEND. ATTACK.', 'dim');

@@ -16,7 +16,11 @@ const hash = (n: number) => {
 };
 
 /** Placeholder online counts: stale on purpose, they only change every 30 s. Replaced by the presence endpoint later. */
-export function placeholderOnline(seconds: number) {
+/** Players online now: everyone, and per language. */
+export type OnlineCounts = { en: number; es: number; total: number };
+
+/** Made-up counts for screens shown without the real network (`?fake`, the sandbox). */
+export function placeholderOnline(seconds: number): OnlineCounts {
   const step = Math.floor(seconds / 30);
   const en = 97 + Math.round((hash(step) - 0.5) * 8);
   const es = 31 + Math.round((hash(step + 9) - 0.5) * 4);
