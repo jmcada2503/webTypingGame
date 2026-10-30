@@ -425,6 +425,24 @@ describe('Rematch', () => {
     });
   });
 
+  describe('while the end screen is not up yet (an ending scene is playing)', () => {
+    test('holding the Rematch clocks keeps the window and answer times still until released', () => {
+      const { flow, network } = ended();
+      flow.holdRematch(true);
+
+      flow.update(8);
+      expect(rematchOf(flow)).toEqual({ status: 'available', secondsLeft: 10 });
+
+      network.emit({ type: 'rematch', message: 'propose' }); // their request arrives meanwhile
+      flow.update(8);
+      expect(rematchOf(flow)).toEqual({ status: 'incoming', answerSecondsLeft: 10, secondsLeft: 10 });
+
+      flow.holdRematch(false);
+      flow.update(4);
+      expect(rematchOf(flow)).toEqual({ status: 'incoming', answerSecondsLeft: 6, secondsLeft: 6 });
+    });
+  });
+
   describe('proposing', () => {
     test('waits for the answer for 10 seconds; an accept starts a new Countdown at once', () => {
       const { flow, network } = ended();

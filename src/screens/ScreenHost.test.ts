@@ -310,6 +310,21 @@ describe('Online endings', () => {
     expect(sceneIsShown(ctx)).toBe(false);
   });
 
+  test('the Rematch window only starts when the end screen is up, not while the ending plays', () => {
+    const ctx = intoOnlineMatch();
+    ctx.made[0].status = 'peace';
+
+    ctx.run(3);
+    expect(ctx.flow.state()).toMatchObject({ rematch: { status: 'available', secondsLeft: 10 } });
+
+    ctx.run(2.2); // the ending is over and the screen has changed
+    ctx.run(2);
+    expect(ctx.flow.state()).toMatchObject({ rematch: { status: 'available' } });
+    const left = (ctx.flow.state() as { rematch: { secondsLeft: number } }).rematch.secondsLeft;
+    expect(left).toBeGreaterThan(7.5);
+    expect(left).toBeLessThan(9);
+  });
+
   test('typing stays off during the ending, and the Match session is not updated any more', () => {
     const ctx = intoOnlineMatch();
     ctx.made[0].status = 'lost';

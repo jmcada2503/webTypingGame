@@ -139,6 +139,8 @@ export class ScreenHost implements GameSession {
   private finishMatch(result: EndingResult) {
     if (this.ending) return;
     this.flow.matchEnded(result);
+    const online = this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus';
+    this.flow.holdRematch(online); // its clocks start when the end screen is up
     // Online Matches play their ending first; Practice (no opponent, no result) goes straight to its screen.
     if (this.flow.state().screen === 'end' && this.shown.screen === 'match' && this.shown.mode === 'versus') {
       this.ending = { result, t: 0, started: false };
@@ -168,6 +170,7 @@ export class ScreenHost implements GameSession {
     this.displayed = visualOf(this.shown);
     this.screenTime = 0;
     this.ending = null;
+    this.flow.holdRematch(false);
     this.view.setEnding(null);
     if (this.displayed !== 'match') this.endSession();
     this.screens[this.displayed].enter?.(this.shown);
