@@ -6,6 +6,8 @@
 //   B Power down      -> Run report (a log that types itself out, with your session best next to each number)
 //   C Power down      -> Big GAME OVER, small difficulty chart + the report typing itself out (round 2: the user's mix)
 //   D Calm fade       -> Three big numbers (time, WPM, accuracy)
+//   E Power down      -> the game over screen the app had before (for comparison)
+// Round 3 (user): A's screen with a big GAME OVER and a much smaller score, after B's power down.
 // The personal best lives in this browser tab only (sessionStorage) until there are accounts.
 import type { ScreenFlow } from '../../flow/ScreenFlow';
 import type { FlowState } from '../../flow/types';
@@ -19,8 +21,8 @@ import type { Screen } from '../../screens/Screen';
 import { GLITCH, MATCH_START_HOLD, TV_OFF_ON } from '../../screens/ScreenTransition';
 
 const params = new URLSearchParams(location.search);
-const NAMES = ['A  FREEZE + ARCADE SCORE', 'B  POWER DOWN + RUN REPORT', 'C  POWER DOWN + SMALL CHART AND REPORT (CHOSEN MIX)', 'D  CALM FADE + THREE BIG NUMBERS'];
-export let variant = Math.max(0, 'ABCD'.indexOf((params.get('go') ?? 'C').toUpperCase()));
+const NAMES = ['A  POWER DOWN + BIG TITLE, SMALL SCORE, STAT GRID (ROUND 3)', 'B  POWER DOWN + RUN REPORT', 'C  POWER DOWN + SMALL CHART AND REPORT (CHOSEN MIX)', 'D  CALM FADE + THREE BIG NUMBERS', 'E  POWER DOWN + THE PREVIOUS SCREEN (FOR COMPARISON)'];
+export let variant = Math.max(0, 'ABCDE'.indexOf((params.get('go') ?? 'A').toUpperCase()));
 
 // ---------------------------------------------------------------- the ending scene (after the last Life)
 
@@ -35,26 +37,8 @@ const base = (): EndingFrame => ({ enemyVisible: true, enemyOffset: { x: 0, y: 0
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
 export function practiceEnding(): PracticeEnding {
-  if (variant === 0) {
-    // A: everything freezes on the spot and GAME OVER is stamped over the scene.
-    return {
-      plan: { sceneSeconds: 1.8, effect: GLITCH, hold: 0 },
-      frame: () => ({ ...base(), pace: 0, dim: 0.3 }),
-      overlay(text, t) {
-        if (t < 0.15) return;
-        const s = 'GAME OVER';
-        const scale = 6;
-        const c = (COLS - s.length * scale) / 2;
-        if (t < 0.3) {
-          text.writeScaled(c - 1.2, 14, s, scale, 'red');
-          text.writeScaled(c + 1.2, 14, s, scale, 'green');
-        }
-        text.writeScaled(c, 14, s, scale, 'red');
-      },
-    };
-  }
-  if (variant === 1) {
-    // B: the cockpit powers down (the stars slow to a stop, the lights dim), then TV off / on.
+  if (variant === 0 || variant === 1 || variant === 4) {
+    // A, B, E: the cockpit powers down (the stars slow to a stop, the lights dim), then TV off / on.
     return {
       plan: { sceneSeconds: 2.8, effect: TV_OFF_ON, hold: MATCH_START_HOLD },
       frame: (t) => ({ ...base(), paceScale: 1 - clamp01((t - 0.3) / 1), dim: Math.min(0.85, Math.max(0, (t - 0.4) * 0.5)) }),
@@ -151,15 +135,14 @@ function optionsRow(text: TextGrid, row: number, t: number) {
 /** A: arcade: the score counts up big, then the best, a verdict, and the numbers in a grid. */
 function drawArcade(text: TextGrid, t: number) {
   const s = shown!;
-  twoTone(text, 2.5, 'GAME ', 'OVER', 3);
-  const counted = s.score * clamp01(t / 1.2);
-  const label = fmt(counted);
-  text.writeScaled((COLS - label.length * 6) / 2, 8, label, 6, 'yellow');
-  centered(text, 15.5, 'SCORE', 'dim');
+  twoTone(text, 2, 'GAME ', 'OVER', 6);
+  const counted = fmt(s.score * clamp01(t / 1.2));
+  const label = `SCORE ${counted}`;
+  text.writeScaled((COLS - label.length * 2) / 2, 11, label, 2, 'yellow');
   if (t > 1.2) {
-    if (s.newBest) centered(text, 17.5, blink(t, 2) ? 'NEW BEST!' : '', 'green');
-    else if (s.bestBefore) centered(text, 17.5, `BEST ${fmt(s.bestBefore.score)}`, 'dim');
-    centered(text, 19.5, verdict(s.difficulty), 'fg');
+    if (s.newBest) centered(text, 15, blink(t, 2) ? 'NEW BEST!' : '', 'green');
+    else if (s.bestBefore) centered(text, 15, `BEST ${fmt(s.bestBefore.score)}`, 'dim');
+    centered(text, 17, verdict(s.difficulty), 'fg');
   }
   const cells: [string, string][] = [
     ['TIME', formatClock(s.r.survivedSeconds)],
@@ -171,11 +154,11 @@ function drawArcade(text: TextGrid, t: number) {
   ];
   cells.forEach(([k, v], i) => {
     const col = 28 + (i % 3) * 26;
-    const row = 23 + Math.floor(i / 3) * 3;
+    const row = 21 + Math.floor(i / 3) * 3;
     put(text, col, row, k, 'dim');
     put(text, col, row + 1, v, 'fg');
   });
-  optionsRow(text, 33, t);
+  optionsRow(text, 31, t);
 }
 
 /** B: a run report that types itself out, line by line, with the session best next to the numbers. */
@@ -290,13 +273,15 @@ export function practiceEndScreen(real: Screen, flow: ScreenFlow, result: () => 
     },
     draw(text, t, s) {
       if (!isPractice(s) || !shown) return real.draw(text, t, s);
-      DRAW[variant](text, t);
+      if (variant === 4) real.draw(text, t, s); // E: the screen that was in the app before
+      else DRAW[variant](text, t);
       put(text, 2, 43, `PROTOTYPE  VARIANT ${NAMES[variant]}    [ ] SWITCH (THE ENDING SCENE CHANGES NEXT RUN)`, 'dim');
     },
     onKey(e, s) {
       if (!isPractice(s) || !shown) return real.onKey?.(e, s);
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (k === '[' || k === ']') variant = (variant + (k === ']' ? 1 : 3)) % 4;
+      if (k === '[' || k === ']') variant = (variant + (k === ']' ? 1 : 4)) % 5;
+      else if (variant === 4) return real.onKey?.(e, s);
       else if (k === 'h' || k === 'k' || k === 'ArrowLeft' || k === 'ArrowUp') sel = (sel + 1) % 2;
       else if (k === 'l' || k === 'j' || k === 'ArrowRight' || k === 'ArrowDown') sel = (sel + 1) % 2;
       else if (k === 'Enter') return sel === 0 ? flow.playAgain() : flow.backToMenu();
