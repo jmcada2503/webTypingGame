@@ -37,7 +37,7 @@ Engine methods: `typed(word)` (the Typed word changed, which counts as activity)
 - **Defending comes first:** a submitted word that equals a Word bullet destroys it (the one closest to the Cockpit if several); only otherwise, if it equals the Attack word, it fires a **Shot**. Matching is `matchPrefix`'s rule: case-insensitive, NFC, exact letters (`ñ ≠ n`, `á ≠ a`).
 - **Shots:** firing sends `shot {i, t, word}` to the opponent, where it becomes a Word bullet; the next Attack word is picked immediately. A Shot waits on the Radar until the opponent answers.
 - **Damage:** each of my Shots that hits adds **40%** Enemy ship damage, capped at **100%** (so the second hit crosses 75%). The opponent's report of 0 Lives wins the Match.
-- **Idle:** Idle means no typing. After **5 s** the engine emits one `idleNudge` (re-armed by typing). If **both** players are Idle for over **10 s** the Match ends in **Peace** (`peace` event; nobody wins).
+- **Idle:** Idle means no typing. After **5 s** the engine emits one `idleNudge` (re-armed by typing). If **both** players are Idle for over **10 s** the Match ends in **Peace** (`peace` event; nobody wins). `state().idle` gives the view a continuous picture: `nudging` (the player has been Idle for 5 s, until they type), `opponentIdle` (their last report plus the time since says 5 s or more), and `peaceIn` (seconds to Peace while both are Idle: it waits for whoever has been Idle for less time; `null` otherwise). All false in Practice and after the Match ends. The Cockpit draws the nudge (marker, hint, underline; faster with a steady white `PEACE IN n` label when the opponent is Idle too) from it, timings in `src/view/cockpit/attackNudge.ts`.
 - **Pace:** letters of correct words (Word bullets destroyed plus Attack words fired) per second over the last 10 s, eased over 1 s. The opponent's Pace is whatever they last reported.
 - **Practice:** no Attack word, nothing is sent to a network, no Peace; the game calls `spawnBullet(word, flightSeconds?)` (the optional flight time lets later words fly faster). It ends when Lives reach 0. `src/practice/` drives it, see Practice below.
 - `stats()` gives counters for the results screen and the Match report: elapsed time, correct words and letters, wrong submits, Word bullets destroyed and arrived, Shots fired, hit and defended.
@@ -51,7 +51,7 @@ The only thing crossing the wire. Each engine produces them with `drainOutgoing(
 | `shot {i, t, word}` | I fired my `i`-th Attack word, picked at Match time `t`. It flies at you as a Word bullet (`e<i>`). |
 | `defended {i}` | I destroyed your Shot `i`. |
 | `hit {i, lives}` | Your Shot `i` reached me; I have `lives` left. |
-| `presence {idleFor, pace}` | Sent every 2 s: seconds since I last typed, and my Pace. Peace needs both sides' Idle time. |
+| `presence {idleFor, pace}` | Sent every 2 s: seconds since I last typed, and my Pace. Peace needs both sides' Idle time. The receiver adds the time since the report, which is right while I stay Idle; so I also send one **at once with `idleFor: 0` when I type after a pause of 2 s or more** (otherwise their estimate could wrongly pass 5 s before my next tick). Shorter pauses send nothing extra. |
 | `peace` | Both of us were Idle too long: the Match is over. |
 
 Each client judges its own defense; the opponent trusts these reports. A `MatchTransport` (`send(event)` and `onEvent(cb)`) carries them: P2P WebRTC implements it, and a relay could replace it without touching the rules.

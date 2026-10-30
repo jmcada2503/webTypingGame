@@ -1,3 +1,4 @@
+import type { MatchStats } from '../match/MatchEngine';
 import type { Language, MatchKind } from '../flow/types';
 import { PRACTICE_RAMP } from '../practice/PracticeDirector';
 import type { PracticeResult } from '../practice/PracticeSession';
@@ -15,7 +16,11 @@ const hash = (n: number) => {
 };
 
 /** Placeholder online counts: stale on purpose, they only change every 30 s. Replaced by the presence endpoint later. */
-export function placeholderOnline(seconds: number) {
+/** Players online now: everyone, and per language. */
+export type OnlineCounts = { en: number; es: number; total: number };
+
+/** Made-up counts for screens shown without the real network (`?fake`, the sandbox). */
+export function placeholderOnline(seconds: number): OnlineCounts {
   const step = Math.floor(seconds / 30);
   const en = 97 + Math.round((hash(step) - 0.5) * 8);
   const es = 31 + Math.round((hash(step + 9) - 0.5) * 4);
@@ -127,6 +132,22 @@ export function practiceResultLines(r: Pick<PracticeResult, 'survivedSeconds' | 
     `${pad('PACE')}${r.averagePace.toFixed(1)} LETTERS/S (${Math.round(r.wpm)} WPM)`,
     `${pad('BEST PACE')}${r.peakPace.toFixed(1)} LETTERS/S`,
   ];
+}
+
+/** The stats block of the online end screens. `enemyDamage` (0..1) is added on a Lose. */
+export function matchStatsLines(m: MatchStats, enemyDamage: number | null = null): string[] {
+  const pad = (label: string) => label.padEnd(18);
+  const pace = m.elapsed > 0 ? m.correctLetters / m.elapsed : 0;
+  const answered = m.correctWords + m.wrongSubmits;
+  const lines = [
+    `${pad('TIME')}${formatClock(m.elapsed)}`,
+    `${pad('PACE')}${pace.toFixed(1)} LETTERS/S (${Math.round((pace * 60) / 5)} WPM)`,
+    `${pad('ACCURACY')}${answered === 0 ? '-' : `${Math.round((m.correctWords / answered) * 100)}%`}`,
+    `${pad('WORDS DESTROYED')}${m.bulletsDestroyed}`,
+    `${pad('SHOTS HIT')}${m.shotsHit} OF ${m.shotsFired}`,
+  ];
+  if (enemyDamage !== null) lines.push(`${pad('ENEMY DAMAGE')}${Math.round(enemyDamage * 100)}%`);
+  return lines;
 }
 
 export const DEMO_DEFEND_WORD = 'planet';

@@ -11,6 +11,8 @@ const EPS = 1e-9;
 export class ScreenFlow {
   private readonly config: FlowConfig;
   private chosenLanguage: Language = 'en';
+  /** The Rematch clocks are paused (an ending scene is playing). */
+  private rematchHeld = false;
   private s: FlowState = { screen: 'menu', serversResting: false, language: 'en' };
   /** Seconds left in the current timed phase (connecting, starting gap). */
   private timer = 0;
@@ -103,6 +105,7 @@ export class ScreenFlow {
   /** The app reports that the running Match finished. */
   matchEnded(result: 'won' | 'lost' | 'peace') {
     if (this.s.screen !== 'match') return;
+    this.rematchHeld = false;
     const mode = this.s.mode;
     if (mode === 'practice') this.s = { screen: 'end', mode, result: 'practiceOver' };
     else {
@@ -149,6 +152,14 @@ export class ScreenFlow {
     this.toMenu();
   }
 
+  /**
+   * Pause (or resume) the Rematch clocks. The app holds them while an ending scene plays, so the window and the
+   * answer times start counting when the end screen is actually up and the player can act.
+   */
+  holdRematch(held: boolean) {
+    this.rematchHeld = held;
+  }
+
   update(dt: number) {
     if (this.s.screen === 'howto') {
       const secondsLeft = this.s.secondsLeft - dt;
@@ -170,7 +181,7 @@ export class ScreenFlow {
       this.timer -= dt;
       if (this.timer <= EPS) this.s = { screen: 'match', mode: this.s.mode };
     } else if (this.s.screen === 'end' && this.s.mode === 'versus') {
-      this.tickRematch(dt, this.s.rematch);
+      if (!this.rematchHeld) this.tickRematch(dt, this.s.rematch);
     } else if (this.s.screen === 'match' && this.grace !== null) {
       this.grace -= dt;
       if (this.grace <= EPS) this.opponentGone();

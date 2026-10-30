@@ -133,7 +133,7 @@ export class OnlineNetwork implements FlowNetwork {
     });
   }
 
-  sendRematch(message: 'propose' | 'accept' | 'decline') {
+  sendRematch(message: 'propose' | 'accept' | 'decline' | 'cancel') {
     this.attempt?.connection?.link.send({ type: 'rematch', message });
   }
 

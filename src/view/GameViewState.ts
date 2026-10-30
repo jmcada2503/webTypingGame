@@ -19,6 +19,19 @@ export interface ShotState {
  * Everything on screen that the game owns, handed to the view every frame.
  * The view keeps no game truth of its own; it only draws this (plus its own animations).
  */
+/** Who is Idle (no typing), for the nudge on the Attack word and the countdown to Peace. */
+export interface IdleViewState {
+  /** The player has been Idle for 5 s: draw attention to the Attack word, until they type. */
+  nudging: boolean;
+  /** The opponent is Idle too (reported 5 s or more without typing). */
+  opponentIdle: boolean;
+  /** Seconds until Peace while both players are Idle; null otherwise. */
+  peaceIn: number | null;
+}
+
+/** Nobody is Idle: the value for screens and sessions that have no Idle logic. */
+export const NOT_IDLE: IdleViewState = { nudging: false, opponentIdle: false, peaceIn: null };
+
 export interface GameViewState {
   /** 0..3 */
   lives: number;
@@ -31,6 +44,7 @@ export interface GameViewState {
   enemyDamage: number;
   /** Each player's Pace: letters of correct words (Word bullets destroyed + Attack words fired) per second, recent. */
   pace: { player: number; enemy: number };
+  idle: IdleViewState;
 }
 
 /**
@@ -48,6 +62,8 @@ export type ViewEvent =
   /** The opponent typed a Shot's word and destroyed it. */
   | { type: 'shotDefended'; id: string }
   | { type: 'enemyFired'; id: string }
+  /** The Enemy ship is destroyed (the Match is won): a bigger explosion and a shake. */
+  | { type: 'enemyDestroyed' }
   /** The player has been Idle (no typing) for a while: draw attention to the Attack word. */
   | { type: 'idleNudge' }
   /** Both players stayed Idle too long: the Match ends in Peace. */

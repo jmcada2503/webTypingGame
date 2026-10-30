@@ -9,16 +9,18 @@ import { REMATCH_INDEX_STRIDE, createAttackWordSource } from './match/attackWord
 import { MatchEngine } from './match/MatchEngine';
 import { MatchSession } from './match/MatchSession';
 import { ShotVerifier } from './match/ShotVerifier';
-import { createApi } from './net/api';
+import { createApi, createPresenceApi } from './net/api';
 import { checkFreshness } from './net/freshness';
 import { listVersion, playerId } from './net/identity';
 import { OnlineNetwork } from './net/OnlineNetwork';
+import { startPresence } from './net/presence';
 import { createServerStatus } from './net/serverStatus';
 import { PracticeSession } from './practice/PracticeSession';
 import { ScreenHost } from './screens/ScreenHost';
 import { howtoScreen } from './screens/howtoScreen';
 import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
+import { placeholderOnline } from './screens/content';
 import { simpleScreens } from './screens/simpleScreens';
 import { waitingScreen } from './screens/waitingScreen';
 import { AsciiGameView } from './view/AsciiGameView';
@@ -31,12 +33,13 @@ const logMetric = (entry: Record<string, unknown>) => console.info(JSON.stringif
 const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
 const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
 
+const pid = playerId();
 // `?fake` plays against the in-memory stand-in (with the dev keys) instead of the real backend and WebRTC.
 const backend = new URLSearchParams(location.search).has('fake') ? new FakeBackend() : null;
 const online = backend
   ? null
   : new OnlineNetwork({
-      api: createApi(playerId()),
+      api: createApi(pid),
       listVersion: (lang) => versions[lang],
       inviteLink: (matchId) => `${location.origin}${location.pathname}#/m/${matchId}`,
       onRecord: (record) => logMetric({ event: 'p2p_connection', ...record }),
@@ -51,16 +54,23 @@ const online = backend
       },
     });
 const flow = new ScreenFlow(online ?? backend!.connect());
+
+// Every open tab counts as online (menu, queue, Match); the menu and waiting screens show the count.
+const presenceApi = online ? createPresenceApi(pid) : null;
+const presence = presenceApi ? startPresence({ language: () => flow.language(), beat: presenceApi.beat, fetchOnline: presenceApi.online }) : null;
+const onlineCounts = (t: number) => (presence ? (presence.counts() ?? { en: 0, es: 0, total: 0 }) : placeholderOnline(t));
 const view = await AsciiGameView.create();
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null), menu: menuScreen(flow, copyText), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText), countdown: countdownScreen() };
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen() };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
 /** How many Matches each connection has started (the first, then Rematches): picks the Attack-word indices. */
 const matchesPlayed = new Map<string, number>();
+/** The online Match being played (or the last one), so its end screen can show the stats. */
+let lastMatch: MatchSession | null = null;
 
 /**
  * What runs on the Match screen. Practice: the real `PracticeSession`. Online: the Match engine with my seeded
@@ -72,7 +82,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
   const opponent = online?.currentMatch();
   if (!opponent) {
     const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
-    return new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 }));
+    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8 })));
   }
   const list = wordLists[opponent.lang];
   const played = matchesPlayed.get(opponent.matchId) ?? 0;
@@ -93,7 +103,7 @@ const createMatch = (mode: 'versus' | 'practice') => {
     bulletFlightSeconds: 8,
     shotFlightSeconds: 8,
   });
-  return new MatchSession(engine, opponent.transport);
+  return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 new AppShell(view, host, input).start();
@@ -116,5 +126,5 @@ if (online) {
 if (import.meta.env.DEV) {
   // For end-to-end checks and the console: drive the real flow without key presses.
   Object.assign(window, { flow, online, host });
-  if (backend) installDevKeys(flow, backend);
+  if (backend) installDevKeys(flow, backend, host);
 }

@@ -341,6 +341,105 @@ describe('Idle nudge', () => {
   });
 });
 
+describe('Idle state for the view', () => {
+  test('nobody is Idle at the start', () => {
+    expect(engine().state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+
+  test('the player is nudged from 5 seconds without typing, until they type', () => {
+    const m = engine();
+
+    advance(m, 4.75);
+    expect(m.state().idle.nudging).toBe(false);
+    advance(m, 0.5);
+    expect(m.state().idle.nudging).toBe(true);
+    advance(m, 20);
+    expect(m.state().idle.nudging).toBe(true); // it keeps going, not just a one-off event
+
+    m.typed('r');
+    expect(m.state().idle.nudging).toBe(false);
+  });
+
+  test('submitting a word stops the nudge too', () => {
+    const m = engine();
+    advance(m, 6);
+    m.submit('anything');
+    expect(m.state().idle.nudging).toBe(false);
+  });
+
+  test('Practice has no Attack word to nudge', () => {
+    const m = engine({ mode: 'practice' });
+    advance(m, 30);
+    expect(m.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+
+  test('the opponent is Idle too once they report 5 seconds without typing, and the report ages', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 1, pace: 0 });
+    expect(m.state().idle.opponentIdle).toBe(false);
+
+    advance(m, 3.75); // their Idle time is now about 4.75
+    expect(m.state().idle.opponentIdle).toBe(false);
+    advance(m, 0.5);
+    expect(m.state().idle.opponentIdle).toBe(true);
+
+    m.receive({ type: 'presence', idleFor: 0.5, pace: 0 }); // they typed
+    expect(m.state().idle.opponentIdle).toBe(false);
+  });
+
+  test('when both are Idle, the snapshot counts down to Peace', () => {
+    const m = engine();
+    advance(m, 4);
+    m.receive({ type: 'presence', idleFor: 6, pace: 0 }); // they have been Idle since Match time -2
+
+    advance(m, 2); // Match time 6: I have been Idle 6 s, they 8 s
+    expect(m.state().idle).toEqual({ nudging: true, opponentIdle: true, peaceIn: 4 });
+
+    advance(m, 3); // Match time 9
+    expect(m.state().idle.peaceIn).toBeCloseTo(1);
+  });
+
+  test('Peace waits for the one who has been Idle for the shorter time', () => {
+    const m = engine();
+    advance(m, 4.5);
+    m.typed('r'); // I was active at 4.5
+    advance(m, 5.25); // Match time 9.75: I have been Idle 5.25 s
+    m.receive({ type: 'presence', idleFor: 30, pace: 0 }); // they have been Idle for ages
+
+    expect(m.state().idle.peaceIn).toBeCloseTo(4.75);
+  });
+
+  test('no countdown to Peace when only one of us is Idle', () => {
+    const me = engine();
+    advance(me, 8);
+    expect(me.state().idle).toMatchObject({ nudging: true, opponentIdle: false, peaceIn: null });
+
+    const them = engine();
+    them.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(them, 2);
+    them.typed('r');
+    expect(them.state().idle).toMatchObject({ nudging: false, opponentIdle: true, peaceIn: null });
+  });
+
+  test('typing clears the countdown', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(m, 6);
+    expect(m.state().idle.peaceIn).not.toBeNull();
+
+    m.typed('r');
+    expect(m.state().idle.peaceIn).toBeNull();
+  });
+
+  test('after the Match ends nothing is Idle any more', () => {
+    const m = engine();
+    m.receive({ type: 'presence', idleFor: 20, pace: 0 });
+    advance(m, 12); // both Idle for over 10 s: Peace
+    expect(m.status).toBe('peace');
+    expect(m.state().idle).toEqual({ nudging: false, opponentIdle: false, peaceIn: null });
+  });
+});
+
 describe('Peace', () => {
   test('when both players stay Idle for over 10 seconds, the Match ends in Peace', () => {
     const m = engine();
@@ -449,6 +548,102 @@ describe('Presence reports', () => {
     const m = engine({ mode: 'practice' });
     advance(m, 10);
     expect(m.drainOutgoing()).toEqual([]);
+  });
+
+  test('typing again after a long pause is reported at once', () => {
+    const m = engine();
+    advance(m, 6.5);
+    m.drainOutgoing();
+
+    m.typed('r');
+    expect(m.drainOutgoing()).toEqual([{ type: 'presence', idleFor: 0, pace: 0 }]);
+  });
+
+  test('a submit after a long pause is reported at once too', () => {
+    const m = engine();
+    advance(m, 6.5);
+    m.drainOutgoing();
+
+    m.submit('nothing');
+    expect(m.drainOutgoing()).toEqual([{ type: 'presence', idleFor: 0, pace: 0 }]);
+  });
+
+  test('a short pause sends nothing extra; a pause of 2 seconds or more sends one report on the first key', () => {
+    const m = engine();
+    advance(m, 1.75);
+    m.drainOutgoing();
+    m.typed('r'); // after 1.75 s: the opponent's estimate can't reach 5 s before my next report
+    expect(m.drainOutgoing()).toEqual([]);
+
+    advance(m, 2); // a 2 s pause (the regular tick at 2 is drained here too)
+    m.drainOutgoing();
+    m.typed('ro');
+    expect(m.drainOutgoing()).toEqual([{ type: 'presence', idleFor: 0, pace: 0 }]);
+    m.typed('roc'); // still typing: no more reports
+    expect(m.drainOutgoing()).toEqual([]);
+  });
+
+  test('Practice sends nothing when the player comes back from a pause', () => {
+    const m = engine({ mode: 'practice' });
+    advance(m, 6);
+    m.typed('r');
+    expect(m.drainOutgoing()).toEqual([]);
+  });
+
+  test('the regular reports do not change: still every 2 seconds, Idle or not', () => {
+    const m = engine();
+    advance(m, 7.75);
+    expect(m.drainOutgoing().map((e) => e.type === 'presence' && e.idleFor)).toEqual([2, 4, 6]);
+  });
+});
+
+describe('Idle across the wire', () => {
+  /** Two engines; A's events reach B at the end of each quarter-second step. B keeps typing so it never goes Idle. */
+  function pair() {
+    const a = engine();
+    const b = engine();
+    const step = () => {
+      b.typed('r');
+      a.update(0.25);
+      b.update(0.25);
+      for (const e of a.drainOutgoing()) b.receive(e);
+      b.drainOutgoing();
+    };
+    return { a, b, run: (seconds: number) => { for (let t = 0; t < seconds; t += 0.25) step(); } };
+  }
+
+  test('the other side sees the opponent Idle as soon as they reach 5 seconds', () => {
+    const { b, run } = pair();
+    run(4.75);
+    expect(b.state().idle.opponentIdle).toBe(false);
+    run(0.25); // A reaches 5 s here; the next regular tick would only be at 6
+    expect(b.state().idle.opponentIdle).toBe(true);
+  });
+
+  test('pauses just under 5 seconds never look like Idle to the other side', () => {
+    // Without the report on return, B would add time to A's last report (Idle 4 s) and see 5 s+ after A typed.
+    // Each pause is 4.5 s (2.5 s + the 2 s checked after the key), at a different phase of A's 2 s report ticks.
+    const { a, b, run } = pair();
+    for (let k = 0; k < 8; k++) {
+      run(2.5);
+      a.typed('r');
+      for (const e of a.drainOutgoing()) b.receive(e);
+      expect(b.state().idle.opponentIdle).toBe(false);
+      for (let s = 0; s < 8; s++) {
+        run(0.25); // A's next regular report comes within these 2 s
+        expect(b.state().idle.opponentIdle).toBe(false);
+      }
+    }
+  });
+
+  test('and sees them active again the moment they type', () => {
+    const { a, b, run } = pair();
+    run(7);
+    expect(b.state().idle.opponentIdle).toBe(true);
+
+    a.typed('r');
+    for (const e of a.drainOutgoing()) b.receive(e);
+    expect(b.state().idle.opponentIdle).toBe(false);
   });
 });
 

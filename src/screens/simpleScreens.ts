@@ -3,6 +3,7 @@ import type { TextGrid } from '../render/AsciiRenderer';
 import type { PracticeResult } from '../practice/PracticeSession';
 import { practiceResultLines, practiceScore } from './content';
 import { blink, centered, formatClock, twoTone } from './draw';
+import { onlineEndScreen, type OnlineStats } from './endScreens';
 import type { Screen, ScreenSet } from './Screen';
 
 /**
@@ -12,7 +13,7 @@ import type { Screen, ScreenSet } from './Screen';
  */
 const lines = (text: TextGrid, start: number, rows: string[], color: 'fg' | 'dim' = 'fg') => rows.forEach((r, i) => centered(text, start + i, r, color));
 
-export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeResult | null = () => null): ScreenSet {
+export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeResult | null = () => null, onlineStats: () => OnlineStats | null = () => null): ScreenSet {
   const menu: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'menu') return;
@@ -69,8 +70,9 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
 
   const match: Screen = { draw() {} }; // the Match is the game scene itself
 
+  const onlineEnd = onlineEndScreen(flow, onlineStats);
   const end: Screen = {
-    draw(text, _t, s) {
+    draw(text, t, s) {
       if (s.screen !== 'end') return;
       if (s.mode === 'practice') {
         twoTone(text, 6, 'GAME ', 'OVER', 3);
@@ -86,30 +88,14 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
         lines(text, 25, ['[ENTER] PLAY AGAIN', '[Q] MENU']);
         return;
       }
-      const title = { won: 'YOU WIN', lost: 'YOU LOSE', peace: 'PEACE' }[s.result];
-      twoTone(text, 6, '', title, 3.4);
-      const r = s.rematch;
-      const rematch =
-        r.status === 'available' ? `[R] PROPOSE A REMATCH${r.secondsLeft === null ? '' : ` (${Math.ceil(r.secondsLeft)}S)`}`
-        : r.status === 'waiting' ? `WAITING FOR THE OPPONENT TO ANSWER... ${Math.ceil(r.answerSecondsLeft)}S  [C] CANCEL`
-        : r.status === 'incoming' ? `THE OPPONENT WANTS A REMATCH (${Math.ceil(r.answerSecondsLeft)}S): [R] ACCEPT  [D] DENY`
-        : r.status === 'notice' ? { noAnswer: 'NO ANSWER', tooLate: 'TOO LATE', declined: 'DECLINED' }[r.notice]
-        : r.status === 'opponentLeft' ? 'THE OPPONENT LEFT'
-        : 'REMATCH CLOSED';
-      lines(text, 18, [rematch]);
-      lines(text, 22, [s.kind === 'public' ? '[S] SEARCH FOR A NEW OPPONENT' : '', '[Q] MENU'], 'dim');
+      onlineEnd.draw(text, t, s);
     },
     onKey(e, s) {
       if (s.screen !== 'end') return;
       const k = e.key.toLowerCase();
       if (s.mode === 'practice') {
         if (k === 'enter') flow.playAgain();
-      } else {
-        if (k === 'r') flow.proposeRematch();
-        if (k === 'd') flow.declineRematch();
-        if (k === 'c') flow.cancelRematch();
-        if (k === 's') flow.searchAgain();
-      }
+      } else return onlineEnd.onKey(e, s);
       if (k === 'q') flow.backToMenu();
     },
   };
