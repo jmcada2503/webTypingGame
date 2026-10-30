@@ -140,7 +140,7 @@ describe('GO flash', () => {
 });
 
 describe('Practice stat grid', () => {
-  const run = { survivedSeconds: 83.4, wordsTyped: 12, accuracy: 12 / 13, peakPace: 4.5, wpm: 37.7, currentLevel: 210 };
+  const run = { survivedSeconds: 83.4, wordsTyped: 12, accuracy: 12 / 13, peakPace: 4.5, wpm: 37.7, currentLevel: 300 };
 
   test('is six label / value cells, read row by row: time, difficulty, words, then WPM, accuracy, best pace', () => {
     expect(practiceStatCells(run)).toEqual([
@@ -163,7 +163,7 @@ describe('Practice stat grid', () => {
 describe('Practice difficulty reached', () => {
   test('is the ramp second reached as a share of the whole ramp, capped at the top', () => {
     expect(practiceDifficulty({ currentLevel: 0 })).toBe(0);
-    expect(practiceDifficulty({ currentLevel: 210 })).toBe(0.5);
+    expect(practiceDifficulty({ currentLevel: 300 })).toBe(0.5);
     expect(practiceDifficulty({ currentLevel: 9999 })).toBe(1);
   });
 
@@ -255,9 +255,9 @@ describe('Practice score (the difficulty level reached)', () => {
     expect(practiceScore({ currentLevel: null })).toBe(0);
   });
 
-  test('stops at the top of the ramp (4200), where the difficulty stops rising', () => {
-    expect(practiceScore({ currentLevel: 420 })).toBe(4200);
-    expect(practiceScore({ currentLevel: 9999 })).toBe(4200);
+  test('stops at the top of the ramp (6000), where the difficulty stops rising', () => {
+    expect(practiceScore({ currentLevel: 600 })).toBe(6000);
+    expect(practiceScore({ currentLevel: 9999 })).toBe(6000);
   });
 });
 
