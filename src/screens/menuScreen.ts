@@ -1,6 +1,6 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
-import { blink, box, centered, put, twoTone, wrap } from './draw';
+import { COLS, blink, box, centered, put, twoTone, wrap } from './draw';
 import { GAME_NAME, MENU_ITEMS, SPONSOR_LINK, moveSelection, placeholderOnline, type OnlineCounts, usableSelection } from './content';
 import type { Screen } from './Screen';
 
@@ -10,9 +10,15 @@ const ICONS: Record<(typeof MENU_ITEMS)[number]['key'], string[]> = {
   private: ['  .---.  ', ' | LINK | ', "  '---'  "],
 };
 const COPIED_SECONDS = 1.6;
+const FOOTER_KEYS = 'ARROWS OR H J K L CHOOSE   ENTER CONFIRM   TAB LANGUAGE   1-3 JUMP   S SPONSOR';
+/** The fullscreen hint ends at this column, clear of the screen's rounded corner. */
+const FULLSCREEN_HINT_RIGHT = COLS - 16;
 
-/** The approved main menu (layout B): three cards, language, online counts, a sponsor note or the resting panel. */
-export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline): Screen {
+/**
+ * The approved main menu (layout B): three cards, language, online counts, a sponsor note or the resting panel.
+ * The fullscreen key is shown big at the top right, in yellow and pulsing until the page is fullscreen.
+ */
+export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline, fullscreen: () => boolean = () => false): Screen {
   let sel = 0;
   let copiedAt = -99;
   /** Read from the flow, not from the drawn state: that one can lag a frame behind. */
@@ -77,7 +83,10 @@ export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onli
       centered(text, 31, `[TAB] LANGUAGE:  <  ${langName()}  >      ONLINE NOW ${online.total}  (ENGLISH ${online.en}   SPANISH ${online.es})`, 'fg');
       if (resting) restingPanel(text, 19, 33, 90, t);
       else sponsorNote(text, 19, 34, 90, t);
-      centered(text, 43, 'ARROWS OR H J K L CHOOSE   ENTER CONFIRM   TAB LANGUAGE   1-3 JUMP   S SPONSOR', 'dim');
+      centered(text, 43, `${FOOTER_KEYS}   F FULLSCREEN`, 'dim');
+      // The fullscreen key stands out (top right, by the title) until it is used; once fullscreen it says how to leave.
+      const fs = fullscreen() ? '[F] EXIT FULLSCREEN' : '[F] FULLSCREEN';
+      text.writeScaled(FULLSCREEN_HINT_RIGHT - fs.length * 1.2, 2.2, fs, 1.2, fullscreen() ? 'dim' : blink(t, 1) ? 'yellow' : 'fg');
     },
     onKey(e, s) {
       if (s.screen !== 'menu') return;

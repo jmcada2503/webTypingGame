@@ -55,6 +55,11 @@ export class ScreenHost implements GameSession {
     this.applyView();
   }
 
+  /** The screen on view (it lags the flow while a screen-change effect or an ending plays). */
+  get screenShown(): ScreenId {
+    return this.displayed;
+  }
+
   start() {
     window.addEventListener('keydown', this.onKey);
   }
