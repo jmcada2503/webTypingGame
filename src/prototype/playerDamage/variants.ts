@@ -5,7 +5,8 @@
 //   B Cracked glass       cracks spread across the window from the edges; an impact star at 1 Life
 //   C Failing systems     flickering panels, dead switches, Radar glitches, ATTACK label stutters, warning text
 //   D Broken structure    consoles knocked loose, missing switches, a swinging cable, floating debris
-//   E A + C (round 2, the user's mix): smoke and sparks, plus the failing systems
+//   E A + C (round 2, the user's mix): smoke and sparks, plus the failing systems; round 3: the central
+//     panel stays quiet (no ATTACK label stutter, no tremble): damage lives on the side consoles only
 // Every variant: damage stays until the Match ends, 0 Lives keeps the 1-Life look (the Lose ending dims it),
 // and each new level is marked the moment the Life goes. Words and the Typed word are never covered.
 import * as THREE from 'three';
@@ -242,10 +243,12 @@ export class PlayerDamageProto {
     // Dead switches: some go out for good (indices 0-4 on the Lives console, 5-9 on the Radar one).
     const dead = this.level === 1 ? [1, 3] : this.level === 2 ? [1, 3, 7, 9, 5] : [];
     dead.forEach((k) => (p.switches[k].visible = false));
+    // E (round 3, the user): the central panel stays quiet, so the Attack word and the Typed word never move.
+    const quietCenter = this.variant === 'E';
     // The ATTACK label stutters at 1 Life (never the Attack word).
-    if (this.level >= 2) this.cockpit.protoLabelOff = noise(5) > 0.6;
-    // Small constant tremble at 1 Life.
-    if (this.level >= 2) {
+    if (this.level >= 2 && !quietCenter) this.cockpit.protoLabelOff = noise(5) > 0.6;
+    // Small constant tremble at 1 Life (it moves the whole view, the central panel too).
+    if (this.level >= 2 && !quietCenter) {
       this.camera.position.x += Math.sin(this.t * 53) * 0.004;
       this.camera.position.y += Math.sin(this.t * 61 + 1) * 0.004;
     }
