@@ -3,6 +3,7 @@ import { ASCII_STYLE } from '../../render/asciiStyle';
 import { matchPrefix } from '../../utils/matchPrefix';
 import type { GameViewState } from '../GameViewState';
 import { WordBulletTracks } from './flightPath';
+import { nextWordId } from './nextWord';
 
 /** Live-tunable from the sandbox panel. */
 export const WORD_LOOK = {
@@ -11,6 +12,9 @@ export const WORD_LOOK = {
   /** Black outline around each letter, in em: cuts the word out of the shading behind it. */
   border: 0.16,
 };
+
+/** The bar under the next word, in em: gap below the letters' middle, thickness, room added below (and above). */
+const BAR = { gap: 0.55, thickness: 0.12, room: 0.35 };
 
 /** Canvas px per em: high enough to stay crisp at the largest on-screen size. */
 const EM_PX = 96;
@@ -35,7 +39,7 @@ export type WordSnapshot = {
  * Word bullets drawn over the ASCII frame in real font ("Words in the ASCII world"): a camera-facing
  * sprite per bullet at its 3D flight position (steady path, see flightPath.ts), so it grows as it
  * nears the Cockpit. No backdrop box: each letter has a thick black outline instead
- * ("Word bullets in flight"). Target prefix in green. Overlaps are allowed (the nearest word
+ * ("Word bullets in flight"). Target prefix in green; a bar under the next word to type (`nextWord.ts`). Overlaps are allowed (the nearest word
  * draws on top); arrival = the bullet vanishes.
  */
 export class WordBulletSprites {
@@ -55,14 +59,16 @@ export class WordBulletSprites {
     const alive = new Set(state.wordBullets.map((b) => b.id));
     for (const [id, s] of this.sprites) if (!alive.has(id)) this.remove(id, s);
 
+    const next = nextWordId(state);
     for (const b of state.wordBullets) {
       const s = this.sprites.get(b.id) ?? this.add(b.id, b.word);
+      const bar = b.id === next;
       const matched = matchPrefix(state.typedWord, b.word);
       s.pulse = Math.max(0, s.pulse - dt);
       const swell = 1 + PULSE_SCALE * (s.pulse / PULSE_SECONDS);
-      const key = `${matched}|${WORD_LOOK.border}|${swell.toFixed(2)}`;
+      const key = `${matched}|${WORD_LOOK.border}|${swell.toFixed(2)}|${bar}`;
       if (s.paintedKey !== key) {
-        s.aspect = paint(s.canvas, [...b.word], matched, ASCII_STYLE.palette.fg, swell);
+        s.aspect = paint(s.canvas, [...b.word], matched, ASCII_STYLE.palette.fg, swell, bar);
         // The canvas may have changed size: drop the GPU copy so it re-uploads.
         s.sprite.material.map!.dispose();
         s.sprite.material.map!.needsUpdate = true;
@@ -112,15 +118,19 @@ export function paintGlyph(canvas: HTMLCanvasElement, ch: string, color: string)
   return paint(canvas, [ch], 0, color);
 }
 
-/** Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green). */
-function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg, swell = 1) {
+/**
+ * Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green).
+ * `bar`: an outlined bar under the word (the next one to type).
+ */
+function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg, swell = 1, bar = false) {
   const g = canvas.getContext('2d')!;
   g.font = FONT;
   const advance = g.measureText('M').width;
   const border = WORD_LOOK.border * EM_PX;
   const pad = border * 1.6;
   canvas.width = Math.ceil(advance * letters.length + 2 * pad);
-  canvas.height = Math.ceil(EM_PX + 2 * pad);
+  // The bar needs room below the word; the same room above keeps the word centred where it flies.
+  canvas.height = Math.ceil(EM_PX + 2 * pad + (bar ? 2 * BAR.room * EM_PX : 0));
   g.font = FONT; // resizing the canvas resets context state
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
@@ -143,5 +153,14 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, co
     g.fillStyle = i < matched ? ASCII_STYLE.palette.green : color;
     draw(i, (ch, px, py) => g.fillText(ch, px, py));
   });
+  if (bar) {
+    const top = y + EM_PX * BAR.gap;
+    const width = advance * letters.length;
+    const thick = EM_PX * BAR.thickness;
+    g.fillStyle = ASCII_STYLE.palette.bg;
+    g.fillRect(pad - border * 0.5, top - border * 0.5, width + border, thick + border);
+    g.fillStyle = color;
+    g.fillRect(pad, top, width, thick);
+  }
   return canvas.width / canvas.height;
 }
