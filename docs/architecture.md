@@ -128,6 +128,13 @@ Shield Standard (L3/L4) is free; no WAF.
 The game is served from **typewing.net** (registered in Route 53; the stack's `ZONE_ID` is its hosted zone). An ACM
 certificate (us-east-1, DNS-validated) covers the apex and `www`; A/AAAA alias records point both at the distribution,
 and a viewer-request CloudFront Function (on every behavior) answers any other host, `www` and the `*.cloudfront.net` address, with a 301 to the apex.
+The same function serves pages as folders: `/es` gets its slash (301) and `/es/` is read from `es/index.html`.
+
+**Pages and SEO.** Two crawlable pages from one template (`index.html`, filled by `vite.seoPages.ts` from
+`src/seo/`): English at `/`, Spanish at `/es/`, each with its own `lang`, title, description, canonical, `hreflang`
+links, Open Graph / Twitter card (`/og.jpg`, 1200x630) and JSON-LD, plus crawlable text (hidden once the game is up).
+The build also writes `sitemap.xml` and `robots.txt` (the sandbox is not indexed). The address sets the game's language;
+Tab in the menu moves between the two addresses without reloading (`src/app/languageAddress.ts`).
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,
