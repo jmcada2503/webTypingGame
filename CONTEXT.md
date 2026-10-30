@@ -1,6 +1,6 @@
-# Web Typing Game
+# Typewing
 
-A two-player typing game in the browser, played in Matches, rendered as ASCII-shaded 3D. Each player defends their ship by typing incoming words and attacks by typing their own word.
+Typewing is a two-player typing game in the browser, played in Matches, rendered as ASCII-shaded 3D. Each player defends their ship by typing incoming words and attacks by typing their own word.
 
 ## Language
 

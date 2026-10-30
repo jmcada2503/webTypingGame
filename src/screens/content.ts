@@ -7,8 +7,8 @@ import { formatClock } from './draw';
 
 /** Placeholder until the real GitHub Sponsors page exists (the prototype used the repo owner's login). */
 export const SPONSOR_LINK = 'https://github.com/sponsors/jmcada2503';
-/** Placeholder game name. */
-export const GAME_NAME: [string, string] = ['TYPING ', 'GAME'];
+/** The game's name, drawn in two tones. */
+export const GAME_NAME: [string, string] = ['TYPE', 'WING'];
 
 const hash = (n: number) => {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;

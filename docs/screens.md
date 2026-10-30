@@ -10,7 +10,7 @@ How the app is put together: the flow decides *which* screen, the screens *draw*
 | `src/screens/Screen`, `ScreenSet` | A screen = `draw(text, t, state)` + optional `enter` and `onKey`. One per flow screen. |
 | `src/screens/draw.ts` | Helpers every screen shares: the 128×45 grid size, `wrap`, `formatClock`, `centered`, `twoTone`, `box`. |
 | `src/screens/menuScreen.ts`, `howtoScreen.ts`, `waitingScreen.ts`, `countdownScreen.ts` | The approved designs: main menu (layout B), how-to (layout B), waiting (terminal style C3), Countdown (variant A: a huge 5 to 1, never 0). Specs: the closed prototype tickets. |
-| `src/screens/content.ts` | The screens' pure logic, tested: menu selection rules, online-count placeholder, the waiting log and tips, the how-to demo timeline, and the placeholder name and sponsor link. |
+| `src/screens/content.ts` | The screens' pure logic, tested: menu selection rules, online-count placeholder, the waiting log and tips, the how-to demo timeline, and the game name (`TYPE` + `WING`) and sponsor link. |
 | `src/screens/simpleScreens.ts` | Plain versions of every screen. `main.ts` overrides the ones that have an approved design; Opponent-left and error stay plain until their builds; the end screen hands off to the Practice game over (`practiceEndScreen.ts`) or the online end screens (`endScreens.ts`,  the approved Win, Lose and Peace designs with the Rematch menu: `rematchMenu.ts`, status line, choices with arrows/hjkl + Enter, window or answer-time bar). |
 | `src/dev/devKeys.ts` | Dev-only (`import.meta.env.DEV`): Ctrl keys that play the opponent and the network against the in-memory fake, so the whole flow can be walked alone. |
 

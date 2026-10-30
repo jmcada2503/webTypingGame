@@ -1,12 +1,14 @@
 import { defineConfig } from "vitest/config";
 import { devApi } from "./vite.devApi";
+import { seoPages } from "./vite.seoPages";
 import { versionFile } from "./vite.versionFile";
 
-// Two pages: the game at / and the visual sandbox (tweak panel) at /sandbox/.
+// The game at / (and its Spanish page /es/, written by seoPages) and the visual sandbox (tweak panel) at /sandbox/.
 export default defineConfig({
   // `npm run dev`: /api served by the real matchmaking code over the in-memory store (no AWS).
   // `npm run build`: /version.json, so tabs left open across a deploy reload before joining.
-  plugins: [devApi(), versionFile()],
+  // Both: the English (/) and Spanish (/es/) pages from index.html, sitemap.xml, robots.txt.
+  plugins: [devApi(), versionFile(), seoPages()],
   build: {
     rollupOptions: { input: { main: "index.html", sandbox: "sandbox/index.html" } },
   },
