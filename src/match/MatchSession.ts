@@ -30,6 +30,11 @@ export class MatchSession implements GameSession {
     return this.engine.stats();
   }
 
+  /** Lives left, peak Pace, missed words and my Shots (for the metrics). */
+  details() {
+    return this.engine.details();
+  }
+
   start() {
     this.started = true;
   }

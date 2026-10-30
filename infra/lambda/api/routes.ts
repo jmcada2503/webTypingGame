@@ -1,3 +1,4 @@
+import type { Metrics } from "./metrics";
 import type { Presence } from "./presence";
 import { ApiError, type Matchmaker } from "./service";
 import type { Language } from "./types";
@@ -8,6 +9,8 @@ export interface HttpRequest {
   query: Record<string, string | undefined>;
   /** Parsed JSON, or undefined if there was none. */
   body: unknown;
+  /** Two-letter country of the viewer (CloudFront's `CloudFront-Viewer-Country`), when known. */
+  country?: string;
 }
 
 export interface HttpResponse {
@@ -50,9 +53,15 @@ function matchId(value: string): string {
 const ok = (body: unknown): HttpResponse => ({ status: 200, body });
 
 /** Maps HTTP requests to the Matchmaker: strict validation in, JSON out, no internals in errors. */
-export function createRouter(mm: Matchmaker, presence?: Presence) {
+export function createRouter(mm: Matchmaker, presence?: Presence, metrics?: Metrics) {
   return async function route(req: HttpRequest): Promise<HttpResponse> {
     try {
+      if (metrics && req.path === "/api/report") {
+        if (req.method !== "POST") throw new ApiError(405, "method_not_allowed");
+        const b = fields(req.body);
+        await metrics.report(pid(b.pid), b.r, req.country);
+        return ok({ ok: true });
+      }
       return await dispatch(mm, presence, req);
     } catch (error) {
       if (error instanceof ApiError) return { status: error.status, body: { error: error.code } };

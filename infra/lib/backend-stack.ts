@@ -2,29 +2,34 @@ import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Architecture, FunctionUrlAuthType, Runtime, type FunctionUrl } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { RetentionDays, LogGroup } from "aws-cdk-lib/aws-logs";
+import { CfnQueryDefinition, LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
+import { METRICS_QUERIES } from "./metrics-queries";
 
 /** Rate cap: more concurrent requests than this get throttled ("Busy, try again"). */
 export const API_CONCURRENCY = 10;
 export const API_MEMORY_MB = 256;
+/** Share of metrics reports kept (1 = all, 0 = off). The kill switch: change it here and deploy. */
+export const METRICS_SAMPLE_RATE = 1;
 
 export class BackendStack extends Stack {
   readonly api: NodejsFunction;
   readonly matches: Table;
   readonly presence: Table;
+  readonly matchDetails: Table;
   readonly apiUrl: FunctionUrl;
 
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
     const logGroup = new LogGroup(this, "ApiLogs", {
-      retention: RetentionDays.ONE_MONTH,
+      // The metrics live here too (one JSON line each, see lambda/api/metrics.ts): half a year of trends.
+      retention: RetentionDays.SIX_MONTHS,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     // Provisioned, not on-demand: 25 read + 25 write units are free account-wide, so a flood throttles
-    // instead of billing. Split so far: matches 10 R / 10 W, presence 2 R / 10 W; match_details gets the rest.
+    // instead of billing. Split: matches 10 R / 10 W, presence 2 R / 3 W, match_details 10 R / 12 W (3 R spare).
     this.matches = new Table(this, "Matches", {
       partitionKey: { name: "pk", type: AttributeType.STRING },
       billingMode: BillingMode.PROVISIONED,
@@ -35,15 +40,26 @@ export class BackendStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    // One counter per language per 30 s window. Writes: one per open tab per window (10 WCU ≈ 300 tabs;
-    // beyond that a heartbeat is dropped, not billed). Reads: rare, the online count is CloudFront-cached.
+    // One counter per language per 60 s window. Writes: one per open tab per window, and tabs sample themselves
+    // above 50 (about 50 writes a minute, under 1/s). Reads: rare, the online count is CloudFront-cached.
     this.presence = new Table(this, "Presence", {
       partitionKey: { name: "pk", type: AttributeType.STRING },
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 2,
-      writeCapacity: 10,
+      writeCapacity: 3,
       timeToLiveAttribute: "ttl",
       removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // The player's history: one item per player per Match / Practice run (~1-3 KB = 1-3 write units each,
+    // so ~4-12 reports/s). Over that the item is dropped and only the log line stays. No TTL.
+    this.matchDetails = new Table(this, "MatchDetails", {
+      partitionKey: { name: "pid", type: AttributeType.STRING },
+      sortKey: { name: "sk", type: AttributeType.STRING },
+      billingMode: BillingMode.PROVISIONED,
+      readCapacity: 10,
+      writeCapacity: 12,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     this.api = new NodejsFunction(this, "Api", {
@@ -56,10 +72,24 @@ export class BackendStack extends Stack {
       // on later deploys as long as this value doesn't change.
       reservedConcurrentExecutions: API_CONCURRENCY,
       logGroup,
-      environment: { MATCHES_TABLE: this.matches.tableName, PRESENCE_TABLE: this.presence.tableName },
+      environment: {
+        MATCHES_TABLE: this.matches.tableName,
+        PRESENCE_TABLE: this.presence.tableName,
+        MATCH_DETAILS_TABLE: this.matchDetails.tableName,
+        METRICS_SAMPLE_RATE: String(METRICS_SAMPLE_RATE),
+      },
     });
     this.matches.grantReadWriteData(this.api);
     this.presence.grantReadWriteData(this.api);
+    this.matchDetails.grantWriteData(this.api);
+
+    for (const [name, queryString] of Object.entries(METRICS_QUERIES)) {
+      new CfnQueryDefinition(this, `Query${name.replace(/[^A-Za-z0-9]/g, "")}`, {
+        name: `typing-game/${name}`,
+        queryString,
+        logGroupNames: [logGroup.logGroupName],
+      });
+    }
 
     // IAM auth: only CloudFront can call it (OAC permission is added by the Static stack).
     this.apiUrl = this.api.addFunctionUrl({ authType: FunctionUrlAuthType.AWS_IAM });
