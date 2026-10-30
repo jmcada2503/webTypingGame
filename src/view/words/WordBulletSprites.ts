@@ -12,6 +12,49 @@ export const WORD_LOOK = {
   border: 0.16,
 };
 
+/**
+ * PROTOTYPE (ticket "Point to the next nearest Word bullet"), throwaway: how to point out the next word to type.
+ * `variant` comes from `?nearest=` (A | B | C | D, anything else = off); the dev bar switches it live.
+ * - A: brightness by Flight (far = dim, near = full white).
+ * - B: the next word glows; the others are slightly dimmed.
+ * - C: a bar under the next word; brightness untouched.
+ * - D: A + B.
+ * "Next" = the nearest Word bullet that isn't the one being typed (the Target matching the Typed word);
+ * with nothing typed, the nearest one.
+ */
+export const NEAREST_PROTO = {
+  variant: new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('nearest') ?? 'off',
+  /** Brightness of the farthest word in A / D (0..1). */
+  far: 0.35,
+  /** Brightness of the other words in B. */
+  others: 0.7,
+};
+
+type Mark = 'none' | 'glow' | 'bar';
+
+/** Which bullet is "next", and how bright each one is, for the current variant. */
+function nearestLook(state: GameViewState): Map<string, { light: number; mark: Mark }> {
+  const v = NEAREST_PROTO.variant;
+  const out = new Map<string, { light: number; mark: Mark }>();
+  const byNear = [...state.wordBullets].sort((a, b) => b.flight - a.flight);
+  const len = [...state.typedWord].length;
+  const target = len > 0 ? byNear.find((b) => matchPrefix(state.typedWord, b.word) === len) : undefined;
+  const next = byNear.find((b) => b !== target);
+  for (const b of byNear) {
+    const isTarget = b === target;
+    const isNext = b === next;
+    const byFlight = NEAREST_PROTO.far + (1 - NEAREST_PROTO.far) * Math.min(1, Math.max(0, b.flight));
+    let light = 1;
+    let mark: Mark = 'none';
+    if (v === 'A') light = isTarget ? 1 : byFlight;
+    if (v === 'B') [light, mark] = isTarget || isNext ? [1, isNext ? 'glow' : 'none'] : [NEAREST_PROTO.others, 'none'];
+    if (v === 'C') mark = isNext ? 'bar' : 'none';
+    if (v === 'D') [light, mark] = isTarget || isNext ? [1, isNext ? 'glow' : 'none'] : [byFlight, 'none'];
+    out.set(b.id, { light, mark });
+  }
+  return out;
+}
+
 /** Canvas px per em: high enough to stay crisp at the largest on-screen size. */
 const EM_PX = 96;
 const FONT = `400 ${EM_PX}px "${ASCII_STYLE.font.family}"`;
@@ -55,14 +98,17 @@ export class WordBulletSprites {
     const alive = new Set(state.wordBullets.map((b) => b.id));
     for (const [id, s] of this.sprites) if (!alive.has(id)) this.remove(id, s);
 
+    const looks = nearestLook(state);
     for (const b of state.wordBullets) {
       const s = this.sprites.get(b.id) ?? this.add(b.id, b.word);
+      const look = looks.get(b.id) ?? { light: 1, mark: 'none' as Mark };
+      s.sprite.material.color.setScalar(look.light);
       const matched = matchPrefix(state.typedWord, b.word);
       s.pulse = Math.max(0, s.pulse - dt);
       const swell = 1 + PULSE_SCALE * (s.pulse / PULSE_SECONDS);
-      const key = `${matched}|${WORD_LOOK.border}|${swell.toFixed(2)}`;
+      const key = `${matched}|${WORD_LOOK.border}|${swell.toFixed(2)}|${look.mark}`;
       if (s.paintedKey !== key) {
-        s.aspect = paint(s.canvas, [...b.word], matched, ASCII_STYLE.palette.fg, swell);
+        s.aspect = paint(s.canvas, [...b.word], matched, ASCII_STYLE.palette.fg, swell, look.mark);
         // The canvas may have changed size: drop the GPU copy so it re-uploads.
         s.sprite.material.map!.dispose();
         s.sprite.material.map!.needsUpdate = true;
@@ -113,18 +159,18 @@ export function paintGlyph(canvas: HTMLCanvasElement, ch: string, color: string)
 }
 
 /** Transparent canvas: each letter stroked with a thick black outline, then filled (Target prefix green). */
-function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg, swell = 1) {
+function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, color: string = ASCII_STYLE.palette.fg, swell = 1, mark: Mark = 'none') {
   const g = canvas.getContext('2d')!;
   g.font = FONT;
   const advance = g.measureText('M').width;
   const border = WORD_LOOK.border * EM_PX;
   const pad = border * 1.6;
   canvas.width = Math.ceil(advance * letters.length + 2 * pad);
-  canvas.height = Math.ceil(EM_PX + 2 * pad);
+  canvas.height = Math.ceil(EM_PX + 2 * pad + (mark === 'bar' ? EM_PX * 0.35 : 0));
   g.font = FONT; // resizing the canvas resets context state
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
-  const y = canvas.height / 2 + EM_PX * 0.05;
+  const y = (mark === 'bar' ? canvas.height - EM_PX * 0.35 : canvas.height) / 2 + EM_PX * 0.05;
   const x = (i: number) => pad + i * advance;
   g.strokeStyle = ASCII_STYLE.palette.bg;
   g.lineWidth = border * 2;
@@ -139,9 +185,21 @@ function paint(canvas: HTMLCanvasElement, letters: string[], matched: number, co
     g.restore();
   };
   letters.forEach((_, i) => draw(i, (ch, px, py) => g.strokeText(ch, px, py)));
+  if (mark === 'glow') {
+    g.shadowColor = 'rgba(255,255,255,0.9)';
+    g.shadowBlur = EM_PX * 0.35;
+  }
   letters.forEach((_, i) => {
     g.fillStyle = i < matched ? ASCII_STYLE.palette.green : color;
     draw(i, (ch, px, py) => g.fillText(ch, px, py));
   });
+  g.shadowBlur = 0;
+  if (mark === 'bar') {
+    const top = y + EM_PX * 0.55;
+    g.fillStyle = ASCII_STYLE.palette.bg;
+    g.fillRect(pad - border * 0.5, top - border * 0.5, advance * letters.length + border, EM_PX * 0.12 + border);
+    g.fillStyle = ASCII_STYLE.palette.fg;
+    g.fillRect(pad, top, advance * letters.length, EM_PX * 0.12);
+  }
   return canvas.width / canvas.height;
 }

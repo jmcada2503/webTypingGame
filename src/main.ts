@@ -172,6 +172,8 @@ if (online) {
 }
 
 if (import.meta.env.DEV) {
+  // PROTOTYPE, throwaway: switch how the next Word bullet is pointed out.
+  void import('./dev/nearestProtoBar').then((m) => m.installNearestProtoBar());
   // For end-to-end checks and the console: drive the real flow without key presses.
   Object.assign(window, { flow, online, host });
   if (backend) installDevKeys(flow, backend, host);
