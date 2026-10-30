@@ -1,7 +1,7 @@
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { COLS, blink, box, centered, formatClock, put, twoTone } from './draw';
-import { typedTip, waitingLogLine, placeholderOnline } from './content';
+import { typedTip, waitingLogLine, placeholderOnline, type OnlineCounts } from './content';
 import type { Screen } from './Screen';
 
 const COPIED_SECONDS = 1.6;
@@ -11,7 +11,7 @@ const hash = (n: number) => {
 };
 
 /** The approved waiting screen (terminal style C3): Public gets a long log, Private the Invite link panel. */
-export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void): Screen {
+export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void, online: (t: number) => OnlineCounts = placeholderOnline): Screen {
   let copiedAt = -99;
   let now = 0;
   const langName = () => (flow.language() === 'en' ? 'ENGLISH' : 'SPANISH');
@@ -59,7 +59,7 @@ export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void): 
       centered(text, 11.5, subtitle, s.phase === 'connecting' ? 'green' : 'dim');
       put(text, 14, 17, 'TIP', 'yellow');
       put(text, 18, 17, typedTip(t) + (blink(t) ? '_' : ' '), 'fg');
-      const o = placeholderOnline(t);
+      const o = online(t);
       put(text, 14, 20, 'ONLINE NOW', 'dim');
       put(text, 26, 20, `${o.total}     ENGLISH ${o.en}   SPANISH ${o.es}`, 'fg');
       drawLog(text, 14, 23, 100, priv ? 3 : 10, t, s.kind);

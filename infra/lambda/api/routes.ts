@@ -1,3 +1,4 @@
+import type { Presence } from "./presence";
 import { ApiError, type Matchmaker } from "./service";
 import type { Language } from "./types";
 
@@ -12,6 +13,8 @@ export interface HttpRequest {
 export interface HttpResponse {
   status: number;
   body: unknown;
+  /** Extra response headers (only the cacheable online count sets any). */
+  headers?: Record<string, string>;
 }
 
 const PID = /^[A-Za-z0-9_-]{16,64}$/;
@@ -47,10 +50,10 @@ function matchId(value: string): string {
 const ok = (body: unknown): HttpResponse => ({ status: 200, body });
 
 /** Maps HTTP requests to the Matchmaker: strict validation in, JSON out, no internals in errors. */
-export function createRouter(mm: Matchmaker) {
+export function createRouter(mm: Matchmaker, presence?: Presence) {
   return async function route(req: HttpRequest): Promise<HttpResponse> {
     try {
-      return await dispatch(mm, req);
+      return await dispatch(mm, presence, req);
     } catch (error) {
       if (error instanceof ApiError) return { status: error.status, body: { error: error.code } };
       console.error(JSON.stringify({ event: "api_error", message: error instanceof Error ? error.message : String(error) }));
@@ -59,7 +62,7 @@ export function createRouter(mm: Matchmaker) {
   };
 }
 
-async function dispatch(mm: Matchmaker, { method, path, query, body }: HttpRequest): Promise<HttpResponse> {
+async function dispatch(mm: Matchmaker, presence: Presence | undefined, { method, path, query, body }: HttpRequest): Promise<HttpResponse> {
   const only = (allowed: string) => {
     if (method !== allowed) throw new ApiError(405, "method_not_allowed");
   };
@@ -67,6 +70,18 @@ async function dispatch(mm: Matchmaker, { method, path, query, body }: HttpReque
   if (path === "/api/ping") {
     only("GET");
     return ok({ ok: true, now: Date.now() });
+  }
+  if (presence && path === "/api/presence") {
+    only("POST");
+    const b = fields(body);
+    pid(b.pid);
+    await presence.beat(lang(b.lang));
+    return ok({ ok: true });
+  }
+  if (presence && path === "/api/online") {
+    only("GET");
+    // The same for everyone: CloudFront answers it for 30 s (its cache policy follows this header).
+    return { status: 200, body: await presence.online(), headers: { "cache-control": "public, max-age=30" } };
   }
   if (path === "/api/queue") {
     only("POST");
