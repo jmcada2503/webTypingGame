@@ -18,7 +18,8 @@ describe('what each page tells search engines and link previews', () => {
     const m = pageMeta('en');
     expect(m.path).toBe('/');
     expect(m.canonical).toBe('https://typewing.net/');
-    expect(m.title).toBe('Typewing: free multiplayer typing game');
+    expect(m.title).toBe('Typewing');
+    expect(m.socialTitle).toBe('Typewing: free multiplayer typing game');
     expect(m.ogLocale).toBe('en_US');
   });
 
@@ -26,7 +27,8 @@ describe('what each page tells search engines and link previews', () => {
     const m = pageMeta('es');
     expect(m.path).toBe('/es/');
     expect(m.canonical).toBe('https://typewing.net/es/');
-    expect(m.title).toBe('Typewing: juego de mecanografía multijugador gratis');
+    expect(m.title).toBe('Typewing');
+    expect(m.socialTitle).toBe('Typewing: juego de mecanografía multijugador gratis');
     expect(m.ogLocale).toBe('es_ES');
   });
 

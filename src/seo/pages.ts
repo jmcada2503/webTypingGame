@@ -9,7 +9,10 @@ export interface PageMeta {
   /** Where the page lives on the site. */
   path: string;
   canonical: string;
+  /** The browser tab's title. */
   title: string;
+  /** The title in link previews (Open Graph / Twitter card): the name plus what the game is. */
+  socialTitle: string;
   description: string;
   /** Open Graph locale (`og:locale`). */
   ogLocale: string;
@@ -19,14 +22,14 @@ export interface PageMeta {
   image: { url: string; width: number; height: number };
 }
 
-const TEXT: Record<Language, { title: string; description: string; ogLocale: string }> = {
+const TEXT: Record<Language, { socialTitle: string; description: string; ogLocale: string }> = {
   en: {
-    title: 'Typewing: free multiplayer typing game',
+    socialTitle: 'Typewing: free multiplayer typing game',
     description: 'Type the words flying at your ship to destroy them, then type your red word to fire back. A free 1v1 typing game in the browser, or practice alone.',
     ogLocale: 'en_US',
   },
   es: {
-    title: 'Typewing: juego de mecanografía multijugador gratis',
+    socialTitle: 'Typewing: juego de mecanografía multijugador gratis',
     description: 'Escribe las palabras que vuelan hacia tu nave para destruirlas y tu palabra roja para disparar. Juego de mecanografía 1 contra 1 gratis en el navegador.',
     ogLocale: 'es_ES',
   },
@@ -45,6 +48,7 @@ export function pageMeta(lang: Language): PageMeta {
     lang,
     path: pathFor(lang),
     canonical: SITE + pathFor(lang),
+    title: 'Typewing',
     ...TEXT[lang],
     alternates: [...LANGUAGES.map((l) => ({ hreflang: l, href: SITE + pathFor(l) })), { hreflang: 'x-default', href: SITE + pathFor('en') }],
     image: { url: `${SITE}/og.jpg`, width: 1200, height: 630 },
