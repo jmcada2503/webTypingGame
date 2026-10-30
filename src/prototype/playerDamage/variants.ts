@@ -5,6 +5,7 @@
 //   B Cracked glass       cracks spread across the window from the edges; an impact star at 1 Life
 //   C Failing systems     flickering panels, dead switches, Radar glitches, ATTACK label stutters, warning text
 //   D Broken structure    consoles knocked loose, missing switches, a swinging cable, floating debris
+//   E A + C (round 2, the user's mix): smoke and sparks, plus the failing systems
 // Every variant: damage stays until the Match ends, 0 Lives keeps the 1-Life look (the Lose ending dims it),
 // and each new level is marked the moment the Life goes. Words and the Typed word are never covered.
 import * as THREE from 'three';
@@ -20,6 +21,7 @@ export const PLAYER_DAMAGE_VARIANTS = [
   { key: 'B', name: 'Cracked glass' },
   { key: 'C', name: 'Failing systems' },
   { key: 'D', name: 'Broken structure' },
+  { key: 'E', name: 'A + C: smoke, sparks, failing systems' },
 ] as const;
 type Variant = (typeof PLAYER_DAMAGE_VARIANTS)[number]['key'];
 
@@ -77,16 +79,16 @@ export class PlayerDamageProto {
     this.level = level;
     this.lastLives = lives;
     this.reset();
-    if (this.variant === 'A') this.smokeAndSparks(dt, text);
+    if (this.variant === 'A' || this.variant === 'E') this.smokeAndSparks(dt, text);
     if (this.variant === 'B') this.cracks(text);
-    if (this.variant === 'C') this.failing(dt);
+    if (this.variant === 'C' || this.variant === 'E') this.failing(dt);
     if (this.variant === 'D') this.structure(dt);
     if (this.sinceMark === 0) this.mark();
   }
 
   /** After the Cockpit draws: effects that go over its readouts (the Radar glitch). */
   drawAfter(text: TextGrid) {
-    if (this.variant === 'C') this.radarGlitch(text);
+    if (this.variant === 'C' || this.variant === 'E') this.radarGlitch(text);
   }
 
   private reset() {
@@ -111,7 +113,7 @@ export class PlayerDamageProto {
   private mark() {
     const side = this.level === 1 ? 0 : 1;
     const at = this.onPanel(side, side === 0 ? 0.15 : -0.2, 0.15);
-    if (this.variant === 'A') {
+    if (this.variant === 'A' || this.variant === 'E') {
       this.sparks.burst(at.col, at.row, { count: 22, reach: 6, life: 0.6, color: 'yellow' });
       this.sparks.burst(at.col, at.row, { count: 12, reach: 4, life: 0.5, color: 'red' });
     }
