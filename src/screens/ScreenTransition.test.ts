@@ -92,6 +92,13 @@ describe('which effect plays between two flow states', () => {
   const match: FlowState = { screen: 'match', mode: 'versus', link: { status: 'ok' } };
   const end: FlowState = { screen: 'end', mode: 'practice', result: 'practiceOver' };
 
+  test('the opponent leaving, in any phase, is the shared glitch with no win animation or hold', () => {
+    const left: FlowState = { screen: 'opponentLeft', during: 'match', youWin: true, keptDropping: false, kind: 'public' };
+    expect(transitionFor(match, left)).toEqual({ effect: GLITCH, hold: 0 });
+    expect(transitionFor(countdown, left)).toEqual({ effect: GLITCH, hold: 0 });
+    expect(transitionFor(waiting, left)).toEqual({ effect: GLITCH, hold: 0 });
+  });
+
   test('the starting gap is drawn as the Match scene', () => {
     expect(visualOf(starting)).toBe('match');
     expect(visualOf(match)).toBe('match');
