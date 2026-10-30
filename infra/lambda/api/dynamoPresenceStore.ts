@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-
 import { BUCKET_MS, type PresenceStore } from "./presence";
 import type { Language } from "./types";
 
-/** Windows are read for a minute at most; TTL (cleanup only, it lags) clears them after ~10 min. */
+/** Windows are read for two minutes at most; TTL (cleanup only, it lags) clears them after ~10 min. */
 const TTL_SECONDS = 600;
 
 const key = (lang: Language, window: number) => ({ pk: `P#${lang}#${window}` });
@@ -18,14 +18,14 @@ export class DynamoPresenceStore implements PresenceStore {
     this.db = DynamoDBDocumentClient.from(client);
   }
 
-  async bump(lang: Language, window: number) {
+  async bump(lang: Language, window: number, amount: number) {
     await this.db.send(
       new UpdateCommand({
         TableName: this.table,
         Key: key(lang, window),
-        UpdateExpression: "ADD n :one SET #ttl = :ttl",
+        UpdateExpression: "ADD n :w SET #ttl = :ttl",
         ExpressionAttributeNames: { "#ttl": "ttl" },
-        ExpressionAttributeValues: { ":one": 1, ":ttl": Math.floor((window * BUCKET_MS) / 1000) + TTL_SECONDS },
+        ExpressionAttributeValues: { ":w": amount, ":ttl": Math.floor((window * BUCKET_MS) / 1000) + TTL_SECONDS },
       }),
     );
   }

@@ -88,6 +88,6 @@ export function createApi(pid: string, fetchFn: typeof fetch = browserFetch, bas
 export function createPresenceApi(pid: string, fetchFn: typeof fetch = browserFetch, base = '') {
   return {
     beat: async (lang: Language) => void (await request(fetchFn, 'POST', `${base}/api/presence`, { pid, lang })),
-    online: () => request<{ en: number; es: number; total: number }>(fetchFn, 'GET', `${base}/api/online`, undefined, 'default'),
+    online: () => request<{ en: number; es: number; total: number; sample?: number }>(fetchFn, 'GET', `${base}/api/online`, undefined, 'default'),
   };
 }
