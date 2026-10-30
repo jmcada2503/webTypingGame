@@ -8,6 +8,13 @@ type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void
 export const isFullscreen = () => !!(document.fullscreenElement || (document as FsDoc).webkitFullscreenElement);
 
 /**
+ * The fullscreen key: a plain F (no Ctrl / Cmd / Alt, not held down). The caller only listens for it where nothing
+ * is being typed (not on the Match screen, where F is a letter).
+ */
+export const isFullscreenKey = (e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'repeat'>) =>
+  (e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat;
+
+/**
  * Fullscreen API on the whole page: hides the browser's URL bar, tabs and toolbars (Esc exits).
  * Must be called from a user gesture. Resolves to an error message if the browser refuses.
  */

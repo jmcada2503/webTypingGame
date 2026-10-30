@@ -1,6 +1,6 @@
 import type { TypingInput } from '../input/TypingInput';
 import type { GameView } from '../view/GameView';
-import { isFullscreen, onFullscreenChange, toggleFullscreen } from './fullscreen';
+import { onFullscreenChange, toggleFullscreen } from './fullscreen';
 import type { GameSession } from './GameSession';
 
 /** Longest frame step; a hidden tab or debugger pause shouldn't teleport Word bullets. */
@@ -9,7 +9,7 @@ const RESIZE_DEBOUNCE_MS = 100;
 
 /**
  * Owns the page: mounts the view's canvas (centered, letterboxed on black), runs the frame loop,
- * re-fits on resize / fullscreen, and offers a fullscreen button.
+ * re-fits on resize / fullscreen, and toggles fullscreen when asked (the game binds it to the F key).
  *
  * Each frame: events = session.update(dt); events.forEach(view.trigger); view.render(session.state(), dt)
  */
@@ -18,7 +18,6 @@ export class AppShell {
   private last = 0;
   private resizeTimer = 0;
   private readonly cleanups: (() => void)[] = [];
-  private readonly fsButton = document.createElement('button');
   private readonly toast = document.createElement('div');
 
   constructor(
@@ -31,7 +30,7 @@ export class AppShell {
   start() {
     this.root.classList.add('app-root');
     this.root.prepend(this.view.canvas);
-    this.mountFullscreenUi();
+    this.mountToast();
     this.fit();
 
     const onResize = () => {
@@ -41,10 +40,7 @@ export class AppShell {
     window.addEventListener('resize', onResize);
     this.cleanups.push(() => window.removeEventListener('resize', onResize));
     this.cleanups.push(
-      onFullscreenChange(() => {
-        this.fsButton.hidden = isFullscreen();
-        this.fit();
-      }),
+      onFullscreenChange(() => this.fit()),
     );
 
     this.session.attachInput(this.input);
@@ -71,14 +67,11 @@ export class AppShell {
     this.view.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
   }
 
-  private mountFullscreenUi() {
-    this.fsButton.className = 'fs-button';
-    this.fsButton.textContent = '⛶';
-    this.fsButton.title = 'Fullscreen (Esc exits)';
-    this.fsButton.onclick = () => void this.toggleFullscreen();
+  /** A short message at the top when the browser refuses fullscreen. */
+  private mountToast() {
     this.toast.className = 'toast';
     this.toast.hidden = true;
-    this.root.append(this.fsButton, this.toast);
+    this.root.append(this.toast);
   }
 
   private say(msg: string) {
@@ -91,7 +84,6 @@ export class AppShell {
     cancelAnimationFrame(this.frame);
     clearTimeout(this.resizeTimer);
     this.cleanups.forEach((c) => c());
-    this.fsButton.remove();
     this.toast.remove();
     this.session.dispose();
     this.input.dispose();

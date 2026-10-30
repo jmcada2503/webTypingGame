@@ -1,6 +1,7 @@
 // The game: the screen flow, the screens, and the game scene, mounted by the app shell.
 import './app/app.css';
 import { AppShell } from './app/AppShell';
+import { isFullscreen, isFullscreenKey } from './app/fullscreen';
 import { isTouchOnly } from './app/keyboardGate';
 import { runKeyboardGate } from './app/runKeyboardGate';
 import { installDevKeys } from './dev/devKeys';
@@ -82,7 +83,7 @@ const onlineCounts = (t: number) => (presence ? (presence.counts() ?? { en: 0, e
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow) };
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow) };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
@@ -129,7 +130,12 @@ const createMatch = (mode: 'versus' | 'practice') => {
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
-new AppShell(view, host, input).start();
+const shell = new AppShell(view, host, input);
+shell.start();
+// F toggles fullscreen on every screen but the Match, where it is a letter being typed (Esc also leaves fullscreen).
+window.addEventListener('keydown', (e) => {
+  if (isFullscreenKey(e) && host.screenShown !== 'match') void shell.toggleFullscreen();
+});
 
 // Online only: `?fake` plays against a stand-in, nothing worth counting.
 if (online) {

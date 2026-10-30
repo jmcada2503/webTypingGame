@@ -37,6 +37,10 @@ The flow's `starting` gap (the TV effect) draws the game scene idle (nothing fly
 
 `src/main.ts` decides what runs. **Practice** runs the real `PracticeSession` (words from the game on a ramp; it measures your speed first), and its Game Over screen (variant A of the prototype) shows a huge `GAME OVER`, a **score** that counts up over 1.2 s (the difficulty level the run reached, as a second of the 0 to 600 s ramp, times 10: 0 to 6,000; 0 if the run never got past the speed measurement), then `NEW BEST!` or `BEST n` (this browser session only, `sessionStorage`) and a verdict word by the difficulty reached (20 / 40 / 60 / 80 %), a 3×2 stat grid (time, difficulty, words, WPM, accuracy, best pace), and Play again / Menu (arrows or hjkl + Enter, `Q` = menu). **Online** matches use `MatchSession` over a `MatchEngine` with seeded Attack words from the chosen language's word list (the seed will come from the server; for now it is local, and there is no transport, so the opponent never answers).
 
+## Fullscreen
+
+**F** toggles fullscreen on every screen except the Match, where F is a letter being typed (the host's `screenShown`, so the ending scene counts as the Match too); Esc also leaves it. There is no on-screen button: the menu shows `[F] FULLSCREEN` at the top right, by the title, a little larger, in yellow and pulsing until the page is fullscreen, then a dim `[F] EXIT FULLSCREEN` (the key footer lists it too). If the browser refuses (an iframe, an embedded browser), a short message shows at the top.
+
 ## Running it
 
 `npm run dev` serves the game at `/` and the visual sandbox at `/sandbox/`; `npm run build` builds both (the deployed site's root object is `index.html`). With `npm run dev`, Ctrl+F plays "opponent found", Ctrl+E / Ctrl+V ends the Match as lost / won, Ctrl+D makes the opponent leave, Ctrl+L / Ctrl+B make their signal drop / come back (a held Match, no animation yet), Ctrl+M / Ctrl+A / Ctrl+X make them propose, accept or decline a Rematch, Ctrl+R toggles "servers resting".

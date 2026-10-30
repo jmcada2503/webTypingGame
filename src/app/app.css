@@ -16,22 +16,6 @@ body {
   display: block;
 }
 
-.fs-button {
-  position: fixed;
-  left: 16px;
-  top: 16px;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 50%;
-  background: #ffd400;
-  color: #000;
-  font-size: 22px;
-  cursor: pointer;
-  z-index: 9999;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-}
-
 .toast {
   position: fixed;
   top: 16px;
