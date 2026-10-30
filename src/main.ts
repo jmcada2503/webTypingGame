@@ -1,6 +1,8 @@
 // The game: the screen flow, the screens, and the game scene, mounted by the app shell.
 import './app/app.css';
 import { AppShell } from './app/AppShell';
+import { isTouchOnly } from './app/keyboardGate';
+import { runKeyboardGate } from './app/runKeyboardGate';
 import { installDevKeys } from './dev/devKeys';
 import { FakeBackend } from './flow/FakeNetwork';
 import { ScreenFlow } from './flow/ScreenFlow';
@@ -27,6 +29,10 @@ import { loadWordList } from './words/wordLists';
 /** Until the metrics pipeline exists, metric records go to the console as one JSON line each. */
 const logMetric = (entry: Record<string, unknown>) => console.info(JSON.stringify(entry));
 
+const view = await AsciiGameView.create();
+// Phones and tablets without a mouse or trackpad get a "needs a physical keyboard" screen until a real key is pressed.
+if (isTouchOnly(window)) await runKeyboardGate(view);
+
 // Word lists are small (about 50 KB each, compressed): load both before the first screen.
 const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
 const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
@@ -51,7 +57,6 @@ const online = backend
       },
     });
 const flow = new ScreenFlow(online ?? backend!.connect());
-const view = await AsciiGameView.create();
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
