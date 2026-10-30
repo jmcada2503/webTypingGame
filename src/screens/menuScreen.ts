@@ -64,8 +64,8 @@ export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onli
       sel = usableSelection(sel, resting);
       const online = onlineCounts(t);
       const mine = flow.language() === 'en' ? online.en : online.es;
-      twoTone(text, 1.5, GAME_NAME[0], GAME_NAME[1], 2.8);
-      centered(text, 6, 'TYPE FAST. DEFEND. ATTACK.', 'dim');
+      twoTone(text, 0.6, GAME_NAME[0], GAME_NAME[1], 5.5);
+      centered(text, 7.2, 'TYPE FAST. DEFEND. ATTACK.', 'dim');
       const w = 36;
       MENU_ITEMS.forEach((it, i) => {
         const c0 = 6 + i * 40;
