@@ -56,7 +56,7 @@ export class Cockpit {
   /** Lamp index → seconds of flicker left. */
   private readonly flicker = new Map<number, number>();
   /** PROTOTYPE (Prototype: Player damage): the parts the damage variants bend, break and flicker. */
-  readonly protoParts = { root: this.root, panels: [] as THREE.Group[], panelMats: [] as THREE.MeshLambertMaterial[], switches: [] as THREE.Mesh[], radarScreen: null as THREE.Mesh | null, bezel: null as THREE.Mesh | null };
+  readonly protoParts = { root: this.root, panels: [] as THREE.Group[], panelMats: [] as THREE.MeshLambertMaterial[], switches: [] as THREE.Mesh[], radarScreen: null as THREE.Mesh | null, bezel: null as THREE.Mesh | null, yoke: [] as THREE.Mesh[], labels: [] as THREE.Object3D[] };
   /** PROTOTYPE: the ATTACK label is blanked this frame (a failing light), the Attack word itself never is. */
   protoLabelOff = false;
 
@@ -75,6 +75,7 @@ export class Cockpit {
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, -0.48, -1.35);
     this.root.add(column, bar);
+    this.protoParts.yoke.push(column, bar);
     for (const x of [-0.36, 0.36]) {
       const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.28, 12), gray(0.9, false));
       grip.position.set(x, -0.4, -1.35);
@@ -148,6 +149,7 @@ export class Cockpit {
     anchor.add(plate);
     this.overlay.add(anchor);
     this.labelAnchors.push({ panel, anchor });
+    this.protoParts.labels.push(plate);
   }
 
   update(state: GameViewState, dt: number, text: TextGrid) {

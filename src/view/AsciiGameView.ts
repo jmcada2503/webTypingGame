@@ -194,7 +194,8 @@ export class AsciiGameView implements GameView {
       if (snap) this.hitFx.explode(snap.center);
     }
     if (event.type === 'lifeLost') {
-      this.hitFx.shake();
+      // PROTOTYPE: E keeps the Typed word panel and everything above it still, so its own jolt replaces the camera shake.
+      if (!this.playerDamage.quietCenter) this.hitFx.shake();
       SCREEN_HIT.level = 1;
     }
     if (event.type === 'shotHit') this.shotHitFx.hit();

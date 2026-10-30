@@ -6,7 +6,9 @@
 //   C Failing systems     flickering panels, dead switches, Radar glitches, ATTACK label stutters, warning text
 //   D Broken structure    consoles knocked loose, missing switches, a swinging cable, floating debris
 //   E A + C (round 2, the user's mix): smoke and sparks, plus the failing systems; round 3: the central
-//     panel stays quiet (no ATTACK label stutter, no tremble): damage lives on the side consoles only
+//     panel stays quiet (no ATTACK label stutter, no tremble): damage lives on the side consoles only;
+//     round 4: the structure below the Typed word panel trembles and stutters, the panel and above stay still
+//     (a lost Life jolts the lower structure instead of shaking the camera; the black flash stays)
 // Every variant: damage stays until the Match ends, 0 Lives keeps the 1-Life look (the Lose ending dims it),
 // and each new level is marked the moment the Life goes. Words and the Typed word are never covered.
 import * as THREE from 'three';
@@ -53,6 +55,9 @@ export class PlayerDamageProto {
   /** Seconds since the last new damage level (for the mark), Infinity when none yet. */
   private sinceMark = Infinity;
   private readonly base: { pos: THREE.Vector3; rot: THREE.Euler }[];
+  private readonly yokeBase: { pos: THREE.Vector3; rot: THREE.Euler }[];
+  /** E: the Typed word panel and everything above it never move (no camera shake, no label stutter). */
+  readonly quietCenter: boolean;
   private readonly baseColors: THREE.Color[];
 
   constructor(
@@ -65,6 +70,8 @@ export class PlayerDamageProto {
     const p = cockpit.protoParts;
     this.base = p.panels.map((g) => ({ pos: g.position.clone(), rot: g.rotation.clone() }));
     this.baseColors = p.panelMats.map((m) => m.color.clone());
+    this.yokeBase = p.yoke.map((m) => ({ pos: m.position.clone(), rot: m.rotation.clone() }));
+    this.quietCenter = this.variant === 'E';
     if (this.variant === 'B') this.buildCracks();
     if (this.variant === 'D') this.buildStructure();
     if (import.meta.env.DEV) Object.assign(window, { playerDamage: this });
@@ -84,6 +91,7 @@ export class PlayerDamageProto {
     if (this.variant === 'B') this.cracks(text);
     if (this.variant === 'C' || this.variant === 'E') this.failing(dt);
     if (this.variant === 'D') this.structure(dt);
+    if (this.variant === 'E') this.lowerTremble();
     if (this.sinceMark === 0) this.mark();
   }
 
@@ -100,7 +108,34 @@ export class PlayerDamageProto {
     });
     p.panelMats.forEach((m, i) => m.color.copy(this.baseColors[i]));
     p.switches.forEach((s) => (s.visible = true));
+    p.yoke.forEach((m, i) => {
+      m.position.copy(this.yokeBase[i].pos);
+      m.rotation.copy(this.yokeBase[i].rot);
+    });
+    p.labels.forEach((l) => (l.visible = true));
     this.cockpit.protoLabelOff = false;
+  }
+
+  /**
+   * E: the structure below the Typed word panel trembles and stutters (the side consoles, their LIVES / RADAR
+   * labels, the yoke column and bar); the panel and everything above it stay still. A Life lost jolts it hard,
+   * in place of the camera shake.
+   */
+  private lowerTremble() {
+    const p = this.cockpit.protoParts;
+    const jolt = this.sinceMark < 0.7 ? (1 - this.sinceMark / 0.7) ** 2 : 0;
+    const steady = this.level >= 2 ? 0.006 : this.level === 1 ? 0.002 : 0;
+    const amp = steady + jolt * 0.05;
+    if (amp <= 0) return;
+    const wobble = (k: number) => Math.sin(this.t * 47 + k * 2.1) * Math.sin(this.t * 13 + k);
+    p.panels.forEach((g, i) => {
+      g.position.x += wobble(i) * amp;
+      g.position.y += wobble(i + 3) * amp;
+      g.rotation.z += wobble(i + 6) * amp * 2;
+    });
+    p.yoke.forEach((m, i) => (m.position.x += wobble(i + 9) * amp * 0.6));
+    // The console labels stutter at 1 Life (and while the jolt runs).
+    if (this.level >= 2 || jolt > 0.2) p.labels.forEach((l, i) => (l.visible = wobble(i + 12) < 0.55));
   }
 
   /** Grid position of a point in a console's local space (0 = left / Lives, 1 = right / Radar). */
@@ -244,7 +279,7 @@ export class PlayerDamageProto {
     const dead = this.level === 1 ? [1, 3] : this.level === 2 ? [1, 3, 7, 9, 5] : [];
     dead.forEach((k) => (p.switches[k].visible = false));
     // E (round 3, the user): the central panel stays quiet, so the Attack word and the Typed word never move.
-    const quietCenter = this.variant === 'E';
+    const quietCenter = this.quietCenter;
     // The ATTACK label stutters at 1 Life (never the Attack word).
     if (this.level >= 2 && !quietCenter) this.cockpit.protoLabelOff = noise(5) > 0.6;
     // Small constant tremble at 1 Life (it moves the whole view, the central panel too).
