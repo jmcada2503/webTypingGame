@@ -1,7 +1,9 @@
-import { DEFAULT_FLOW_CONFIG, type FlowConfig, type FlowNetwork, type FlowState, type Language, type MatchKind, type MenuChoice, type NetworkEvent, type RematchState } from './types';
+import { DEFAULT_FLOW_CONFIG, type FlowConfig, type FlowNetwork, type FlowState, type Language, type MatchKind, type MatchLink, type MenuChoice, type NetworkEvent, type RematchState } from './types';
 
 /** Floating-point slack when a timer is compared with zero. */
 const EPS = 1e-9;
+/** The third signal loss in a Match is too many: the connection can't be played, so no grace. */
+const MAX_SIGNAL_LOSSES = 3;
 
 /**
  * Which screen the player is on, and how they move between screens: menu, how-to, waiting, Countdown, Match,
@@ -28,7 +30,8 @@ export class ScreenFlow {
   /** The kind of online match the player is in (remembered for the end screens). */
   private kind: MatchKind = 'public';
   /** Seconds the opponent's dropped connection has left to come back (null = connected). */
-  private grace: number | null = null;
+  /** Signal losses so far in this Match. */
+  private losses = 0;
   /** The Invite code being joined (a guest); null when hosting or playing Public. */
   private joinCode: string | null = null;
   /** Servers resting: online matches are blocked. */
@@ -194,12 +197,14 @@ export class ScreenFlow {
       } else this.s = { ...this.s, secondsLeft };
     } else if (this.s.screen === 'starting') {
       this.timer -= dt;
-      if (this.timer <= EPS) this.s = { screen: 'match', mode: this.s.mode };
+      if (this.timer <= EPS) this.s = { screen: 'match', mode: this.s.mode, link: { status: 'ok' } };
     } else if (this.s.screen === 'end' && this.s.mode === 'versus') {
       if (!this.rematchHeld) this.tickRematch(dt, this.s.rematch);
-    } else if (this.s.screen === 'match' && this.grace !== null) {
-      this.grace -= dt;
-      if (this.grace <= EPS) this.opponentGone();
+    } else if (this.s.screen === 'match' && this.s.link.status !== 'ok') {
+      const secondsLeft = this.s.link.secondsLeft - dt;
+      if (secondsLeft > EPS) this.setLink({ ...this.s.link, secondsLeft });
+      else if (this.s.link.status === 'away') this.opponentGone();
+      else this.setLink({ status: 'ok' });
     }
   }
 
@@ -246,6 +251,7 @@ export class ScreenFlow {
   }
 
   private startCountdown(mode: 'versus' | 'practice') {
+    this.losses = 0;
     this.s = { screen: 'countdown', mode, secondsLeft: this.config.countdownSeconds };
   }
 
@@ -262,12 +268,15 @@ export class ScreenFlow {
   }
 
   /** The opponent is gone: where it happened decides the screen; leaving the Match is a win. */
-  private opponentGone() {
+  private setLink(link: MatchLink) {
+    if (this.s.screen === 'match') this.s = { ...this.s, link };
+  }
+
+  private opponentGone(keptDropping = false) {
     const s = this.s;
     const during = s.screen === 'waiting' ? 'waiting' : s.screen === 'match' ? 'match' : 'countdown';
     this.network.leave();
-    this.grace = null;
-    this.s = { screen: 'opponentLeft', during, youWin: during === 'match', kind: this.kind };
+    this.s = { screen: 'opponentLeft', during, youWin: during === 'match', keptDropping, kind: this.kind };
   }
 
   private onNetwork(event: NetworkEvent) {
@@ -290,10 +299,13 @@ export class ScreenFlow {
     }
     if (event.type === 'opponentLeft' && ((s.screen === 'waiting' && s.phase === 'connecting') || s.screen === 'countdown' || s.screen === 'starting' || s.screen === 'match')) return this.opponentGone();
     if (event.type === 'opponentDisconnected') {
-      if (s.screen === 'match') this.grace = this.config.disconnectGraceSeconds;
-      else if ((s.screen === 'waiting' && s.phase === 'connecting') || s.screen === 'countdown' || s.screen === 'starting') return this.opponentGone();
+      if (s.screen === 'match') {
+        if (s.link.status === 'away') return;
+        if (++this.losses >= MAX_SIGNAL_LOSSES) return this.opponentGone(true);
+        this.setLink({ status: 'away', secondsLeft: this.config.disconnectGraceSeconds, losses: this.losses });
+      } else if ((s.screen === 'waiting' && s.phase === 'connecting') || s.screen === 'countdown' || s.screen === 'starting') return this.opponentGone();
     }
-    if (event.type === 'opponentReconnected') this.grace = null;
+    if (event.type === 'opponentReconnected' && s.screen === 'match' && s.link.status === 'away') this.setLink({ status: 'back', secondsLeft: event.resumeIn });
     if (this.s.screen === 'waiting') {
       if (event.type === 'inviteCreated') this.s = { ...this.s, inviteLink: event.link };
       if (event.type === 'inviteInvalid') {

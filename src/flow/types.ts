@@ -14,14 +14,24 @@ export type FlowState =
   | { screen: 'countdown'; mode: PlayMode; secondsLeft: number }
   /** The screen-off / black / screen-on gap: the Match begins only when it ends. */
   | { screen: 'starting'; mode: PlayMode }
-  | { screen: 'match'; mode: PlayMode }
+  | { screen: 'match'; mode: PlayMode; link: MatchLink }
   /** Practice results. */
   | { screen: 'end'; mode: 'practice'; result: 'practiceOver' }
   /** After an online Match: how it ended and the state of the Rematch offer. */
   | { screen: 'end'; mode: 'versus'; result: 'won' | 'lost' | 'peace'; kind: MatchKind; rematch: RematchState }
-  /** The opponent left during `during`; `youWin` only when it happened in the Match. */
-  | { screen: 'opponentLeft'; during: 'waiting' | 'countdown' | 'match'; youWin: boolean; kind: MatchKind }
+  /** The opponent left during `during`; `youWin` only when it happened in the Match; `keptDropping`: too many signal losses. */
+  | { screen: 'opponentLeft'; during: 'waiting' | 'countdown' | 'match'; youWin: boolean; keptDropping: boolean; kind: MatchKind }
   | { screen: 'error'; reason: 'connectFailed' | 'inviteFull' | 'inviteExpired'; kind: MatchKind };
+
+/**
+ * The line to the opponent during a Match. Practice is always `ok`.
+ * - `away`: their signal is lost (the `losses`-th time in this Match); everything is held; `secondsLeft` of grace.
+ * - `back`: they are back; everything stays held for `secondsLeft`, the same moment on both sides.
+ */
+export type MatchLink =
+  | { status: 'ok' }
+  | { status: 'away'; secondsLeft: number; losses: number }
+  | { status: 'back'; secondsLeft: number };
 
 /**
  * The Rematch offer on an online end screen.
@@ -58,7 +68,8 @@ export type NetworkEvent =
   | { type: 'connectFailed' }
   /** The opponent's connection dropped; in a Match they get a short grace to come back. */
   | { type: 'opponentDisconnected' }
-  | { type: 'opponentReconnected' }
+  /** Their signal is back; the Match resumes `resumeIn` seconds from now (agreed by both sides, so they end together). */
+  | { type: 'opponentReconnected'; resumeIn: number }
   /** The opponent is gone for good (closed the tab, left). */
   | { type: 'opponentLeft' }
   /** The opponent's answer to, or offer of, a Rematch. */

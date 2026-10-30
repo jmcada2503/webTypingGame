@@ -8,6 +8,8 @@ export type WireMessage =
   | NetEvent
   /** The Countdown ends at `at` on the sender's clock; convert with `toLocalTime`. */
   | { type: 'startAt'; at: number }
+  /** After a signal loss: the Match resumes at `at` on the sender's clock (the host decides, both sides end together). */
+  | { type: 'resumeAt'; at: number }
   | { type: 'rematch'; message: 'propose' | 'accept' | 'decline' | 'cancel' };
 
 const MATCH_EVENTS = new Set<string>(['shot', 'defended', 'hit', 'presence', 'peace']);
@@ -22,7 +24,7 @@ export type LinkEvent =
 
 export interface LinkConfig {
   heartbeatMs: number;
-  /** Silence (or an unacked event) this long ends the connection. */
+  /** Silence (or an unacked event) this long ends the connection: the time to notice plus the Match's 10 s grace. */
   graceMs: number;
   /** Silence this long counts as a signal loss. */
   signalLostMs: number;
@@ -30,7 +32,7 @@ export interface LinkConfig {
   watchMs: number;
 }
 
-export const DEFAULT_LINK_CONFIG: LinkConfig = { heartbeatMs: 2000, graceMs: 10_000, signalLostMs: 4000, watchMs: 500 };
+export const DEFAULT_LINK_CONFIG: LinkConfig = { heartbeatMs: 2000, graceMs: 14_000, signalLostMs: 4000, watchMs: 500 };
 
 type Frame =
   | { k: 'm'; id: string; n: number; b: WireMessage }
@@ -99,8 +101,17 @@ export class PeerLink {
 
   /** Host side of the Countdown: it ends `delayMs` from now. Tells the guest, returns the moment on our clock. */
   startIn(delayMs: number) {
+    return this.announce('startAt', delayMs);
+  }
+
+  /** Host side after a signal loss: the Match resumes `delayMs` from now. Tells the guest, returns the moment on our clock. */
+  resumeIn(delayMs: number) {
+    return this.announce('resumeAt', delayMs);
+  }
+
+  private announce(type: 'startAt' | 'resumeAt', delayMs: number) {
     const at = this.timers.now() + delayMs;
-    this.send({ type: 'startAt', at });
+    this.send({ type, at });
     return at;
   }
 

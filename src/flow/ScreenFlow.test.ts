@@ -281,7 +281,7 @@ describe('The opponent leaves', () => {
 
     network.emit({ type: 'opponentLeft' });
 
-    expect(flow.state()).toEqual({ screen: 'opponentLeft', during: 'waiting', youWin: false, kind: 'public' });
+    expect(flow.state()).toEqual({ screen: 'opponentLeft', during: 'waiting', youWin: false, keptDropping: false, kind: 'public' });
     expect(network.calls.at(-1)).toBe('leave');
   });
 
@@ -296,26 +296,98 @@ describe('The opponent leaves', () => {
     expect(b.flow.state()).toMatchObject({ screen: 'opponentLeft', during: 'countdown', youWin: false });
   });
 
-  test('during the Match, a dropped connection gets 10 seconds to come back, then the player wins', () => {
-    const { flow, network } = playing();
+  describe('a dropped connection during the Match', () => {
+    const linkOf = (flow: ScreenFlow) => (flow.state() as { link: unknown }).link;
 
-    network.emit({ type: 'opponentDisconnected' });
-    flow.update(9.9);
-    expect(screen(flow)).toBe('match');
+    test('gets 10 seconds to come back, shown as `away`, then the player wins', () => {
+      const { flow, network } = playing();
+      expect(linkOf(flow)).toEqual({ status: 'ok' });
 
-    flow.update(0.2);
-    expect(flow.state()).toEqual({ screen: 'opponentLeft', during: 'match', youWin: true, kind: 'public' });
-  });
+      network.emit({ type: 'opponentDisconnected' });
+      expect(linkOf(flow)).toEqual({ status: 'away', secondsLeft: 10, losses: 1 });
+      flow.update(9.9);
+      expect(screen(flow)).toBe('match');
+      expect(linkOf(flow)).toMatchObject({ status: 'away', losses: 1 });
 
-  test('a connection that comes back within the grace keeps the Match going', () => {
-    const { flow, network } = playing();
+      flow.update(0.2);
+      expect(flow.state()).toEqual({ screen: 'opponentLeft', during: 'match', youWin: true, keptDropping: false, kind: 'public' });
+    });
 
-    network.emit({ type: 'opponentDisconnected' });
-    flow.update(3);
-    network.emit({ type: 'opponentReconnected' });
-    flow.update(10);
+    test('coming back starts the resume countdown the transport reports, then play resumes', () => {
+      const { flow, network } = playing();
+      network.emit({ type: 'opponentDisconnected' });
+      flow.update(3);
 
-    expect(screen(flow)).toBe('match');
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      expect(linkOf(flow)).toEqual({ status: 'back', secondsLeft: 5 });
+      flow.update(4.9);
+      expect(linkOf(flow)).toMatchObject({ status: 'back' });
+
+      flow.update(0.2);
+      expect(linkOf(flow)).toEqual({ status: 'ok' });
+      flow.update(30); // the grace is over for good: nothing ends the Match
+      expect(screen(flow)).toBe('match');
+    });
+
+    test('the grace does not run during the resume countdown', () => {
+      const { flow, network } = playing();
+      network.emit({ type: 'opponentDisconnected' });
+      flow.update(9);
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      flow.update(5.1);
+      expect(screen(flow)).toBe('match');
+      expect(linkOf(flow)).toEqual({ status: 'ok' });
+    });
+
+    test('a signal that comes back when nothing was lost changes nothing', () => {
+      const { flow, network } = playing();
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      expect(linkOf(flow)).toEqual({ status: 'ok' });
+    });
+
+    test('the second loss counts and gets the full grace again, also when it happens during the resume countdown', () => {
+      const { flow, network } = playing();
+      network.emit({ type: 'opponentDisconnected' });
+      flow.update(4);
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      flow.update(1);
+
+      network.emit({ type: 'opponentDisconnected' }); // again, during the countdown
+      expect(linkOf(flow)).toEqual({ status: 'away', secondsLeft: 10, losses: 2 });
+    });
+
+    test('the third loss in a Match gives no time: the opponent is gone, and the connection kept dropping', () => {
+      const { flow, network } = playing();
+      for (let i = 0; i < 2; i++) {
+        network.emit({ type: 'opponentDisconnected' });
+        network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+        flow.update(5.1);
+      }
+
+      network.emit({ type: 'opponentDisconnected' });
+
+      expect(flow.state()).toEqual({ screen: 'opponentLeft', during: 'match', youWin: true, keptDropping: true, kind: 'public' });
+      expect(network.calls.at(-1)).toBe('leave');
+    });
+
+    test('losses are counted per Match: a Rematch starts again from none', () => {
+      const { flow, network } = playing();
+      network.emit({ type: 'opponentDisconnected' });
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      network.emit({ type: 'opponentDisconnected' });
+      network.emit({ type: 'opponentReconnected', resumeIn: 5 });
+      flow.update(5.1);
+      flow.matchEnded('won');
+      flow.proposeRematch();
+      network.emit({ type: 'rematch', message: 'accept' });
+      flow.update(5.1);
+      flow.update(1.9);
+      expect(screen(flow)).toBe('match');
+
+      network.emit({ type: 'opponentDisconnected' });
+
+      expect(linkOf(flow)).toMatchObject({ status: 'away', losses: 1 });
+    });
   });
 
   test('an opponent who leaves for good ends the Match at once, with a win', () => {

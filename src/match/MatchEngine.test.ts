@@ -749,3 +749,41 @@ describe('details for the metrics', () => {
     expect(m.details().peakPace).toBeGreaterThan(0);
   });
 });
+
+describe('Held while the opponent is away', () => {
+  test('time stands still: Word bullets stay where they are and nothing arrives, however long it lasts', () => {
+    const m = engine();
+    m.spawnBullet('planet');
+    advance(m, 4);
+    const flight = m.state().wordBullets[0].flight;
+
+    m.hold(true);
+    const events = advance(m, 30);
+
+    expect(events).toEqual([]);
+    expect(m.state().wordBullets[0].flight).toBe(flight);
+    expect(m.state().lives).toBe(3);
+    expect(m.stats().elapsed).toBe(4);
+  });
+
+  test('no Idle nudge, no Peace and no presence report while held', () => {
+    const m = engine();
+    m.hold(true);
+    expect(types(advance(m, 60))).toEqual([]);
+    expect(m.status).toBe('running');
+    expect(m.drainOutgoing()).toEqual([]);
+  });
+
+  test('when released the Match goes on from where it was', () => {
+    const m = engine();
+    m.spawnBullet('planet');
+    advance(m, 4);
+    m.hold(true);
+    advance(m, 30);
+
+    m.hold(false);
+
+    expect(types(advance(m, 3.75))).not.toContain('wordBulletArrived');
+    expect(types(advance(m, 0.5))).toContain('wordBulletArrived');
+  });
+});
