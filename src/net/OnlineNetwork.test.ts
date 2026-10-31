@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Language, NetworkEvent } from '../flow/types';
 import { ApiError, type MatchApi, type MatchView } from './api';
-import type { ConnectionRecord } from './errors';
+import type { ConnectionRecord, IceReport } from './errors';
 import { OnlineNetwork } from './OnlineNetwork';
 import { FakeNetwork, FakeRtc, FakeTimers, type FakeRtcOptions } from './testing';
 
@@ -26,6 +26,8 @@ class FakeServer {
   /** Makes the next N calls of this player fail like a network error. */
   failing = new Map<string, number>();
   busy = 0;
+  /** ICE reports received, in order. */
+  iceReports: Array<{ pid: string; id: string; report: IceReport }> = [];
 
   api(pid: string): MatchApi {
     const guard = async () => {
@@ -87,6 +89,10 @@ class FakeServer {
         const m = get(id);
         m.connected.add(pid);
         return this.view(m, pid);
+      },
+      ice: async (id, report) => {
+        await guard();
+        this.iceReports.push({ pid, id, report });
       },
       leave: async (id) => {
         await guard();
@@ -262,6 +268,39 @@ describe('when it goes wrong', () => {
     expect(a.types()).toEqual(['matched', 'connectFailed']);
     expect(b.types()).toEqual(['matched', 'connectFailed']);
     expect(records.map((r) => r.failure)).toEqual(['iceFailed', 'iceFailed']);
+  });
+
+  it('no network path: each side saves its ICE report on the match', async () => {
+    const { timers, a, b, server } = setup({ outcome: 'failed' });
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    b.network.joinQueue('en');
+    await timers.advanceAsync(8000);
+    const sent = server.iceReports.map(({ pid, id, report }) => ({ pid, id, fail: report.fail, pairs: report.pairs.length }));
+    expect(sent.sort((x, y) => x.pid.localeCompare(y.pid))).toEqual([
+      { pid: 'player-a', id: 'm1', fail: 'iceFailed', pairs: 1 },
+      { pid: 'player-b', id: 'm1', fail: 'iceFailed', pairs: 1 },
+    ]);
+  });
+
+  it('the guest leaving mid-handshake aborts the host, whose ICE report is still saved', async () => {
+    const { timers, a, b, server } = setup({ outcome: 'never' });
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    b.network.joinQueue('en');
+    await timers.advanceAsync(2500); // the host has seen the pairing
+    b.network.leave();
+    await timers.advanceAsync(3000);
+    expect(server.iceReports.find((r) => r.pid === 'player-a')?.report).toMatchObject({ fail: 'aborted' });
+  });
+
+  it('a successful connection saves no ICE report', async () => {
+    const { timers, a, b, server } = setup();
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    b.network.joinQueue('en');
+    await timers.advanceAsync(5000);
+    expect(server.iceReports).toEqual([]);
   });
 
   it('the opponent leaves during the handshake: opponentLeft', async () => {

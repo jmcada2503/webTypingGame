@@ -1,4 +1,4 @@
-import { TransportError, type ConnectionRecord, type TransportErrorKind } from './errors';
+import { TransportError, type ConnectFailure, type ConnectionRecord, type IceCandidate, type IcePair, type IceReport } from './errors';
 import { DEFAULT_LINK_CONFIG, PeerLink, type LinkConfig } from './PeerLink';
 import { realTimers, type Timers } from './timers';
 
@@ -136,12 +136,13 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
     failure: null,
     browser: browserName(userAgent),
     candidates: { local: emptyCount(), remote: emptyCount() },
+    ice: null,
   };
 
   const pc = createConnection();
   const stops: Array<() => void> = [];
   let settled = false;
-  let fail!: (kind: TransportErrorKind) => void;
+  let fail!: (kind: ConnectFailure) => void;
 
   const done = new Promise<PeerConnection>((resolve, reject) => {
     const settle = () => {
@@ -153,8 +154,26 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
       if (settled) return;
       settle();
       record.failure = kind;
-      pc.close();
-      reject(new TransportError(kind, record));
+      const end = { fail: kind, ms: since(), ice: pc.iceConnectionState, gathering: pc.iceGatheringState };
+      // Read what ICE saw before closing (a closed connection has no stats), but never wait long for it.
+      let done = false;
+      const finish = (ice: IceReport | null) => {
+        if (done) return;
+        done = true;
+        stopWaiting();
+        record.ice = ice;
+        pc.close();
+        reject(new TransportError(kind, record));
+      };
+      const stopWaiting = timers.after(STATS_WAIT_MS, () => finish(null));
+      pc.getStats().then(
+        (stats) => {
+          const reports: RtcStatsReport[] = [];
+          stats.forEach((report) => reports.push(report));
+          finish(iceReportOf(reports, end));
+        },
+        () => finish(null),
+      );
     };
 
     const succeed = async (channel: RtcChannel) => {
@@ -242,7 +261,61 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
   return { done, abort: () => fail('aborted') };
 }
 
+/** How long a failure waits for `getStats()` before giving up on the ICE report. */
+const STATS_WAIT_MS = 1000;
+
 const emptyCount = () => ({ host: 0, srflx: 0, relay: 0 });
+
+// The backend's limits (infra/lambda/api/iceReport.ts): anything else would get the whole report refused.
+const MAX_ICE_CANDIDATES = 30;
+const MAX_ICE_PAIRS = 50;
+const ADDRESS = /^[A-Za-z0-9.:%-]{1,100}$/;
+const CANDIDATE_TYPES = ['host', 'srflx', 'prflx', 'relay'] as const;
+const PAIR_STATES = ['frozen', 'waiting', 'in-progress', 'failed', 'succeeded'] as const;
+const COUNT_MAX = 1_000_000;
+
+const oneOf = <T extends string>(values: readonly T[], v: unknown): T | null => (values.includes(v as T) ? (v as T) : null);
+const intIn = (v: unknown, max: number): number | null => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= max ? (v as number) : null);
+
+/** The ICE report from a `getStats()` dump: candidates and the pairs between them, cleaned to what the backend accepts. */
+export function iceReportOf(reports: RtcStatsReport[], end: Omit<IceReport, 'cands' | 'pairs'>): IceReport {
+  const cands: IceCandidate[] = [];
+  const index = new Map<string, number>();
+  for (const r of reports) {
+    if (r.type !== 'local-candidate' && r.type !== 'remote-candidate') continue;
+    const type = oneOf(CANDIDATE_TYPES, r.candidateType);
+    if (!type || cands.length >= MAX_ICE_CANDIDATES) continue;
+    const address = r.address ?? r.ip; // `ip` in older browsers
+    index.set(r.id, cands.length);
+    cands.push({
+      side: r.type === 'local-candidate' ? 'local' : 'remote',
+      type,
+      address: typeof address === 'string' && ADDRESS.test(address) ? address : null,
+      port: intIn(r.port, 65535),
+      protocol: oneOf(['udp', 'tcp'], r.protocol),
+    });
+  }
+  const pairs: IcePair[] = [];
+  for (const r of reports) {
+    if (r.type !== 'candidate-pair' || pairs.length >= MAX_ICE_PAIRS) continue;
+    const local = index.get(r.localCandidateId as string);
+    const remote = index.get(r.remoteCandidateId as string);
+    const state = oneOf(PAIR_STATES, r.state);
+    if (local === undefined || remote === undefined || !state) continue;
+    const count = (v: unknown) => intIn(v, COUNT_MAX) ?? 0;
+    pairs.push({
+      local,
+      remote,
+      state,
+      nominated: r.nominated === true,
+      requestsSent: count(r.requestsSent),
+      responsesReceived: count(r.responsesReceived),
+      requestsReceived: count(r.requestsReceived),
+      responsesSent: count(r.responsesSent),
+    });
+  }
+  return { ...end, cands, pairs };
+}
 
 /** Candidates in a description, by type (no trickle: they are all in it). No srflx = STUN didn't answer. */
 export function countCandidates(sdp: string | undefined) {

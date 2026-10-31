@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { parseIceReport } from "./iceReport";
 import type { Language, Match, MatchKind, Store } from "./types";
 
 /** A waiter or opponent who hasn't polled for this long is gone. */
@@ -9,6 +10,8 @@ const MAX_ATTEMPTS = 3;
 const TTL_SECONDS = 3600;
 /** Once both players are connected nothing more is needed from the item. */
 const DONE_TTL_SECONDS = 120;
+/** An ended match (with its offer, answer and ICE reports) stays this long, to debug failed connections. */
+const ENDED_TTL_SECONDS = 24 * 3600;
 export const MAX_SDP_BYTES = 8192;
 
 export class ApiError extends Error {
@@ -96,7 +99,7 @@ export class Matchmaker {
 
   async join(pid: string, matchId: string): Promise<MatchView> {
     const match = await this.store.get(matchId);
-    if (!match) throw new ApiError(404, "expired");
+    if (!match || match.status === "ended") throw new ApiError(404, "expired");
     if (match.guest === pid) return this.view(match, pid);
     if (match.host === pid) throw new ApiError(409, "own");
     if (match.guest || match.status === "paired") throw new ApiError(409, "full");
@@ -141,19 +144,36 @@ export class Matchmaker {
     return this.view(match, pid);
   }
 
-  /** Leaves quietly: a waiting host also takes their queue pointer; a paired match ends for both. */
+  /** Saves this player's ICE report (why the connection didn't open). Accepted on an ended match too. */
+  async ice(pid: string, matchId: string, report: unknown): Promise<void> {
+    const match = await this.store.get(matchId);
+    if (!match) throw new ApiError(404, "gone");
+    if (match.host !== pid && match.guest !== pid) throw new ApiError(403, "forbidden");
+    const saved = { ...parseIceReport(report), at: this.deps.now() };
+    await this.store.update(matchId, match.host === pid ? { hostIce: saved } : { guestIce: saved });
+  }
+
+  /**
+   * Leaves quietly: a waiting host also takes their queue pointer; a paired match ends for both. The item is
+   * kept (ended) for a day so a failed connection can be looked at; nobody can poll, join or pair with it.
+   */
   async leave(pid: string, matchId: string): Promise<void> {
     const match = await this.store.get(matchId);
-    if (!match || (match.host !== pid && match.guest !== pid)) return;
+    if (!match || match.status === "ended" || (match.host !== pid && match.guest !== pid)) return;
     if (match.status === "waiting" && match.kind === "public") await this.store.clearQueue(match.lang, matchId);
-    await this.store.delete(matchId);
+    await this.store.update(matchId, {
+      status: "ended",
+      endedBy: match.host === pid ? "host" : "guest",
+      endedAt: this.deps.now(),
+      ttl: this.ttl(ENDED_TTL_SECONDS),
+    });
   }
 
   // ---- internals ----
 
   private async mine(pid: string, matchId: string, consistent = true): Promise<Match> {
     const match = await this.store.get(matchId, consistent);
-    if (!match) throw new ApiError(404, "gone");
+    if (!match || match.status === "ended") throw new ApiError(404, "gone");
     if (match.host !== pid && match.guest !== pid) throw new ApiError(403, "forbidden");
     return match;
   }
@@ -181,7 +201,8 @@ export class Matchmaker {
     return {
       matchId: match.id,
       role,
-      status: match.status,
+      // Never `ended` here: every caller refuses an ended match before building a view.
+      status: match.status as MatchView["status"],
       kind: match.kind,
       lang: match.lang,
       listVersion: match.listVersion,

@@ -1,3 +1,5 @@
+import type { IceReport } from "./iceReport";
+
 export type Language = "en" | "es";
 export type MatchKind = "public" | "private";
 
@@ -9,7 +11,8 @@ export interface Match {
   /** The waiter: makes the WebRTC offer after pairing. Anonymous player ids. */
   host: string;
   guest?: string;
-  status: "waiting" | "paired";
+  /** `ended`: someone left. Kept a day for debugging connections, but over for everyone. */
+  status: "waiting" | "paired" | "ended";
   /** Hash of the word lists the host loaded; both players use it. */
   listVersion: string;
   /** Issued at pairing; each player's Attack words come from their own seed. */
@@ -22,6 +25,12 @@ export interface Match {
   guestSeen?: number;
   hostConnected?: boolean;
   guestConnected?: boolean;
+  /** Each player's view of a connection attempt that didn't open (`at`: when it was saved, ms). */
+  hostIce?: IceReport & { at: number };
+  guestIce?: IceReport & { at: number };
+  /** Who left first, and when (ms). Set once, when the match ends. */
+  endedBy?: "host" | "guest";
+  endedAt?: number;
   /** Epoch seconds. DynamoDB deletes lag, so this is cleanup only. */
   ttl: number;
 }

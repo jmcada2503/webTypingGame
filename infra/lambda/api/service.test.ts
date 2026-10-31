@@ -339,3 +339,130 @@ describe('connected and leaving', () => {
     await expect(t.mm.leave(PID.a, "nope")).resolves.toBeUndefined();
   });
 });
+
+describe('ended matches are kept for debugging, but are over', () => {
+  const DAY_SECONDS = 24 * 3600;
+
+  async function failedConnection() {
+    const t = setup();
+    const a = await t.mm.queue(PID.a, "en", VERSION);
+    await t.mm.queue(PID.b, "en", VERSION);
+    await t.mm.signal(PID.a, a.matchId, "offer", "v=0 offer");
+    await t.mm.signal(PID.b, a.matchId, "answer", "v=0 answer");
+    await t.mm.leave(PID.b, a.matchId); // the guest gave up (connection timeout)
+    return { t, id: a.matchId };
+  }
+
+  it('leaving keeps the item, with its offer and answer, for a day', async () => {
+    const { t, id } = await failedConnection();
+    const item = await t.store.get(id);
+    expect(item).toMatchObject({ status: "ended", endedBy: "guest", offer: "v=0 offer", answer: "v=0 answer" });
+    expect(item!.ttl).toBe(Math.floor(t.clock.now / 1000) + DAY_SECONDS);
+  });
+
+  it('an ended match is gone for polling, signaling and connecting', async () => {
+    const { t, id } = await failedConnection();
+    expect(await code(t.mm.poll(PID.a, id))).toMatchObject({ status: 404, code: "gone" });
+    expect(await code(t.mm.signal(PID.a, id, "offer", "v=0 again"))).toMatchObject({ status: 404, code: "gone" });
+    expect(await code(t.mm.connected(PID.a, id))).toMatchObject({ status: 404, code: "gone" });
+  });
+
+  it('leaving an ended match again changes nothing', async () => {
+    const { t, id } = await failedConnection();
+    t.clock.now += 60_000;
+    await t.mm.leave(PID.a, id);
+    expect(await t.store.get(id)).toMatchObject({ endedBy: "guest", endedAt: t.clock.now - 60_000 });
+  });
+
+  it('an ended private match link is "expired"', async () => {
+    const t = setup();
+    const made = await t.mm.createPrivate(PID.a, "en", VERSION);
+    await t.mm.leave(PID.a, made.matchId);
+    expect(await code(t.mm.join(PID.b, made.matchId))).toMatchObject({ status: 404, code: "expired" });
+  });
+
+  it('a waiter who left is never paired: the next searcher waits instead', async () => {
+    const t = setup();
+    const a = await t.mm.queue(PID.a, "en", VERSION);
+    await t.store.putQueue("en", a.matchId); // the pointer outlived the leave (race)
+    await t.mm.leave(PID.a, a.matchId);
+    await t.store.putQueue("en", a.matchId);
+    const b = await t.mm.queue(PID.b, "en", VERSION);
+    expect(b).toMatchObject({ role: "host", status: "waiting" });
+    expect(b.matchId).not.toBe(a.matchId);
+  });
+});
+
+describe('ICE reports: why a connection attempt failed', () => {
+  const report = () => ({
+    fail: "timeout",
+    ms: 10_000,
+    ice: "checking",
+    gathering: "complete",
+    cands: [
+      { side: "local", type: "host", address: "0a1b2c3d-1111-2222-3333-444455556666.local", port: 54321, protocol: "udp" },
+      { side: "local", type: "srflx", address: "203.0.113.7", port: 61000, protocol: "udp" },
+      { side: "remote", type: "srflx", address: "203.0.113.7", port: 62000, protocol: "udp" },
+    ],
+    pairs: [
+      { local: 0, remote: 2, state: "failed", nominated: false, requestsSent: 9, responsesReceived: 0, requestsReceived: 0, responsesSent: 0 },
+      { local: 1, remote: 2, state: "in-progress", nominated: false, requestsSent: 7, responsesReceived: 0, requestsReceived: 3, responsesSent: 3 },
+    ],
+  });
+
+  async function paired() {
+    const t = setup();
+    const a = await t.mm.queue(PID.a, "en", VERSION);
+    await t.mm.queue(PID.b, "en", VERSION);
+    return { t, id: a.matchId };
+  }
+
+  it('each player saves their own report on the match, with the time', async () => {
+    const { t, id } = await paired();
+    await t.mm.ice(PID.a, id, report());
+    t.clock.now += 500;
+    await t.mm.ice(PID.b, id, { ...report(), fail: "aborted" });
+    const item = await t.store.get(id);
+    expect(item!.hostIce).toEqual({ ...report(), at: t.clock.now - 500 });
+    expect(item!.guestIce).toMatchObject({ fail: "aborted", at: t.clock.now });
+  });
+
+  it('is accepted after the match ended (the player left right after failing)', async () => {
+    const { t, id } = await paired();
+    await t.mm.leave(PID.b, id);
+    await t.mm.ice(PID.a, id, report());
+    expect((await t.store.get(id))!.hostIce).toMatchObject({ fail: "timeout" });
+  });
+
+  it('refuses people who are not in the match, and unknown matches', async () => {
+    const { t, id } = await paired();
+    expect(await code(t.mm.ice(PID.c, id, report()))).toMatchObject({ status: 403 });
+    expect(await code(t.mm.ice(PID.a, "nope", report()))).toMatchObject({ status: 404, code: "gone" });
+  });
+
+  it('rejects anything that is not a well-formed report', async () => {
+    const { t, id } = await paired();
+    const bad = [
+      null,
+      "text",
+      { ...report(), fail: "boom" },
+      { ...report(), ms: -1 },
+      { ...report(), cands: "x" },
+      { ...report(), cands: Array.from({ length: 31 }, () => report().cands[0]) },
+      { ...report(), cands: [{ ...report().cands[0], address: "<script>" }] },
+      { ...report(), pairs: [{ ...report().pairs[0], state: "weird" }] },
+      { ...report(), pairs: [{ ...report().pairs[0], local: 3 }] }, // no such candidate
+      { ...report(), pairs: Array.from({ length: 51 }, () => report().pairs[0]) },
+    ];
+    for (const value of bad) expect(await code(t.mm.ice(PID.a, id, value)), JSON.stringify(value)?.slice(0, 80)).toMatchObject({ status: 400 });
+    expect((await t.store.get(id))!.hostIce).toBeUndefined();
+  });
+
+  it('keeps only the fields it knows', async () => {
+    const { t, id } = await paired();
+    await t.mm.ice(PID.a, id, { ...report(), extra: "x", cands: [{ ...report().cands[0], foo: 1 }], pairs: [] });
+    const saved = (await t.store.get(id))!.hostIce as unknown as Record<string, unknown>;
+    expect(saved.extra).toBeUndefined();
+    expect((saved.cands as Record<string, unknown>[])[0].foo).toBeUndefined();
+  });
+});

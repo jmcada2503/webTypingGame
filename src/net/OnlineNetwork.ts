@@ -286,6 +286,8 @@ export class OnlineNetwork implements FlowNetwork {
       (connection) => this.opened(a, connection),
       (error: unknown) => {
         if (error instanceof TransportError) {
+          // Saved on the match even when we gave up on purpose: the host is aborted when the guest leaves.
+          if (error.record.ice) this.api.ice(a.matchId!, error.record.ice).catch(() => {});
           if (error.kind === 'aborted') return;
           this.config.onRecord?.(error.record, { matchId: a.matchId!, kind: a.view!.kind });
         }

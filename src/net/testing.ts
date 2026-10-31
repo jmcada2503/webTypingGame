@@ -145,6 +145,8 @@ export interface FakeRtcOptions {
   /** The ICE connection state the pair ends in. */
   outcome?: 'connected' | 'failed' | 'never';
   pairType?: 'host' | 'srflx' | 'relay';
+  /** `getStats()` never answers (a stuck browser). */
+  statsHang?: boolean;
 }
 
 /** Hands out the two ends of one fake WebRTC connection; the end that creates the data channel is the host's. */
@@ -158,7 +160,7 @@ export class FakeRtc {
     readonly net: FakeNetwork,
     options: FakeRtcOptions = {},
   ) {
-    this.options = { gatherMs: 300, connectMs: 400, outcome: 'connected', pairType: 'srflx', ...options };
+    this.options = { gatherMs: 300, connectMs: 400, outcome: 'connected', pairType: 'srflx', statsHang: false, ...options };
   }
 
   readonly createConnection = (): RtcConnection => {
@@ -236,12 +238,28 @@ class FakeRtcEnd implements RtcConnection {
   }
 
   async getStats() {
-    const { pairType } = this.rtc.options;
+    // Like a browser: a closed connection has no stats.
+    if (this.closed) throw new Error('InvalidStateError: the connection is closed');
+    const { pairType, statsHang } = this.rtc.options;
+    if (statsHang) return new Promise<never>(() => {});
+    const ice = this.iceConnectionState;
+    const state = ice === 'connected' ? 'succeeded' : ice === 'failed' ? 'failed' : 'in-progress';
     const reports: RtcStatsReport[] = [
       { id: 't', type: 'transport', selectedCandidatePairId: 'p' },
-      { id: 'p', type: 'candidate-pair', localCandidateId: 'l', remoteCandidateId: 'r' },
-      { id: 'l', type: 'local-candidate', candidateType: pairType },
-      { id: 'r', type: 'remote-candidate', candidateType: 'host' },
+      {
+        id: 'p',
+        type: 'candidate-pair',
+        localCandidateId: 'l',
+        remoteCandidateId: 'r',
+        state,
+        nominated: state === 'succeeded',
+        requestsSent: 5,
+        responsesReceived: state === 'succeeded' ? 5 : 0,
+        requestsReceived: 2,
+        responsesSent: 2,
+      },
+      { id: 'l', type: 'local-candidate', candidateType: pairType, address: '203.0.113.1', port: 50000 + this.index, protocol: 'udp' },
+      { id: 'r', type: 'remote-candidate', candidateType: 'host', address: 'abc.local', port: 60000, protocol: 'udp' },
     ];
     return { forEach: (cb: (report: RtcStatsReport) => void) => reports.forEach(cb) };
   }

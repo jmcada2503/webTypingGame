@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TransportError } from './errors';
-import { browserName, connectPeer, type PeerConnection } from './rtc';
+import { browserName, connectPeer, iceReportOf, type PeerConnection } from './rtc';
 import { FakeNetwork, FakeRtc, FakeTimers, signalingPair, type FakeRtcOptions } from './testing';
 
 function setup(options: FakeRtcOptions = {}) {
@@ -145,5 +145,81 @@ describe('countCandidates', () => {
     ].join('\r\n');
     expect(countCandidates(sdp)).toEqual({ host: 2, srflx: 1, relay: 1 });
     expect(countCandidates(undefined)).toEqual({ host: 0, srflx: 0, relay: 0 });
+  });
+});
+
+describe('ICE report on failure', () => {
+  it('a timed-out attempt carries every candidate and pair ICE tried', async () => {
+    const { timers, hostResult } = setup({ outcome: 'never' });
+    await timers.advanceAsync(10_100);
+    const { record } = (await hostResult) as TransportError;
+    expect(record.ice).toEqual({
+      fail: 'timeout',
+      ms: 10_000,
+      ice: 'checking',
+      gathering: 'complete',
+      cands: [
+        { side: 'local', type: 'srflx', address: '203.0.113.1', port: 50000, protocol: 'udp' },
+        { side: 'remote', type: 'host', address: 'abc.local', port: 60000, protocol: 'udp' },
+      ],
+      pairs: [
+        { local: 0, remote: 1, state: 'in-progress', nominated: false, requestsSent: 5, responsesReceived: 0, requestsReceived: 2, responsesSent: 2 },
+      ],
+    });
+  });
+
+  it('an aborted attempt (the player left) carries it too', async () => {
+    const { timers, host, hostResult } = setup({ outcome: 'never' });
+    await timers.advanceAsync(3000);
+    host.abort();
+    await timers.advanceAsync(10);
+    expect(((await hostResult) as TransportError).record.ice).toMatchObject({ fail: 'aborted', ms: 3000 });
+  });
+
+  it('a successful connection has none', async () => {
+    const { timers, hostResult } = setup();
+    await timers.advanceAsync(3000);
+    expect(((await hostResult) as PeerConnection).record.ice).toBeNull();
+  });
+
+  it('a browser that never answers for stats does not hold up the failure', async () => {
+    const { timers, hostResult } = setup({ outcome: 'never', statsHang: true });
+    await timers.advanceAsync(10_000 + 1100);
+    const error = (await hostResult) as TransportError;
+    expect(error.kind).toBe('timeout');
+    expect(error.record.ice).toBeNull();
+  });
+});
+
+describe('iceReportOf', () => {
+  const stats = (reports: Record<string, unknown>[]) => reports.map((r, i) => ({ id: `s${i}`, type: 'x', ...r }));
+
+  it('keeps only candidates and pairs the backend accepts', () => {
+    const report = iceReportOf(
+      stats([
+        { id: 'a', type: 'local-candidate', candidateType: 'host', address: 'abc.local', port: 1, protocol: 'udp' },
+        { id: 'b', type: 'remote-candidate', candidateType: 'weird', address: '1.2.3.4', port: 2, protocol: 'udp' },
+        { id: 'c', type: 'remote-candidate', candidateType: 'srflx', address: '<bad>', port: 99999, protocol: 'sctp' },
+        { type: 'candidate-pair', localCandidateId: 'a', remoteCandidateId: 'b', state: 'failed' }, // b was dropped
+        { type: 'candidate-pair', localCandidateId: 'a', remoteCandidateId: 'c', state: 'odd' }, // unknown state
+        { type: 'candidate-pair', localCandidateId: 'a', remoteCandidateId: 'c', state: 'failed', requestsSent: -1 },
+      ]),
+      { fail: 'timeout', ms: 5, ice: 'checking', gathering: 'gathering' },
+    );
+    expect(report.cands).toEqual([
+      { side: 'local', type: 'host', address: 'abc.local', port: 1, protocol: 'udp' },
+      { side: 'remote', type: 'srflx', address: null, port: null, protocol: null },
+    ]);
+    expect(report.pairs).toEqual([
+      { local: 0, remote: 1, state: 'failed', nominated: false, requestsSent: 0, responsesReceived: 0, requestsReceived: 0, responsesSent: 0 },
+    ]);
+  });
+
+  it('caps the lists at the backend limits (30 candidates, 50 pairs)', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ id: `c${i}`, type: 'local-candidate', candidateType: 'host' }));
+    const pairs = Array.from({ length: 60 }, () => ({ type: 'candidate-pair', localCandidateId: 'c0', remoteCandidateId: 'c1', state: 'waiting' }));
+    const report = iceReportOf(stats([...many, ...pairs]), { fail: 'timeout', ms: 0, ice: 'new', gathering: 'new' });
+    expect(report.cands).toHaveLength(30);
+    expect(report.pairs).toHaveLength(50);
   });
 });

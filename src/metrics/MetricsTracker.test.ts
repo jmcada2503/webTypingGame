@@ -133,11 +133,14 @@ describe('Practice', () => {
 });
 
 describe('connection attempts', () => {
-  it('a failure keeps its ICE timeline and the candidates each side offered', () => {
+  it('a failure keeps its ICE timeline and the candidates each side offered, but never the addresses', () => {
     const { tracker, reports } = setup();
     const record: ConnectionRecord = {
       role: 'guest', iceTimeline: [{ atMs: 300, state: 'checking' }, { atMs: 9000, state: 'failed' }], gatherMs: 200, pairType: null, connectMs: null,
       failure: 'iceFailed', browser: 'Safari', candidates: { local: { host: 2, srflx: 0, relay: 0 }, remote: { host: 1, srflx: 1, relay: 0 } },
+      // The IPs go to the match item (a day), never to the logs (months).
+      ice: { fail: 'iceFailed', ms: 9000, ice: 'failed', gathering: 'complete', pairs: [],
+        cands: [{ side: 'remote', type: 'srflx', address: '203.0.113.7', port: 5000, protocol: 'udp' }] },
     };
     tracker.connection(record, { matchId: 'abc123', kind: 'private' });
     expect(reports).toEqual([

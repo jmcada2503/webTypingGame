@@ -132,3 +132,16 @@ describe("POST /api/report", () => {
     expect((await route({ method: "GET", path: "/api/report", query: {} , body: undefined })).status).toBe(405);
   });
 });
+
+describe('ICE report over HTTP', () => {
+  it('a player saves why their connection failed, even after the match ended', async () => {
+    const { call } = setup();
+    const id = ((await call("POST", "/api/queue", { pid: A, lang: "en", listVersion: VERSION })).body as { matchId: string }).matchId;
+    await call("POST", "/api/queue", { pid: B, lang: "en", listVersion: VERSION });
+    expect((await call("POST", `/api/match/${id}/leave`, { pid: B })).status).toBe(200);
+    const report = { fail: "timeout", ms: 10000, ice: "checking", gathering: "complete", cands: [], pairs: [] };
+    expect(await call("POST", `/api/match/${id}/ice`, { pid: A, report })).toEqual({ status: 200, body: { ok: true } });
+    expect((await call("POST", `/api/match/${id}/ice`, { pid: A, report: { ...report, fail: "x" } })).status).toBe(400);
+    expect((await call("GET", `/api/match/${id}/ice`, undefined, { pid: A })).status).toBe(405);
+  });
+});
