@@ -2,8 +2,11 @@ import { Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Architecture, FunctionUrlAuthType, Runtime, type FunctionUrl } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { CfnQueryDefinition, LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
+import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
+import { TURN_PARAMS } from "../lambda/api/turn";
 import { METRICS_QUERIES } from "./metrics-queries";
 
 /** Rate cap: more concurrent requests than this get throttled ("Busy, try again"). */
@@ -82,6 +85,22 @@ export class BackendStack extends Stack {
     this.matches.grantReadWriteData(this.api);
     this.presence.grantReadWriteData(this.api);
     this.matchDetails.grantWriteData(this.api);
+
+    // TURN relay (Cloudflare): the key id and its API token are set by hand (a SecureString can't be made
+    // here); without them the game stays STUN-only. The switch is the kill switch: set it to anything but
+    // `on` (`aws ssm put-parameter --name /typing-game/turn/enabled --value off --overwrite`) and no new relay
+    // logins go out within a minute. Deploys leave a hand-set value alone while this one doesn't change.
+    new StringParameter(this, "TurnEnabled", {
+      parameterName: TURN_PARAMS.enabled,
+      stringValue: "on",
+      description: "TURN relay switch: on = paired players get Cloudflare relay logins",
+    });
+    this.api.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["ssm:GetParameters"],
+        resources: Object.values(TURN_PARAMS).map((name) => this.formatArn({ service: "ssm", resource: "parameter", resourceName: name.slice(1) })),
+      }),
+    );
 
     for (const [name, queryString] of Object.entries(METRICS_QUERIES)) {
       new CfnQueryDefinition(this, `Query${name.replace(/[^A-Za-z0-9]/g, "")}`, {

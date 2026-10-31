@@ -1,3 +1,4 @@
+import { SSMClient } from "@aws-sdk/client-ssm";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { DynamoDetailsStore } from "./dynamoDetailsStore";
 import { DynamoPresenceStore } from "./dynamoPresenceStore";
@@ -7,6 +8,7 @@ import { MemoryDetailsStore, Metrics } from "./metrics";
 import { MemoryPresenceStore, Presence } from "./presence";
 import { createRouter } from "./routes";
 import { Matchmaker } from "./service";
+import { CloudflareTurn, NO_TURN, cachedConfig, ssmTurnConfig } from "./turn";
 
 /** Requests are small (a pid, a language, at most one 8 KB description or one Match report). */
 const MAX_BODY_BYTES = 16 * 1024;
@@ -21,8 +23,14 @@ const matches = process.env.MATCHES_TABLE;
 const presence = process.env.PRESENCE_TABLE;
 const details = process.env.MATCH_DETAILS_TABLE;
 const sampleRate = Number(process.env.METRICS_SAMPLE_RATE ?? "1");
+/** A relay login outlasts any session (an active relay needs it to stay up); rematches can run for hours. */
+const TURN_TTL_SECONDS = 6 * 3600;
+// In the cloud the relay is set up through SSM (`TURN_PARAMS`); locally there is none.
+const turn = matches
+  ? new CloudflareTurn({ config: cachedConfig(ssmTurnConfig(new SSMClient({}))), log: logLine, ttlSeconds: TURN_TTL_SECONDS })
+  : NO_TURN;
 const route = createRouter(
-  new Matchmaker(matches ? new DynamoStore(matches) : new MemoryStore()),
+  new Matchmaker(matches ? new DynamoStore(matches) : new MemoryStore(), { turn }),
   new Presence(presence ? new DynamoPresenceStore(presence) : new MemoryPresenceStore(), { log: logLine }),
   new Metrics({
     store: details ? new DynamoDetailsStore(details) : new MemoryDetailsStore(),

@@ -3,6 +3,7 @@ import type { Language, NetworkEvent } from '../flow/types';
 import { ApiError, type MatchApi, type MatchView } from './api';
 import type { ConnectionRecord, IceReport } from './errors';
 import { OnlineNetwork } from './OnlineNetwork';
+import { STUN_SERVERS } from './rtc';
 import { FakeNetwork, FakeRtc, FakeTimers, type FakeRtcOptions } from './testing';
 
 type Item = {
@@ -26,6 +27,11 @@ class FakeServer {
   /** Makes the next N calls of this player fail like a network error. */
   failing = new Map<string, number>();
   busy = 0;
+  /** Relay servers handed out, and how long each player's answer takes (ms; Infinity = never; -1 = fails). */
+  relay: RTCIceServer[] = [{ urls: ['turn:turn.example:3478?transport=udp'], username: 'u', credential: 'c' }];
+  turnDelay = new Map<string, number>();
+  turnAsked: string[] = [];
+  timers?: FakeTimers;
   /** ICE reports received, in order. */
   iceReports: Array<{ pid: string; id: string; report: IceReport }> = [];
 
@@ -90,6 +96,15 @@ class FakeServer {
         m.connected.add(pid);
         return this.view(m, pid);
       },
+      turn: async (id) => {
+        await guard();
+        get(id);
+        this.turnAsked.push(pid);
+        const delay = this.turnDelay.get(pid) ?? 0;
+        if (delay < 0) throw new ApiError(500, 'internal');
+        if (delay > 0) await new Promise<void>((resolve) => (Number.isFinite(delay) ? this.timers!.after(delay, resolve) : undefined));
+        return this.relay;
+      },
       ice: async (id, report) => {
         await guard();
         this.iceReports.push({ pid, id, report });
@@ -133,21 +148,30 @@ function setup(rtcOptions: FakeRtcOptions = {}, versions: { a?: string; b?: stri
   const net = new FakeNetwork(timers);
   const rtc = new FakeRtc(net, rtcOptions);
   const server = new FakeServer();
+  server.timers = timers;
   const records: ConnectionRecord[] = [];
+  /** The ICE servers each new connection was made with, in order. */
+  const configs: RTCIceServer[][] = [];
   const player = (pid: string, version: string) => {
     const network = new OnlineNetwork({
       api: server.api(pid),
       timers,
       listVersion: () => version,
       inviteLink: (id) => `https://game.test/#/m/${id}`,
-      connectOptions: { createConnection: rtc.createConnection, userAgent: 'Chrome/130' },
+      connectOptions: {
+        createConnection: (servers: RTCIceServer[]) => {
+          configs.push(servers);
+          return rtc.createConnection();
+        },
+        userAgent: 'Chrome/130',
+      },
       onRecord: (r) => records.push(r),
     });
     const events: Array<NetworkEvent & { at: number }> = [];
     network.onEvent((e) => events.push({ ...e, at: timers.now() }));
     return { network, events, types: () => events.map((e) => e.type) };
   };
-  return { timers, net, rtc, server, records, a: player('player-a', versions.a ?? 'v1'), b: player('player-b', versions.b ?? 'v1') };
+  return { timers, net, rtc, server, records, configs, a: player('player-a', versions.a ?? 'v1'), b: player('player-b', versions.b ?? 'v1') };
 }
 
 describe('a Public match', () => {
@@ -292,6 +316,41 @@ describe('when it goes wrong', () => {
     b.network.leave();
     await timers.advanceAsync(3000);
     expect(server.iceReports.find((r) => r.pid === 'player-a')?.report).toMatchObject({ fail: 'aborted' });
+  });
+
+  it('both players connect with the relay servers the backend gives them', async () => {
+    const { timers, a, b, server, configs } = setup();
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    b.network.joinQueue('en');
+    await timers.advanceAsync(5000);
+    expect(a.types()).toEqual(['matched', 'connected']);
+    expect(server.turnAsked.sort()).toEqual(['player-a', 'player-b']);
+    expect(configs).toEqual([[...STUN_SERVERS, ...server.relay], [...STUN_SERVERS, ...server.relay]]);
+  });
+
+  it('no relay when asking for it fails or takes over a second: they still connect, STUN only', async () => {
+    const { timers, a, b, server, configs } = setup();
+    server.turnDelay.set('player-a', -1);
+    server.turnDelay.set('player-b', Infinity);
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    b.network.joinQueue('en');
+    await timers.advanceAsync(6000);
+    expect(a.types()).toEqual(['matched', 'connected']);
+    expect(b.types()).toEqual(['matched', 'connected']);
+    expect(configs).toEqual([STUN_SERVERS, STUN_SERVERS]);
+  });
+
+  it('an offer that arrives while the guest is still asking for relay servers is not lost', async () => {
+    const { timers, a, b, server } = setup();
+    server.turnDelay.set('player-b', 950);
+    a.network.joinQueue('en'); // the host's first poll is at 2 s
+    await timers.advanceAsync(1950);
+    b.network.joinQueue('en'); // the guest pairs just before it, then waits ~1 s for the relay
+    await timers.advanceAsync(6000);
+    expect(a.types()).toEqual(['matched', 'connected']);
+    expect(b.types()).toEqual(['matched', 'connected']);
   });
 
   it('a successful connection saves no ICE report', async () => {

@@ -45,6 +45,8 @@ export interface OnlineNetworkOptions {
 
 /** Polls in a row that may fail before the line to the backend counts as lost. */
 const MAX_POLL_FAILURES = 3;
+/** How long the handshake waits for the relay servers before connecting without them. */
+const RELAY_WAIT_MS = 1000;
 /** The host waits this long at most for a first clock measurement before setting the start. */
 const MAX_SYNC_WAIT_MS = 3000;
 
@@ -243,7 +245,8 @@ export class OnlineNetwork implements FlowNetwork {
     if (a.handshaking) {
       if (view.opponentGone) return this.gone(a);
       const sdp = a.role === 'guest' ? view.offer : view.answer;
-      if (sdp && !a.delivered.has(sdp)) {
+      // Nobody listening yet (still asking for relay servers): the next poll delivers it.
+      if (sdp && !a.delivered.has(sdp) && a.signalHandlers.size > 0) {
         a.delivered.add(sdp);
         const message: SignalMessage = { type: a.role === 'guest' ? 'offer' : 'answer', sdp };
         a.signalHandlers.forEach((h) => h(message));
@@ -266,8 +269,32 @@ export class OnlineNetwork implements FlowNetwork {
   private handshake(a: Attempt) {
     a.handshaking = true;
     this.emit({ type: 'matched' });
+    void this.relayServers(a).then((iceServers) => {
+      if (!a.cancelled) this.startConnecting(a, iceServers);
+    });
+  }
+
+  /** The match's TURN relay servers, or none if the backend fails or is slow: a relay is a bonus, never a wait. */
+  private relayServers(a: Attempt): Promise<RTCIceServer[]> {
+    return new Promise((resolve) => {
+      const stop = this.timers.after(RELAY_WAIT_MS, () => resolve([]));
+      this.api.turn(a.matchId!).then(
+        (servers) => {
+          stop();
+          resolve(servers);
+        },
+        () => {
+          stop();
+          resolve([]);
+        },
+      );
+    });
+  }
+
+  private startConnecting(a: Attempt, iceServers: RTCIceServer[]) {
     a.pending = this.connect({
       ...this.config.connectOptions,
+      iceServers,
       role: a.role!,
       timers: this.timers,
       signaling: {

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { parseIceReport } from "./iceReport";
+import { NO_TURN, type Turn, type TurnServer } from "./turn";
 import type { Language, Match, MatchKind, Store } from "./types";
 
 /** A waiter or opponent who hasn't polled for this long is gone. */
@@ -43,6 +44,8 @@ export interface MatchmakerDeps {
   now: () => number;
   newId: () => string;
   random32: () => number;
+  /** Relay logins (none by default). */
+  turn: Turn;
 }
 
 const ID_ALPHABET = "abcdefghjkmnpqrstvwxyz23456789";
@@ -50,6 +53,7 @@ const defaults: MatchmakerDeps = {
   now: () => Date.now(),
   newId: () => Array.from(randomBytes(12), (b) => ID_ALPHABET[b % ID_ALPHABET.length]).join(""),
   random32: () => randomBytes(4).readUInt32BE(),
+  turn: NO_TURN,
 };
 
 export class Matchmaker {
@@ -142,6 +146,14 @@ export class Matchmaker {
     if (match.hostConnected && match.guestConnected) fields.ttl = match.ttl = this.ttl(DONE_TTL_SECONDS);
     await this.store.update(matchId, fields);
     return this.view(match, pid);
+  }
+
+  /** TURN relay logins, only for a player of a live, paired match: relayed bytes are billed. */
+  async turn(pid: string, matchId: string): Promise<{ iceServers: TurnServer[] }> {
+    // Consistent read: the guest asks right after pairing, a stale read could still say "waiting".
+    const match = await this.mine(pid, matchId);
+    if (match.status !== "paired") throw new ApiError(409, "not_paired");
+    return { iceServers: await this.deps.turn.servers() };
   }
 
   /** Saves this player's ICE report (why the connection didn't open). Accepted on an ended match too. */

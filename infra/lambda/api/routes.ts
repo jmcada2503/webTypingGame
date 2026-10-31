@@ -103,7 +103,7 @@ async function dispatch(mm: Matchmaker, presence: Presence | undefined, { method
     return ok(await mm.createPrivate(pid(b.pid), lang(b.lang), listVersion(b.listVersion)));
   }
 
-  const match = /^\/api\/match\/([^/]+)(?:\/(join|signal|connected|ice|leave))?$/.exec(path);
+  const match = /^\/api\/match\/([^/]+)(?:\/(join|signal|connected|ice|turn|leave))?$/.exec(path);
   if (!match) throw new ApiError(404, "not_found");
   const id = matchId(match[1]);
   switch (match[2]) {
@@ -124,6 +124,9 @@ async function dispatch(mm: Matchmaker, presence: Presence | undefined, { method
     case "connected":
       only("POST");
       return ok(await mm.connected(pid(fields(body).pid), id));
+    case "turn":
+      only("POST");
+      return ok(await mm.turn(pid(fields(body).pid), id));
     case "ice": {
       only("POST");
       const b = fields(body);

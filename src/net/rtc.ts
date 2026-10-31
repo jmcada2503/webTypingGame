@@ -34,8 +34,8 @@ export const STUN_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
 ];
 
-const browserConnection = (): RtcConnection =>
-  new RTCPeerConnection({ iceServers: STUN_SERVERS }) as unknown as RtcConnection;
+const browserConnection = (iceServers: RTCIceServer[]): RtcConnection =>
+  new RTCPeerConnection({ iceServers }) as unknown as RtcConnection;
 
 /** A line of text messages to the opponent. */
 export interface Wire {
@@ -87,7 +87,9 @@ export interface ConnectOptions {
   role: 'host' | 'guest';
   signaling: Signaling;
   timers?: Timers;
-  createConnection?: () => RtcConnection;
+  /** TURN relay servers, used next to the STUN ones: ICE only relays when no direct path works. */
+  iceServers?: RTCIceServer[];
+  createConnection?: (iceServers: RTCIceServer[]) => RtcConnection;
   /** Give up on connecting after this long. */
   timeoutMs?: number;
   /** Stop waiting for candidate gathering after this long and send what we have (no trickle). */
@@ -118,6 +120,7 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
     role,
     signaling,
     timers = realTimers,
+    iceServers = [],
     createConnection = browserConnection,
     timeoutMs = 10_000,
     iceGatherMs = 1500,
@@ -139,7 +142,7 @@ export function connectPeer(options: ConnectOptions): PendingConnection {
     ice: null,
   };
 
-  const pc = createConnection();
+  const pc = createConnection([...STUN_SERVERS, ...iceServers]);
   const stops: Array<() => void> = [];
   let settled = false;
   let fail!: (kind: ConnectFailure) => void;

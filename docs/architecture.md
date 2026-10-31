@@ -138,7 +138,7 @@ Tab in the menu moves between the two addresses without reloading (`src/app/lang
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,
-`POST match/{id}/ice`, `POST match/{id}/leave`, `POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
+`POST match/{id}/ice`, `POST match/{id}/turn`, `POST match/{id}/leave`, `POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
 Matchmaking and signaling live in `infra/lambda/api/` as a `Matchmaker` over a small atomic `Store` (in-memory for
 tests and local dev, DynamoDB conditional writes in the cloud). Players are anonymous ids (`pid`) in the body or the
 `pid` query of `GET match/{id}`; the host's word-list version wins at pairing; a waiter or opponent who hasn't polled
@@ -189,8 +189,16 @@ The limit lives in one SSM parameter; `guardrails:limit <usd> [--resume]` update
 alarm, `guardrails:resume` lifts (refused while the estimate is still over the trip point). The client
 treats a missing flag as open and two failed reads in a row as resting.
 
-**External STUN.** Cloudflare + Google, both free. TURN is deliberately omitted; if connection metrics
-show frequent P2P failures, add TURN or a WebSocket fallback later (fog on the map).
+**External STUN + TURN relay.** STUN: Cloudflare + Google, both free. TURN: Cloudflare Realtime TURN, the
+fallback when no direct path works. Measured case: two computers on the same Wi-Fi behind a router with no
+hairpin NAT and no mDNS between them (each side's `.local` name never resolved, 0 of ~400 srflx checks
+arrived). ICE still prefers host and srflx, so the relay only carries those matches. After pairing each player
+asks `POST match/{id}/turn` (paired, live match only) for a login (6 h TTL: an active relay needs it to stay
+up); the Lambda mints it with Cloudflare's `generate-ice-servers` (port-53 URLs dropped, browsers block them).
+The handshake waits at most 1 s for it, then connects STUN-only. Billing: Cloudflare egress, 1,000 GB/month
+free then $0.05/GB (a match is well under 1 MB), with no hard cap, so: SSM `/typing-game/turn/key-id`,
+`/typing-game/turn/api-token` (SecureString, set by hand) and `/typing-game/turn/enabled` (kill switch: anything
+but `on` stops new logins within a minute, cached 60 s). Missing parameters or a failing Cloudflare = no relay.
 
 ## Key flows
 
@@ -225,7 +233,7 @@ Rematch reuses the open channel and the same seeds (`i` continues) — it works 
 
 | Concern | Choice | Hard $0 ceiling? |
 |---|---|---|
-| In-Match traffic | P2P WebRTC (no AWS per-message cost) | yes (STUN free) |
+| In-Match traffic | P2P WebRTC (no AWS per-message cost) | STUN free; TURN relay 1,000 GB/mo free, no hard cap (SSM switch) |
 | Lambda | Function URL, no extra charge; always-free 1M req/mo | within free tier |
 | DynamoDB | provisioned 25/25 (free), shared per region | yes — throttles instead of billing |
 | Static + edge | S3 + CloudFront pay-as-you-go (10M req/mo free) | no, bounded by guardrails |
@@ -238,5 +246,5 @@ guardrails are the only cap.
 
 ## Out of scope
 
-Accounts, saved progress/stats, rankings; custom domain; staging environment; TURN/WebSocket fallback
+Accounts, saved progress/stats, rankings; custom domain; staging environment; WebSocket fallback
 (revisited only if metrics demand it).
