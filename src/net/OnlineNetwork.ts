@@ -270,7 +270,14 @@ export class OnlineNetwork implements FlowNetwork {
     a.handshaking = true;
     this.emit({ type: 'matched' });
     void this.relayServers(a).then((iceServers) => {
-      if (!a.cancelled) this.startConnecting(a, iceServers);
+      if (a.cancelled) return;
+      try {
+        this.startConnecting(a, iceServers);
+      } catch (error) {
+        // No WebRTC in this browser (or it refused the configuration): say so instead of hanging on "connecting".
+        this.log({ event: 'connect_failed', reason: error instanceof Error ? error.name : String(error) });
+        this.emit({ type: 'connectFailed' });
+      }
     });
   }
 
