@@ -47,6 +47,14 @@ describe('createApi', () => {
     expect(JSON.parse(calls[2].init.body as string)).toMatchObject({ type: 'offer', sdp: 'sdp' });
   });
 
+  it('saves an ICE report on the match', async () => {
+    const { calls, api } = recording();
+    const report = { fail: 'timeout' as const, ms: 10_000, ice: 'checking', gathering: 'complete', cands: [], pairs: [] };
+    await api.ice('m1', report);
+    expect(calls[0].url).toBe('/api/match/m1/ice');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ pid: PID, report });
+  });
+
   it('turns refusals into an ApiError with the backend code', async () => {
     const { api } = recording(409, { error: 'full' });
     const error = await api.join('m1').catch((e: unknown) => e);

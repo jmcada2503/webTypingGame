@@ -22,6 +22,46 @@ export interface ConnectionRecord {
   browser: string;
   /** Candidates each side offered, by type: tells "STUN blocked" (no srflx) from "no path between them". */
   candidates: { local: CandidateCount; remote: CandidateCount };
+  /** What ICE saw when the attempt failed (null on success, or if the browser wouldn't say). Holds IPs. */
+  ice: IceReport | null;
+}
+
+/** The ways a connection attempt can end before the channel opens. */
+export type ConnectFailure = Extract<TransportErrorKind, 'timeout' | 'iceFailed' | 'signalingLost' | 'aborted'>;
+
+/**
+ * Why a connection attempt didn't open, from `getStats()`: every candidate (address) both sides had and every
+ * pair tried between them. Saved on the match (mirrors `infra/lambda/api/iceReport.ts`).
+ */
+export interface IceReport {
+  fail: ConnectFailure;
+  /** Milliseconds from the start of the attempt. */
+  ms: number;
+  ice: string;
+  gathering: string;
+  cands: IceCandidate[];
+  /** `local` and `remote` are indexes into `cands`. */
+  pairs: IcePair[];
+}
+
+export interface IceCandidate {
+  side: 'local' | 'remote';
+  type: 'host' | 'srflx' | 'prflx' | 'relay';
+  /** IP, or an mDNS `.local` name (Chrome hides local IPs). */
+  address: string | null;
+  port: number | null;
+  protocol: 'udp' | 'tcp' | null;
+}
+
+export interface IcePair {
+  local: number;
+  remote: number;
+  state: 'frozen' | 'waiting' | 'in-progress' | 'failed' | 'succeeded';
+  nominated: boolean;
+  requestsSent: number;
+  responsesReceived: number;
+  requestsReceived: number;
+  responsesSent: number;
 }
 
 export interface CandidateCount {

@@ -138,7 +138,7 @@ Tab in the menu moves between the two addresses without reloading (`src/app/lang
 
 **`api` Lambda.** All routes behind one Lambda (warmer, cheaper): `POST queue`, `POST match`,
 `POST match/{id}/join`, `GET match/{id}`, `POST match/{id}/signal`, `POST match/{id}/connected`,
-`POST match/{id}/leave`, `POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
+`POST match/{id}/ice`, `POST match/{id}/leave`, `POST presence`, `GET online`, `POST report`. Reserved concurrency 10–20 doubles as the rate cap.
 Matchmaking and signaling live in `infra/lambda/api/` as a `Matchmaker` over a small atomic `Store` (in-memory for
 tests and local dev, DynamoDB conditional writes in the cloud). Players are anonymous ids (`pid`) in the body or the
 `pid` query of `GET match/{id}`; the host's word-list version wins at pairing; a waiter or opponent who hasn't polled
@@ -147,6 +147,11 @@ for 10 s is gone (polls write liveness at most every 4 s). Errors are `{error}` 
 
 **DynamoDB** (provisioned 25/25 in total, always-free, shared per region; `matches` has 10/10):
 - `matches` — `Q#<lang>` single pointer (≤1 waiter/language) + `M#<id>` match items (seeds, SDP, status, `*Seen`).
+  `leave` doesn't delete the item: it becomes `ended` (`endedBy`, `endedAt`) with a 1-day TTL, and every route
+  treats an ended match as gone (`gone`/`expired`, never queued or claimed). Kept to debug failed connections:
+  when an attempt fails or is aborted each browser saves its `getStats()` view on it (`POST match/{id}/ice` →
+  `hostIce`/`guestIce`: every candidate with its address, every pair tried with its checks). These hold IPs,
+  which is why they live a day on the item and never go to the logs.
 - `presence` — `P#<lang>#<60s bucket>` counters (2 R / 3 W); online = last complete bucket. Every open tab
   (`src/net/presence.ts`) beats once per wall-clock window at a fixed random offset (2–55 s in), which also keeps
   `api` warm. Above 50 tabs online it's **sampled**: `GET online` publishes `sample = 50 / total`, each tab beats

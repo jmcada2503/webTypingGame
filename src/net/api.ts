@@ -1,4 +1,5 @@
 import type { Language } from '../flow/types';
+import type { IceReport } from './errors';
 
 /** What the backend shows a player of a match (mirrors `infra/lambda/api/service.ts`). */
 export interface MatchView {
@@ -35,6 +36,8 @@ export interface MatchApi {
   poll(matchId: string): Promise<MatchView>;
   signal(matchId: string, type: 'offer' | 'answer', sdp: string): Promise<void>;
   connected(matchId: string): Promise<MatchView>;
+  /** Saves why my connection attempt didn't open (accepted after the match ended too). */
+  ice(matchId: string, report: IceReport): Promise<void>;
   leave(matchId: string): Promise<void>;
 }
 
@@ -80,6 +83,7 @@ export function createApi(pid: string, fetchFn: typeof fetch = browserFetch, bas
     poll: (id) => call('GET', `${match(id)}?pid=${encodeURIComponent(pid)}`),
     signal: async (id, type, sdp) => void (await call('POST', `${match(id)}/signal`, { type, sdp })),
     connected: (id) => call('POST', `${match(id)}/connected`, {}),
+    ice: async (id, report) => void (await call('POST', `${match(id)}/ice`, { report })),
     leave: async (id) => void (await call('POST', `${match(id)}/leave`, {})),
   };
 }
