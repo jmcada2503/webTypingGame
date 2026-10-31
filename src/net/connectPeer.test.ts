@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TransportError } from './errors';
-import { browserName, connectPeer, iceReportOf, type PeerConnection } from './rtc';
+import { STUN_SERVERS, browserName, connectPeer, iceReportOf, type PeerConnection } from './rtc';
 import { FakeNetwork, FakeRtc, FakeTimers, signalingPair, type FakeRtcOptions } from './testing';
 
 function setup(options: FakeRtcOptions = {}) {
@@ -61,6 +61,26 @@ describe('connecting', () => {
     // The fake throws if the host asks for an unordered channel; connecting without error proves it.
     const { timers } = setup();
     await expect(timers.advanceAsync(3000)).resolves.toBeUndefined();
+  });
+});
+
+describe('relay servers', () => {
+  it('uses the relay servers it is given next to the free STUN servers', async () => {
+    const timers = new FakeTimers();
+    const rtc = new FakeRtc(new FakeNetwork(timers));
+    const configs: RTCIceServer[][] = [];
+    const relay = [{ urls: ['turn:turn.example:3478?transport=udp'], username: 'u', credential: 'c' }];
+    connectPeer({
+      role: 'host',
+      timers,
+      signaling: signalingPair(timers).host,
+      iceServers: relay,
+      createConnection: (servers) => {
+        configs.push(servers);
+        return rtc.createConnection();
+      },
+    });
+    expect(configs).toEqual([[...STUN_SERVERS, ...relay]]);
   });
 });
 

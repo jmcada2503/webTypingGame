@@ -145,3 +145,14 @@ describe('ICE report over HTTP', () => {
     expect((await call("GET", `/api/match/${id}/ice`, undefined, { pid: A })).status).toBe(405);
   });
 });
+
+describe('TURN over HTTP', () => {
+  it('a paired player gets the relay servers (an empty list when there is no relay)', async () => {
+    const { call } = setup();
+    const id = ((await call("POST", "/api/queue", { pid: A, lang: "en", listVersion: VERSION })).body as { matchId: string }).matchId;
+    expect((await call("POST", `/api/match/${id}/turn`, { pid: A })).body).toEqual({ error: "not_paired" });
+    await call("POST", "/api/queue", { pid: B, lang: "en", listVersion: VERSION });
+    expect(await call("POST", `/api/match/${id}/turn`, { pid: A })).toEqual({ status: 200, body: { iceServers: [] } });
+    expect((await call("GET", `/api/match/${id}/turn`, undefined, { pid: A })).status).toBe(405);
+  });
+});

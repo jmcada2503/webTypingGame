@@ -466,3 +466,51 @@ describe('ICE reports: why a connection attempt failed', () => {
     expect((saved.cands as Record<string, unknown>[])[0].foo).toBeUndefined();
   });
 });
+
+describe('TURN relay logins', () => {
+  const SERVERS = [{ urls: ["turn:turn.example:3478?transport=udp"], username: "u", credential: "c" }];
+
+  function withTurn() {
+    let issued = 0;
+    const store = new MemoryStore();
+    const mm = new Matchmaker(store, {
+      now: () => 1_000_000,
+      newId: () => "m1",
+      random32: () => 7,
+      turn: {
+        servers: async () => {
+          issued++;
+          return SERVERS;
+        },
+      },
+    });
+    return { mm, store, issued: () => issued };
+  }
+
+  it('both players of a paired match get relay servers', async () => {
+    const { mm } = withTurn();
+    const a = await mm.queue(PID.a, "en", VERSION);
+    await mm.queue(PID.b, "en", VERSION);
+    expect(await mm.turn(PID.a, a.matchId)).toEqual({ iceServers: SERVERS });
+    expect(await mm.turn(PID.b, a.matchId)).toEqual({ iceServers: SERVERS });
+  });
+
+  it('nobody else, and not before the pairing or after the end (each relayed byte costs)', async () => {
+    const { mm, issued } = withTurn();
+    const a = await mm.queue(PID.a, "en", VERSION);
+    expect(await code(mm.turn(PID.a, a.matchId))).toMatchObject({ status: 409, code: "not_paired" });
+    await mm.queue(PID.b, "en", VERSION);
+    expect(await code(mm.turn(PID.c, a.matchId))).toMatchObject({ status: 403 });
+    await mm.leave(PID.b, a.matchId);
+    expect(await code(mm.turn(PID.a, a.matchId))).toMatchObject({ status: 404, code: "gone" });
+    expect(await code(mm.turn(PID.a, "nope"))).toMatchObject({ status: 404 });
+    expect(issued()).toBe(0);
+  });
+
+  it('without a relay set up the answer is an empty list', async () => {
+    const t = setup();
+    const a = await t.mm.queue(PID.a, "en", VERSION);
+    await t.mm.queue(PID.b, "en", VERSION);
+    expect(await t.mm.turn(PID.a, a.matchId)).toEqual({ iceServers: [] });
+  });
+});

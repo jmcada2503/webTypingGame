@@ -36,6 +36,8 @@ export interface MatchApi {
   poll(matchId: string): Promise<MatchView>;
   signal(matchId: string, type: 'offer' | 'answer', sdp: string): Promise<void>;
   connected(matchId: string): Promise<MatchView>;
+  /** TURN relay servers for this match (empty when the backend has none). */
+  turn(matchId: string): Promise<RTCIceServer[]>;
   /** Saves why my connection attempt didn't open (accepted after the match ended too). */
   ice(matchId: string, report: IceReport): Promise<void>;
   leave(matchId: string): Promise<void>;
@@ -71,6 +73,20 @@ async function request<T>(
 
 const browserFetch: typeof fetch = (...args) => fetch(...args);
 
+/** The relay servers in a `/turn` answer; anything malformed means none (the game works without a relay). */
+function relayServers(body: unknown): RTCIceServer[] {
+  const list = (body as { iceServers?: unknown } | null)?.iceServers;
+  if (!Array.isArray(list)) return [];
+  const ok = list.every((s: Record<string, unknown> | null) => {
+    const urls = s?.urls;
+    return (
+      Array.isArray(urls) && urls.length > 0 && urls.every((u) => typeof u === 'string') &&
+      typeof s?.username === 'string' && typeof s?.credential === 'string'
+    );
+  });
+  return ok ? (list as RTCIceServer[]) : [];
+}
+
 /** The matchmaking and signaling client, as player `pid`. */
 export function createApi(pid: string, fetchFn: typeof fetch = browserFetch, base = ''): MatchApi {
   const call = <T>(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>) =>
@@ -83,6 +99,7 @@ export function createApi(pid: string, fetchFn: typeof fetch = browserFetch, bas
     poll: (id) => call('GET', `${match(id)}?pid=${encodeURIComponent(pid)}`),
     signal: async (id, type, sdp) => void (await call('POST', `${match(id)}/signal`, { type, sdp })),
     connected: (id) => call('POST', `${match(id)}/connected`, {}),
+    turn: async (id) => relayServers(await call('POST', `${match(id)}/turn`, {})),
     ice: async (id, report) => void (await call('POST', `${match(id)}/ice`, { report })),
     leave: async (id) => void (await call('POST', `${match(id)}/leave`, {})),
   };

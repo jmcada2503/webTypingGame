@@ -47,6 +47,20 @@ describe('createApi', () => {
     expect(JSON.parse(calls[2].init.body as string)).toMatchObject({ type: 'offer', sdp: 'sdp' });
   });
 
+  it('asks for relay servers for the match', async () => {
+    const servers = [{ urls: ['turn:turn.example:3478?transport=udp'], username: 'u', credential: 'c' }];
+    const { calls, api } = recording(200, { iceServers: servers });
+    expect(await api.turn('m1')).toEqual(servers);
+    expect(calls[0].url).toBe('/api/match/m1/turn');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ pid: PID });
+  });
+
+  it('ignores a relay answer that is not a list of servers', async () => {
+    for (const body of [{}, { iceServers: 'x' }, { iceServers: [{ urls: 5 }] }, { iceServers: [{ urls: ['turn:a'], username: 1, credential: 'c' }] }]) {
+      expect(await recording(200, body).api.turn('m1')).toEqual([]);
+    }
+  });
+
   it('saves an ICE report on the match', async () => {
     const { calls, api } = recording();
     const report = { fail: 'timeout' as const, ms: 10_000, ice: 'checking', gathering: 'complete', cands: [], pairs: [] };
