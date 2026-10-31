@@ -342,6 +342,28 @@ describe('when it goes wrong', () => {
     expect(configs).toEqual([STUN_SERVERS, STUN_SERVERS]);
   });
 
+  it('a browser without WebRTC (making the connection throws): connectFailed, not stuck connecting', async () => {
+    const { timers, server, a } = setup();
+    const noWebRtc = new OnlineNetwork({
+      api: server.api('player-b'),
+      timers,
+      listVersion: () => 'v1',
+      inviteLink: (id) => id,
+      connectOptions: {
+        createConnection: () => {
+          throw new ReferenceError('RTCPeerConnection is not defined');
+        },
+      },
+    });
+    const events: string[] = [];
+    noWebRtc.onEvent((e) => events.push(e.type));
+    a.network.joinQueue('en');
+    await timers.advanceAsync(100);
+    noWebRtc.joinQueue('en');
+    await timers.advanceAsync(2000);
+    expect(events).toEqual(['matched', 'connectFailed']);
+  });
+
   it('an offer that arrives while the guest is still asking for relay servers is not lost', async () => {
     const { timers, a, b, server } = setup();
     server.turnDelay.set('player-b', 950);
