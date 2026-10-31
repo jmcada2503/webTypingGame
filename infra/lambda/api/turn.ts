@@ -1,5 +1,3 @@
-import { GetParametersCommand } from "@aws-sdk/client-ssm";
-
 /**
  * TURN relay logins (Cloudflare Realtime TURN), for players who can't reach each other directly (same Wi-Fi
  * without hairpin NAT, strict NATs). The browser adds them next to the free STUN servers and only relays when
@@ -87,11 +85,13 @@ function relayServers(body: unknown): TurnServer[] {
   return out;
 }
 
+/** What `ssmTurnConfig` needs from SSM: a GetParameters call (index.ts wires the SDK, so this file needs none). */
+export type GetParameters = (input: { Names: string[]; WithDecryption: boolean }) => Promise<{ Parameters?: { Name?: string; Value?: string }[] }>;
+
 /** The config from SSM: null when switched off or not set up. */
-export function ssmTurnConfig(ssm: { send(command: GetParametersCommand): Promise<{ Parameters?: { Name?: string; Value?: string }[] }> }) {
+export function ssmTurnConfig(getParameters: GetParameters) {
   return async (): Promise<TurnConfig | null> => {
-    const names = [TURN_PARAMS.keyId, TURN_PARAMS.apiToken, TURN_PARAMS.enabled];
-    const out = await ssm.send(new GetParametersCommand({ Names: names, WithDecryption: true }));
+    const out = await getParameters({ Names: [TURN_PARAMS.keyId, TURN_PARAMS.apiToken, TURN_PARAMS.enabled], WithDecryption: true });
     const value = (name: string) => out.Parameters?.find((p) => p.Name === name)?.Value;
     const keyId = value(TURN_PARAMS.keyId);
     const apiToken = value(TURN_PARAMS.apiToken);

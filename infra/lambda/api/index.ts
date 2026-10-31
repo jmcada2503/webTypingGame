@@ -1,4 +1,4 @@
-import { SSMClient } from "@aws-sdk/client-ssm";
+import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { DynamoDetailsStore } from "./dynamoDetailsStore";
 import { DynamoPresenceStore } from "./dynamoPresenceStore";
@@ -26,8 +26,13 @@ const sampleRate = Number(process.env.METRICS_SAMPLE_RATE ?? "1");
 /** A relay login outlasts any session (an active relay needs it to stay up); rematches can run for hours. */
 const TURN_TTL_SECONDS = 6 * 3600;
 // In the cloud the relay is set up through SSM (`TURN_PARAMS`); locally there is none.
+const ssm = new SSMClient({});
 const turn = matches
-  ? new CloudflareTurn({ config: cachedConfig(ssmTurnConfig(new SSMClient({}))), log: logLine, ttlSeconds: TURN_TTL_SECONDS })
+  ? new CloudflareTurn({
+      config: cachedConfig(ssmTurnConfig((input) => ssm.send(new GetParametersCommand(input)))),
+      log: logLine,
+      ttlSeconds: TURN_TTL_SECONDS,
+    })
   : NO_TURN;
 const route = createRouter(
   new Matchmaker(matches ? new DynamoStore(matches) : new MemoryStore(), { turn }),

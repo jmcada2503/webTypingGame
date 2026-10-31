@@ -124,11 +124,9 @@ describe("cachedConfig", () => {
 describe("ssmTurnConfig", () => {
   const params = (values: Record<string, string>) => {
     const asked: unknown[] = [];
-    const read = ssmTurnConfig({
-      send: async (command: { input: unknown }) => {
-        asked.push(command.input);
-        return { Parameters: Object.entries(values).map(([Name, Value]) => ({ Name, Value })) };
-      },
+    const read = ssmTurnConfig(async (input) => {
+      asked.push(input);
+      return { Parameters: Object.entries(values).map(([Name, Value]) => ({ Name, Value })) };
     });
     return { read, asked };
   };
