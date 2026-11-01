@@ -12,7 +12,7 @@ Ticket: #150 (map #149). Checked 2026-11-01. Budget $0. Licence must allow shipp
 4. **Kenney CC0 packs** are the fallback for anything synthesis can't sell (big impacts, explosions). They need no attribution and add tens of KB per sound.
 5. **Do not use AI generators for shipped assets.** The free tiers are non-commercial or come with licence conditions. Use them, if at all, only as reference for what a sound should feel like.
 
-Music (out of scope here, but it shares the engine): ZzFXM (MIT, about 0.5 KB) or hand-rolled Web Audio sequencing keeps the same synth voice and allows adaptive layers. Tone.js is the fallback if scheduling gets complex (79 KB gzip).
+Music is out of scope here and is decided in #151, which picked Tone.js generative layers. SFX still play through raw Web Audio buffers on the same `AudioContext`, and are not scheduled through Tone's lookahead. Once Tone is loaded, its synths could also make SFX, but ZzFX buffers stay the lowest-latency path for keystrokes.
 
 ### Trade-offs of this mix
 
