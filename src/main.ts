@@ -134,6 +134,8 @@ const createMatch = (mode: 'versus' | 'practice') => {
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
+// PROTOTYPE (sound style, throwaway): three sound styles + soundboard, dev only.
+if (import.meta.env.DEV) (await import('./audio/prototype-sound-style/installSoundStyle')).installSoundStylePrototype(host, flow, input);
 const shell = new AppShell(view, host, input);
 // The page's crawlable text (title, how to play) gives way to the game.
 document.documentElement.classList.add('game-ready');
