@@ -11,8 +11,8 @@ export interface SoundSettings {
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
-/** A first visit: sound on, the music under the effects. */
-export const DEFAULT_SOUND_SETTINGS: Readonly<SoundSettings> = { master: 0.8, effects: 1, music: 0.4, keyClicks: true, muted: false };
+/** A first visit: sound on, the music under the effects (80 / 80 / 40, tuned by ear in the mix prototype). */
+export const DEFAULT_SOUND_SETTINGS: Readonly<SoundSettings> = { master: 0.8, effects: 0.8, music: 0.4, keyClicks: true, muted: false };
 
 const KEY = 'typing-game.sound';
 
