@@ -52,7 +52,7 @@ export const arcade: SoundStyle = {
   name: 'Arcade',
   idea: 'ZzFX chiptune: square/triangle blips, crushed noise. Good = rising major arpeggios; bad = falling saw + crunch.',
   sounds: {
-    keyMatch: () => variants(5, (k) => z({ f: 1500 + k * 90, rel: 0.018, vol: 0.18, shape: 5, curve: 0.6 })),
+    keyMatch: () => variants(5, (k) => z({ f: 1500 + k * 90, rel: 0.018, vol: 0.08, shape: 5, curve: 0.6 })),
     keyNoMatch: () => variants(3, (k) => z({ f: 150 + k * 8, sus: 0.02, rel: 0.05, vol: 0.32, shape: 2, crush: 0.25 })),
     keyBackspace: () => z({ f: 900, to: 550, rel: 0.035, vol: 0.18, shape: 1 }),
     wrongSubmit: () => mix([z({ f: 220, to: 160, sus: 0.06, rel: 0.06, vol: 0.35, shape: 2, crush: 0.3 })], [z({ f: 150, to: 90, sus: 0.08, rel: 0.1, vol: 0.38, shape: 2, crush: 0.3 }), 0.11]),
@@ -62,7 +62,8 @@ export const arcade: SoundStyle = {
     lastLife: () => arp(0.14, [sq(880, 0.1, 0.3), sq(620, 0.1, 0.3), sq(880, 0.1, 0.3), sq(620, 0.12, 0.3)]),
     damageHum: () => loopable(mix([z({ f: 55, sus: 1.6, rel: 0.05, vol: 0.12, shape: 2, crush: 0.5 })], ...Array.from({ length: 6 }, (_, i): [Float32Array, number] => [z({ f: 400 + Math.random() * 800, rel: 0.02, vol: 0.12, shape: 4 }), 0.1 + i * 0.25 + Math.random() * 0.1]))),
     wordBulletDestroyed: () => mix([z({ f: 400, rel: 0.12, vol: 0.3, shape: 4, crush: 0.2 })], [arp(0.03, [sq(C6, 0.04, 0.22), sq(E6, 0.04, 0.22), sq(G6, 0.06, 0.22)]), 0.01]),
-    attackFired: () => z({ f: 380, to: 1700, sus: 0.04, rel: 0.1, vol: 0.28, shape: 5, curve: 0.5 }),
+    // the rising pew + a firing blast (the same crushed noise as the Shot hit, shorter)
+    attackFired: () => mix([z({ f: 380, to: 1700, sus: 0.04, rel: 0.1, vol: 0.28, shape: 5, curve: 0.5 })], [z({ f: 140, rel: 0.22, vol: 0.3, shape: 4, crush: 0.4, filter: -2200 })]),
     shotHit: () => mix([z({ f: 120, rel: 0.4, vol: 0.32, shape: 4, crush: 0.4, filter: -2000 })], [arp(0.045, [sq(G5, 0.05, 0.2), sq(note(14), 0.05, 0.2), sq(note(17), 0.1, 0.22)]), 0.05]),
     shotDefended: () => mix([z({ f: 800, to: 180, sus: 0.08, rel: 0.17, vol: 0.3, shape: 2 })], [z({ f: 300, rel: 0.08, vol: 0.2, shape: 4 }), 0.05]),
     idleNudge: () => arp(0.12, [tri(1200, 0.06, 0.22), tri(1200, 0.06, 0.18)]),
@@ -87,15 +88,8 @@ export const arcade: SoundStyle = {
     opponentLeftWin: () => arp(0.08, [sq(G5), sq(C6), sq(E6), sq(G6, 0.2)]),
     errorSting: () => arp(0.12, [tri(500, 0.08, 0.28), tri(400, 0.12, 0.28)]),
     winEnding: () => mix([z({ f: 70, sus: 0.3, rel: 0.9, vol: 0.55, shape: 4, crush: 0.7 })], [z({ f: 150, to: 30, sus: 0.2, rel: 0.6, vol: 0.35, shape: 2, crush: 0.5 })], [arp(0.09, [sq(C6), sq(E6), sq(G6), sq(C7), z({ f: note(31), sus: 0.2, rel: 0.3, vol: 0.28 })]), 0.75]),
-    loseEnding: () =>
-      mix(
-        // the Enemy ship looms: low buzz swelling
-        [z({ f: 50, att: 2.5, sus: 0.9, rel: 0.1, vol: 0.25, shape: 2, crush: 0.4, trem: 0.5, repeat: 0.12 })],
-        // it rushes over: rising then falling noise whoosh
-        [z({ f: 200, to: 900, att: 0.3, sus: 0.1, rel: 0.4, vol: 0.4, shape: 4 }), 3.4],
-        // sad falling notes
-        [arp(0.22, [sq(note(10), 0.18, 0.22), sq(note(8), 0.18, 0.22), sq(note(6), 0.18, 0.22), z({ f: note(3), to: note(-2), sus: 0.2, rel: 0.4, vol: 0.24, shape: 5 })]), 4.0],
-      ),
+    // the Enemy ship looms: the low buzz swells until the TV off (5.2 s), which plays its own sound
+    loseEnding: () => z({ f: 50, att: 4.7, sus: 0.4, rel: 0.1, vol: 0.3, shape: 2, crush: 0.4, trem: 0.5, repeat: 0.12 }),
     peaceEnding: () => mix([z({ f: 600, to: 150, att: 0.2, sus: 0.6, rel: 1.2, vol: 0.15, shape: 4, filter: -1500 })], [arp(0.35, [tri(C5, 0.3, 0.22), tri(E5, 0.3, 0.22), tri(G5, 0.3, 0.22), tri(C6, 0.8, 0.22)]), 0.4]),
     signalLost: () => mix([z({ f: 500, sus: 0.15, rel: 0.05, vol: 0.3, shape: 4, crush: 1, repeat: 0.02, jump: 500, jumpAt: 0.01 })], [z({ f: 600, to: 150, sus: 0.1, rel: 0.2, vol: 0.28, shape: 5 }), 0.2]),
     reconnecting: () => loopable(gain(z({ f: 300, sus: 1.95, rel: 0.05, vol: 0.12, shape: 4, crush: 0.8, trem: 0.8, repeat: 0.25 }), 1)),
