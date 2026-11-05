@@ -197,3 +197,17 @@ export function mix(...parts: [Float32Array, number?, number?][]): Float32Array 
 
 /** Sounds one after another, `step` seconds apart. */
 export const arp = (step: number, notes: Float32Array[]) => mix(...notes.map((b, i): [Float32Array, number] => [b, i * step]));
+
+/** A sound that loops without a click: its last `fade` seconds are cross-faded into its start. */
+export function loopable(b: Float32Array, fade = 0.05): Float32Array {
+  const n = Math.round(fade * SAMPLE_RATE);
+  const out = b.slice(0, b.length - n);
+  for (let i = 0; i < n; i++) {
+    const g = i / n;
+    out[i] = out[i] * g + b[b.length - n + i] * (1 - g);
+  }
+  return out;
+}
+
+/** The frequency `semis` semitones above A4 (440 Hz). */
+export const note = (semis: number) => 440 * 2 ** (semis / 12);

@@ -1,8 +1,10 @@
+import type { PlaySound } from '../audio/sounds';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { PaletteColor, TextGrid } from '../render/AsciiRenderer';
 import { COLS, blink, box, centered, put, twoTone } from './draw';
 import { DEMO_ATTACK_WORD, DEMO_DEFEND_WORD, howToDemo } from './content';
 import type { Screen } from './Screen';
+import { act, moved, silent } from './screenSound';
 
 const AUTO_SECONDS = 30;
 
@@ -50,7 +52,7 @@ function miniScene(text: TextGrid, c0: number, r0: number, kind: 'defend' | 'att
 }
 
 /** The approved how-to (layout B): DEFEND and ATTACK demos side by side, an Enter button and a 30 s auto-start. */
-export function howtoScreen(flow: ScreenFlow): Screen {
+export function howtoScreen(flow: ScreenFlow, play: PlaySound = silent): Screen {
   return {
     draw(text, t, s) {
       if (s.screen !== 'howto') return;
@@ -70,7 +72,7 @@ export function howtoScreen(flow: ScreenFlow): Screen {
       put(text, c0, 42, `[${'#'.repeat(n)}${'-'.repeat(w - 2 - n)}]`, secs <= 5 ? 'yellow' : 'dim');
     },
     onKey(e) {
-      if (e.key === 'Enter') flow.confirm();
+      if (e.key === 'Enter') act(flow, play, 'menuConfirm', () => flow.confirm());
     },
   };
 }

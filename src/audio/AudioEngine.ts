@@ -78,7 +78,7 @@ export class AudioEngine<C extends ContextLike = ContextLike, Id extends string 
   private buffers: Map<Id, BufferLike[]> | null = null;
   /** Each sound's plays still sounding, oldest first. */
   private readonly voices = new Map<Id, SourceLike[]>();
-  private readonly loops = new Map<Id, { src: SourceLike; level: GainLike }>();
+  private readonly loops = new Map<Id, { src: SourceLike; level: GainLike; target: number }>();
 
   constructor(opts: AudioEngineOptions<C, Id>) {
     this.sounds = opts.sounds;
@@ -147,7 +147,7 @@ export class AudioEngine<C extends ContextLike = ContextLike, Id extends string 
       return;
     }
     if (loop) {
-      fadeTo(ctx!, loop.level, level);
+      if (loop.target !== level) fadeTo(ctx!, loop.level, (loop.target = level));
       return;
     }
     const buffer = this.ready()?.get(id)?.[0];
@@ -162,7 +162,7 @@ export class AudioEngine<C extends ContextLike = ContextLike, Id extends string 
     connect(src, gain);
     connect(gain, this.buses![def.bus]);
     src.start();
-    this.loops.set(id, { src, level: gain });
+    this.loops.set(id, { src, level: gain, target: level });
   }
 
   /** A random number from -1 to 1. */

@@ -1,11 +1,11 @@
 // The Match and Practice sounds of the event catalog, Arcade style (parameters from the sound style and keystroke prototypes).
 // Bad sounds are falling saws and crushed noise; good ones are rising square arpeggios. Keystrokes are the "Climb".
 import type { SoundDef } from './AudioEngine';
-import { arp, mix, zzfx } from './zzfx';
+import { arp, mix, note as semitonesFromA4, zzfx } from './zzfx';
 
 const sq = (f: number, rel = 0.05, vol = 0.3) => zzfx({ f, rel, vol, shape: 5 });
 const tri = (f: number, rel = 0.05, vol = 0.35) => zzfx({ f, rel, vol, shape: 1 });
-const note = (semitonesFromA4: number) => 440 * 2 ** (semitonesFromA4 / 12);
+const note = semitonesFromA4;
 const [G5, B5, D6, C6, E6, G6] = [note(10), note(14), note(17), note(15), note(19), note(22)];
 
 /** One pentatonic step per matching letter: A, B, C#, E, F# and the next octave on up. */
