@@ -237,6 +237,7 @@ window.addEventListener('keydown', (e) => {
 if (online) {
   const tracker = new MetricsTracker({
     report,
+    sound: () => soundSettings,
     language: () => flow.language(),
     now: () => Date.now(),
     match: () => (lastMatch ? { stats: lastMatch.stats(), details: lastMatch.details() } : null),

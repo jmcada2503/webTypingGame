@@ -28,9 +28,18 @@ interface Typing {
   missed: string[];
 }
 
+/** The sound settings when the record was sent: Mute, master / Effects / Music volumes (0..1), Key clicks. */
+export interface SoundSnapshot {
+  mute: boolean;
+  vol: number;
+  fx: number;
+  mus: number;
+  kc: boolean;
+}
+
 export type MatchEnding = 'won' | 'lost' | 'peace' | 'opponentLeft' | 'quit';
 
-export interface MatchRecord extends Typing {
+export interface MatchRecord extends Typing, SoundSnapshot {
   t: 'match';
   mid: string;
   /** 0 the first Match on this connection, then 1, 2... for each Rematch. */
@@ -54,7 +63,7 @@ export interface MatchRecord extends Typing {
   near: number;
 }
 
-export interface PracticeRecord extends Typing {
+export interface PracticeRecord extends Typing, SoundSnapshot {
   t: 'practice';
   rid: string;
   active: number;
