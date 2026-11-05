@@ -8,8 +8,8 @@ const memoryStorage = (entries: Record<string, string> = {}) => {
 };
 
 describe('sound settings', () => {
-  test('a first visit has sound on: master 80%, effects 100%, music 40%, key clicks on', () => {
-    expect(loadSoundSettings(memoryStorage())).toEqual({ master: 0.8, effects: 1, music: 0.4, keyClicks: true, muted: false });
+  test('a first visit has sound on: master 80%, effects 80%, music 40%, key clicks on', () => {
+    expect(loadSoundSettings(memoryStorage())).toEqual({ master: 0.8, effects: 0.8, music: 0.4, keyClicks: true, muted: false });
   });
 
   test('saved settings come back on the next visit', () => {
@@ -19,7 +19,7 @@ describe('sound settings', () => {
   });
 
   test('a broken entry falls back to the defaults', () => {
-    expect(loadSoundSettings(memoryStorage({ 'typing-game.sound': '{not json' }))).toEqual({ master: 0.8, effects: 1, music: 0.4, keyClicks: true, muted: false });
+    expect(loadSoundSettings(memoryStorage({ 'typing-game.sound': '{not json' }))).toEqual({ master: 0.8, effects: 0.8, music: 0.4, keyClicks: true, muted: false });
   });
 
   test('each bad or missing field falls back on its own; volumes are kept between 0 and 1', () => {
@@ -29,7 +29,7 @@ describe('sound settings', () => {
 
   test('no storage (blocked by the browser) plays with the defaults and saving does nothing', () => {
     expect(() => saveSoundSettings(null, { master: 0.1, effects: 1, music: 1, keyClicks: true, muted: false })).not.toThrow();
-    expect(loadSoundSettings(null)).toEqual({ master: 0.8, effects: 1, music: 0.4, keyClicks: true, muted: false });
+    expect(loadSoundSettings(null)).toEqual({ master: 0.8, effects: 0.8, music: 0.4, keyClicks: true, muted: false });
   });
 
   test('the volumes set the bus levels; key clicks sit inside the effects', () => {
