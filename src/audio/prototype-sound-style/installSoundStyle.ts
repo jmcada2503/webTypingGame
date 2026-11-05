@@ -104,7 +104,8 @@ const same = (a: string, b: string) => a.normalize('NFC').toLowerCase() === b.no
 export function installSoundStylePrototype(host: ScreenHost, flow: ScreenFlow, input: TypingInput): { ctx: AudioContext; master: GainNode } {
   const audio = new ProtoAudio();
   const params = new URLSearchParams(location.search);
-  let styleIndex = Math.max(0, STYLES.findIndex((s) => s.key === (params.get('variant') ?? 'A').toUpperCase())); // Arcade won: the music prototype keeps it
+  void params;
+  let styleIndex = 0; // Arcade won: locked, so no key or URL can switch the effects away from it
   audio.setStyle(STYLES[styleIndex]);
 
   const ui = mountUi(audio, () => STYLES[styleIndex], (dir) => {
@@ -145,11 +146,6 @@ export function installSoundStylePrototype(host: ScreenHost, flow: ScreenFlow, i
 
   // --- Screen keys (not in the Match, where letters are typed). ---
   addEventListener('keydown', (e) => {
-    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
-      ui.cycle(e.key === 'ArrowLeft' ? -1 : 1);
-      return;
-    }
     if (e.ctrlKey || e.metaKey || e.altKey || host.screenShown === 'match' || SCREEN_TRANSITION.level > 0) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     const screen = flow.state().screen;

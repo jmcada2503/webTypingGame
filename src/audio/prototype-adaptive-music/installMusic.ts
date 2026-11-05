@@ -90,6 +90,16 @@ export async function installMusicPrototype(host: ScreenHost, flow: ScreenFlow, 
   const lead = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.4, release: 0.15 }, volume: -14 }).connect(layerGain.lead);
   const stinger = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.002, decay: 0.1, sustain: 0.3, release: 0.3 }, volume: -10 }).connect(bus);
   const stingerPad = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.05, decay: 0.5, sustain: 0.5, release: 2.5 }, volume: -10 }).connect(bus);
+  // Win fanfare: lead + a harmony voice, bass, kick and a crash.
+  const fanfare2 = new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.002, decay: 0.1, sustain: 0.35, release: 0.3 }, volume: -17 }).connect(bus);
+  const fanfareBass = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0.6, release: 0.6 }, volume: -6 }).connect(bus);
+  const crash = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 1.6, sustain: 0 }, volume: -20 }).connect(new Tone.Filter(5000, 'highpass').connect(bus));
+  // Peace: soft bell-like triangle notes through an echo, like the ship drifting away.
+  const echo = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.4, wet: 0.45 }).connect(bus);
+  const peaceBell = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.8, sustain: 0.15, release: 1.8 }, volume: -12 }).connect(echo);
+  const peacePad = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.8, decay: 0.5, sustain: 0.7, release: 2.5 }, volume: -14 }).connect(bus);
+  /** The end screen's harmony follows how the Match ended. */
+  let endMood: Mood = 0;
   const riserFilter = new Tone.Filter(300, 'bandpass').connect(bus);
   const riserGain = new Tone.Gain(0).connect(riserFilter);
   const riser = new Tone.Noise('white').connect(riserGain);
@@ -117,8 +127,8 @@ export async function installMusicPrototype(host: ScreenHost, flow: ScreenFlow, 
     held: { layers: { pad: 0.4, bass: 0.3 }, cutoff: 450 },
     endingWin: { layers: {}, cutoff: 6000 },
     endingLose: { layers: {}, cutoff: 300 },
-    endingPeace: { layers: { pad: 0.45 }, cutoff: 900 },
-    end: { layers: { pad: 0.4, arp: 0.12 }, cutoff: 1200 },
+    endingPeace: { layers: {}, cutoff: 900 },
+    end: { layers: { pad: 0.4, arp: 0.12, bass: 0.15 }, cutoff: 1300 },
   };
 
   const level = () => (override ?? smooth);
@@ -146,7 +156,7 @@ export async function installMusicPrototype(host: ScreenHost, flow: ScreenFlow, 
     const step = Math.round(transport.getTicksAtTime(time) / SIXTEENTH) % 64;
     const bar = Math.floor(step / 16);
     const s = step % 16;
-    if (s === 0) barMood = mood; // harmony changes only on the bar
+    if (s === 0) barMood = state === 'end' ? endMood : mood; // harmony changes only on the bar
     const chord = PROGRESSIONS[barMood][bar];
     const v = state === 'match' ? level() : 0.3;
     if (s % 4 === 0) applyMix(time, s === 0);
@@ -187,10 +197,28 @@ export async function installMusicPrototype(host: ScreenHost, flow: ScreenFlow, 
       for (const l of LAYERS) (on[l] = false), (lowSince[l] = 0);
     }
     if (next === 'endingWin') {
-      ['C5', 'E5', 'G5', 'C6', 'E6', 'G6'].forEach((n, i) => stinger.triggerAttackRelease(n, '16n', beat + i * 0.07));
-      stingerPad.triggerAttackRelease(['C4', 'E4', 'G4', 'C5'], 1.5, beat + 0.42);
+      endMood = 1;
+      // A short victory fanfare: pickup triplet, a held G, a turn, then a big C major landing with crash and bass.
+      const lead: [string, number, number][] = [['G4', 0, 0.1], ['C5', 0.1, 0.1], ['E5', 0.2, 0.1], ['G5', 0.3, 0.32], ['E5', 0.68, 0.12], ['G5', 0.84, 0.12], ['C6', 1.0, 1.4]];
+      const harm: [string, number, number][] = [['E4', 0.3, 0.32], ['C5', 0.68, 0.12], ['E5', 0.84, 0.12], ['G5', 1.0, 1.4]];
+      lead.forEach(([n, at, d]) => stinger.triggerAttackRelease(n, d, beat + at));
+      harm.forEach(([n, at, d]) => fanfare2.triggerAttackRelease(n, d, beat + at));
+      fanfareBass.triggerAttackRelease('G2', 0.6, beat + 0.3);
+      fanfareBass.triggerAttackRelease('C2', 1.6, beat + 1.0);
+      kick.triggerAttackRelease('C1', '8n', beat + 0.3);
+      kick.triggerAttackRelease('C1', '8n', beat + 1.0);
+      crash.triggerAttackRelease(1.6, beat + 1.0);
+      stingerPad.triggerAttackRelease(['C4', 'E4', 'G4', 'C5'], 2, beat + 1.0);
     }
-    if (next === 'endingPeace') stingerPad.triggerAttackRelease(['F3', 'A3', 'C4', 'E4'], 3, beat);
+    if (next === 'endingPeace') {
+      endMood = 0;
+      // Calm and open: a rising Fmaj9 arpeggio, then Cmaj9, soft pads underneath, echoing away.
+      peacePad.triggerAttackRelease(['F3', 'A3', 'C4', 'E4'], 2.2, beat);
+      ['F4', 'A4', 'C5', 'E5', 'G5'].forEach((n, i) => peaceBell.triggerAttackRelease(n, 0.4, beat + i * 0.3, 0.7));
+      peacePad.triggerAttackRelease(['C4', 'E4', 'G4', 'B4'], 2.6, beat + 2.2);
+      ['C5', 'E5', 'G5', 'B5', 'D6'].forEach((n, i) => peaceBell.triggerAttackRelease(n, 0.5, beat + 2.2 + i * 0.3, 0.6 - i * 0.08));
+    }
+    if (next === 'endingLose') endMood = -1;
     applyMix(audio.ctx.currentTime, true);
   };
 
