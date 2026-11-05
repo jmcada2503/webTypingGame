@@ -112,7 +112,7 @@ export class AudioEngine<C extends ContextLike = ContextLike, Id extends string 
   }
 
   /** Play a sound once (nothing while the audio is blocked). */
-  play(id: Id) {
+  play(id: Id, gain = 1) {
     const list = this.ready()?.get(id);
     const def = this.sounds[id];
     if (!list?.length || !def) return;
@@ -121,7 +121,7 @@ export class AudioEngine<C extends ContextLike = ContextLike, Id extends string 
     src.buffer = list[Math.floor(this.random() * list.length)];
     src.playbackRate.value = 1 + this.spread() * (def.pitchJitter ?? 0);
     const level = ctx.createGain();
-    level.gain.value = 10 ** ((this.spread() * (def.gainJitterDb ?? 0)) / 20);
+    level.gain.value = gain * 10 ** ((this.spread() * (def.gainJitterDb ?? 0)) / 20); // PROTOTYPE: `gain` (mix tuning)
     connect(src, level);
     connect(level, this.buses![def.bus]);
     const playing = this.voices.get(id) ?? [];

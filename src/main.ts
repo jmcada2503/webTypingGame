@@ -145,6 +145,8 @@ const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () =>
 
 /** The Match and Practice sounds: key presses (from the sessions), game events and PEACE IN ticks (from the host). */
 const matchSounds = new MatchSounds(play as (id: string) => void);
+// PROTOTYPE (mix and balance, throwaway): live tuning panel, dev only (#169).
+if (import.meta.env.DEV) (await import('./audio/prototype-mix/installMix')).installMixPrototype(sound as never, soundPanel, () => soundSettings);
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
 /** How many Matches each connection has started (the first, then Rematches): picks the Attack-word indices. */
