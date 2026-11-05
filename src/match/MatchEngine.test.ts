@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { ViewEvent } from '../view/GameViewState';
 import { MatchEngine } from './MatchEngine';
+import type { KeyPress } from './types';
 
 /** A deterministic Attack-word source: word i is list[i % list.length]. */
 const words = (...list: string[]) => ({ wordAt: (i: number) => list[i % list.length] });
@@ -99,14 +100,14 @@ describe('Defending', () => {
     expect(m.state().wordBullets).toHaveLength(0);
   });
 
-  test('a submitted word that matches nothing changes nothing', () => {
+  test('a submitted word that matches nothing changes nothing in the game (it is only announced as a wrong submit)', () => {
     const m = engine({ mode: 'practice' });
     m.spawnBullet('planet');
     m.update(0);
 
     m.submit('comet');
 
-    expect(m.update(0)).toEqual([]);
+    expect(types(m.update(0))).toEqual(['wrongSubmit']);
     expect(m.state().wordBullets).toHaveLength(1);
   });
 });
@@ -808,5 +809,191 @@ describe('Held while the opponent is away', () => {
 
     expect(types(advance(m, 3.75))).not.toContain('wordBulletArrived');
     expect(types(advance(m, 0.5))).toContain('wordBulletArrived');
+  });
+});
+
+describe('sound hooks: wrong submit', () => {
+  test('a submitted word that matches nothing is announced once', () => {
+    const m = engine();
+    m.spawnBullet('planet');
+    m.submit('zzz');
+    expect(types(m.update(0))).toEqual(['enemyFired', 'wrongSubmit']);
+    expect(types(m.update(0))).toEqual([]);
+  });
+
+  test('a right submit (a Word bullet or the Attack word) is not a wrong submit', () => {
+    const m = engine();
+    m.spawnBullet('planet');
+    m.submit('planet');
+    m.submit('rocket');
+    expect(types(m.update(0))).not.toContain('wrongSubmit');
+  });
+});
+
+describe('sound hooks: close warning', () => {
+  test('a Word bullet passing Flight 0.8 is announced once, with its id', () => {
+    const m = engine({ mode: 'practice' });
+    m.spawnBullet('planet'); // 8 s flight: Flight 0.8 at 6.4 s (first Practice bullet is p1)
+    const early = advance(m, 6.25);
+    expect(types(early)).not.toContain('closeWarning');
+
+    const around = advance(m, 0.5); // 6.25 to 6.75 s
+    expect(around.filter((e) => e.type === 'closeWarning')).toEqual([{ type: 'closeWarning', id: 'p1' }]);
+    expect(types(advance(m, 0.75))).not.toContain('closeWarning'); // not again
+  });
+
+  test('each Word bullet warns on its own, and a bullet destroyed before 0.8 never warns', () => {
+    const m = engine({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.spawnBullet('comet');
+    advance(m, 3);
+    m.submit('comet');
+    const events = advance(m, 5);
+    expect(events.filter((e) => e.type === 'closeWarning')).toEqual([{ type: 'closeWarning', id: 'p1' }]);
+  });
+
+  test('a bullet with its own (shorter) flight time warns at 0.8 of that', () => {
+    const m = engine({ mode: 'practice' });
+    m.spawnBullet('planet', 4); // 0.8 at 3.2 s
+    expect(types(advance(m, 3))).not.toContain('closeWarning');
+    expect(types(advance(m, 0.5))).toContain('closeWarning');
+  });
+});
+
+describe('sound hooks: last Life', () => {
+  test('losing the second Life announces the last one, right after lifeLost', () => {
+    const m = engine({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.spawnBullet('comet', 9);
+    const first = advance(m, 8);
+    expect(types(first)).toContain('lifeLost');
+    expect(types(first)).not.toContain('lastLife'); // 3 -> 2
+
+    const second = advance(m, 1);
+    expect(types(second).filter((t) => t === 'lifeLost' || t === 'lastLife')).toEqual(['lifeLost', 'lastLife']); // 2 -> 1
+    expect(m.state().lives).toBe(1);
+  });
+
+  test('losing the very last Life is the end, not a last-Life alarm', () => {
+    const m = engine({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.spawnBullet('comet', 9);
+    m.spawnBullet('rocket', 10);
+    advance(m, 9);
+    const events = advance(m, 1);
+    expect(m.status).toBe('lost');
+    expect(types(events)).toContain('lifeLost');
+    expect(types(events)).not.toContain('lastLife');
+  });
+
+  test('three bullets arriving in the same moment end the Match with no alarm on the way down', () => {
+    const m = engine({ mode: 'practice' });
+    for (const w of ['a1', 'b2', 'c3']) m.spawnBullet(w);
+    const events = advance(m, 8);
+    expect(m.status).toBe('lost');
+    expect(types(events)).not.toContain('lastLife');
+  });
+});
+
+describe('sound hooks: what each key did', () => {
+  /** An engine with a spy on its key hook; `type(word)` plays the Typed word changing to `word`. */
+  const keyed = (overrides: Partial<ConstructorParameters<typeof MatchEngine>[0]> = {}) => {
+    const keys: KeyPress[] = [];
+    const m = engine({ onKey: (k) => keys.push(k), ...overrides });
+    return { m, keys };
+  };
+
+  test('a letter that keeps the Typed word on a Word bullet is a match, numbered by its place in the word', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.typed('p');
+    m.typed('pl');
+    m.typed('pla');
+    expect(keys).toEqual([
+      { kind: 'match', index: 0 },
+      { kind: 'match', index: 1 },
+      { kind: 'match', index: 2 },
+    ]);
+  });
+
+  test('the Attack word counts as a target too (online)', () => {
+    const { m, keys } = keyed();
+    m.typed('r');
+    m.typed('ro');
+    expect(keys).toEqual([
+      { kind: 'match', index: 0 },
+      { kind: 'match', index: 1 },
+    ]);
+  });
+
+  test('a letter that leaves every target behind is a no-match, and so is each letter after it', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.typed('p');
+    m.typed('px');
+    m.typed('pxl');
+    expect(keys.map((k) => k.kind)).toEqual(['match', 'noMatch', 'noMatch']);
+  });
+
+  test('Practice has no Attack word, so a letter that only fits it is a no-match there', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.typed('r');
+    expect(keys).toEqual([{ kind: 'noMatch' }]);
+  });
+
+  test('accents count: ñ is not n', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('niño');
+    m.typed('ñ');
+    expect(keys).toEqual([{ kind: 'noMatch' }]);
+  });
+
+  test('removing one letter is a Backspace, whatever the word was', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.typed('p');
+    m.typed('px');
+    m.typed('p');
+    expect(keys.map((k) => k.kind)).toEqual(['match', 'noMatch', 'backspace']);
+  });
+
+  test('the Typed word being cleared by a submit is silent, even a one-letter word', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('a');
+    m.typed('a');
+    m.submit('a');
+    m.typed(''); // the input clears after the submit
+    expect(keys.map((k) => k.kind)).toEqual(['match']);
+  });
+
+  test('after a submit, the next letters sound as usual', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('a');
+    m.spawnBullet('bee');
+    m.typed('a');
+    m.submit('a');
+    m.typed('');
+    m.typed('b');
+    expect(keys.map((k) => k.kind)).toEqual(['match', 'match']);
+  });
+
+  test('a Typed word that did not change by one letter makes no key sound', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('planet');
+    m.typed('pla');
+    m.typed('pla');
+    m.typed('');
+    expect(keys).toEqual([]);
+  });
+
+  test('nothing sounds once the Match is over', () => {
+    const { m, keys } = keyed({ mode: 'practice' });
+    m.spawnBullet('a1');
+    m.spawnBullet('b2');
+    m.spawnBullet('c3');
+    advance(m, 8);
+    m.typed('a');
+    expect(keys).toEqual([]);
   });
 });

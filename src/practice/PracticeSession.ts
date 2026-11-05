@@ -2,6 +2,7 @@ import type { GameSession, SessionStatus } from '../app/GameSession';
 import type { TypingInput } from '../input/TypingInput';
 import { MatchEngine } from '../match/MatchEngine';
 import { MatchSession } from '../match/MatchSession';
+import type { KeyPress } from '../match/types';
 import type { GameViewState, ViewEvent } from '../view/GameViewState';
 import { loadWordList, type Language, type WordList } from '../words/wordLists';
 import { PRACTICE_CALIBRATION, PRACTICE_PLACEMENT, PRACTICE_RAMP, PracticeDirector } from './PracticeDirector';
@@ -36,6 +37,8 @@ export interface PracticeOptions {
   list: WordList;
   /** Returns a number in [0, 1). Default `Math.random`. */
   random?: () => number;
+  /** Called on each key press with what it did to the Typed word (for the key sounds). */
+  onKey?: (key: KeyPress) => void;
 }
 
 /** Practice has no Attack word; the engine never asks for one in `practice` mode. */
@@ -64,6 +67,7 @@ export class PracticeSession implements GameSession {
       attackWords: NO_ATTACK_WORDS,
       bulletFlightSeconds: PRACTICE_RAMP.start.flightSeconds,
       shotFlightSeconds: 1,
+      onKey: options.onKey,
     });
     this.match = new MatchSession(this.engine);
     this.director = new PracticeDirector(options);

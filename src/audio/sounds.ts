@@ -1,7 +1,8 @@
 // The game's sounds, Arcade style (chosen in the Sound style prototype): ZzFX chiptune, made in code.
 // Good = rising major arpeggios, bright square; bad = falling saw, crushed noise, low buzz; neutral = single blips.
-// The sound builds add the rest of the Sound event catalog here.
+// Each sound build keeps its area's sounds in its own bank file and spreads it in below (Match and Practice: matchBank.ts).
 import type { SoundDef } from './AudioEngine';
+import { MATCH_SOUNDS } from './matchBank';
 import { arp, loopable, mix, note, zzfx as z } from './zzfx';
 
 const sq = (f: number, rel = 0.05, vol = 0.3) => z({ f, rel, vol, shape: 5 });
@@ -11,6 +12,7 @@ const C5 = note(3), E5 = note(7), G5 = note(10), C6 = note(15), E6 = note(19), G
 const fx = (render: () => Float32Array): SoundDef => ({ bus: 'effects', render, voices: 4 });
 
 export const SOUNDS = {
+  ...MATCH_SOUNDS,
   // Screen keys
   menuMove: fx(() => sq(900, 0.025, 0.15)),
   /** A choice confirmed (menus, the sound prompt). */

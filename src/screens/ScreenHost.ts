@@ -18,6 +18,12 @@ const IDLE_STATE: GameViewState = { lives: 3, typedWord: '', attackWord: '', wor
 /** Creates the session that plays one Match (or Practice). Online play and Practice each bring their own. */
 export type CreateMatch = (mode: PlayMode) => GameSession;
 
+/** What the host tells the sounds while a Match or Practice run is going. */
+export interface MatchSoundSink {
+  events(events: readonly ViewEvent[]): void;
+  frame(state: GameViewState): void;
+}
+
 /**
  * Runs the app: it advances the `ScreenFlow`, draws the screen the flow is on, plays the screen-change effect
  * when the screen changes, and locks input while the effect runs. It is a `GameSession`, so the existing
@@ -51,6 +57,8 @@ export class ScreenHost implements GameSession {
     private readonly flow: ScreenFlow,
     private readonly screens: ScreenSet,
     private readonly createMatch: CreateMatch,
+    /** Hears the running Match: its events, and its state each frame. */
+    private readonly sounds: MatchSoundSink | null = null,
   ) {
     this.shown = flow.state();
     this.displayed = visualOf(this.shown);
@@ -152,6 +160,8 @@ export class ScreenHost implements GameSession {
         this.view.setOverlay(null);
       }
       events = match.update(dt);
+      this.sounds?.events(events);
+      this.sounds?.frame(match.state());
     }
     // Re-read: the session may have ended during that update. The flow ignores a result it already has.
     const status: SessionStatus = match.status;

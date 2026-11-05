@@ -1,6 +1,6 @@
 import { matchPrefix } from '../utils/matchPrefix';
 import type { GameViewState, IdleViewState, ShotState, ViewEvent, WordBulletState } from '../view/GameViewState';
-import type { MatchConfig, MatchStatus, NetEvent, FlightRamp } from './types';
+import type { FlightRamp, KeyPress, MatchConfig, MatchStatus, NetEvent } from './types';
 
 const STARTING_LIVES = 3;
 /** Each hit on the opponent adds this much Enemy ship damage (0..1, capped at 1). */
@@ -28,7 +28,10 @@ const isWord = (typed: string, word: string) => matchPrefix(typed, word) === [..
  * A Word bullet in my game; `shot` is the opponent's Shot index when it came from them (Practice bullets have none).
  * `flightSeconds` overrides how long it takes to reach the Cockpit (Practice speeds up this way).
  */
-type Bullet = WordBulletState & { shot?: number; flightSeconds?: number };
+type Bullet = WordBulletState & { shot?: number; flightSeconds?: number; warned?: boolean };
+
+/** A Word bullet this far into its Flight triggers the close warning. */
+const CLOSE_WARNING_FLIGHT = 0.8;
 
 /**
  * The rules of one Match, with no DOM and no network. Time moves only through `update(dt)`.
@@ -78,6 +81,8 @@ export class MatchEngine {
   private lives = STARTING_LIVES;
   private bullets: Bullet[] = [];
   private pending: ViewEvent[] = [];
+  /** A submit just happened: the next Typed word change is the input clearing, not a key press. */
+  private justSubmitted = false;
   private outbox: NetEvent[] = [];
   private nextBulletId = 1;
   /** Match time in seconds (only moves through `update`). */
@@ -119,19 +124,29 @@ export class MatchEngine {
   /** The Typed word changed (a letter or Backspace): the player is active. */
   typed(word: string) {
     if (this.status !== 'running') return;
+    const before = this.typedWord;
     this.typedWord = word;
     this.activity();
+    if (this.justSubmitted) this.justSubmitted = false; // the input clearing itself after a submit
+    else {
+      const key = this.keyPress(before, word);
+      if (key) this.config.onKey?.(key);
+    }
   }
 
   /** The player submitted a word (Space or Enter). */
   submit(word: string) {
     if (this.status !== 'running') return;
     this.activity();
+    this.justSubmitted = true;
     // Defending comes first. Several Word bullets may carry the same word: take the one closest to the Cockpit.
     const target = this.bullets.filter((b) => isWord(word, b.word)).sort((a, b) => b.flight - a.flight)[0];
     if (target) return this.destroy(target);
     if (this.attackWord && isWord(word, this.attackWord)) this.fire();
-    else this.count.wrongSubmits++;
+    else {
+      this.count.wrongSubmits++;
+      this.pending.push({ type: 'wrongSubmit' });
+    }
   }
 
   /** An event from the opponent. */
@@ -173,7 +188,13 @@ export class MatchEngine {
       this.outbox.push({ type: 'presence', idleFor: this.time - this.lastActivityAt, pace: this.pace });
       this.nextPresenceAt += PRESENCE_EVERY;
     }
-    for (const b of this.bullets) b.flight += dt / (b.flightSeconds ?? this.config.bulletFlightSeconds);
+    for (const b of this.bullets) {
+      b.flight += dt / (b.flightSeconds ?? this.config.bulletFlightSeconds);
+      if (!b.warned && b.flight >= CLOSE_WARNING_FLIGHT && b.flight < 1) {
+        b.warned = true;
+        this.pending.push({ type: 'closeWarning', id: b.id });
+      }
+    }
     for (const b of this.bullets.filter((b) => b.flight >= 1)) this.arrive(b);
     if (this.config.mode === 'versus' && this.status === 'running' && this.bothIdle()) this.endInPeace(true);
     if (!this.nudged && this.time - this.lastActivityAt >= NUDGE_AFTER) {
@@ -265,6 +286,16 @@ export class MatchEngine {
     }
   }
 
+  /** What changing the Typed word from `before` to `word` was, as a key press (null: not one letter added or removed). */
+  private keyPress(before: string, word: string): KeyPress | null {
+    const was = [...before].length;
+    const now = [...word].length;
+    if (now === was - 1) return { kind: 'backspace' };
+    if (now !== was + 1) return null;
+    const targets = [...this.bullets.map((b) => b.word), this.attackWord].filter(Boolean);
+    return targets.some((t) => matchPrefix(word, t) === now) ? { kind: 'match', index: now - 1 } : { kind: 'noMatch' };
+  }
+
   private addBullet(id: string, word: string, shot?: number, flightSeconds?: number) {
     this.bullets.push({ id, word, flight: 0, shot, flightSeconds });
     this.pending.push({ type: 'enemyFired', id });
@@ -298,8 +329,13 @@ export class MatchEngine {
     this.count.bulletsArrived++;
     if (this.missed.length < MAX_MISSED) this.missed.push(b.word);
     this.pending.push({ type: 'wordBulletArrived', id: b.id }, { type: 'lifeLost' });
+    if (this.lives === 1) this.pending.push({ type: 'lastLife' });
     if (b.shot !== undefined) this.outbox.push({ type: 'hit', i: b.shot, lives: this.lives });
-    if (this.lives === 0) this.status = 'lost';
+    if (this.lives === 0) {
+      this.status = 'lost';
+      // Bullets landing in the same moment can take the Life that was "the last" too: that is the end, no alarm.
+      this.pending = this.pending.filter((e) => e.type !== 'lastLife');
+    }
   }
 
   private fire() {
