@@ -135,7 +135,11 @@ const createMatch = (mode: 'versus' | 'practice') => {
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 // PROTOTYPE (sound style, throwaway): three sound styles + soundboard, dev only.
-if (import.meta.env.DEV) (await import('./audio/prototype-sound-style/installSoundStyle')).installSoundStylePrototype(host, flow, input);
+if (import.meta.env.DEV) {
+  const sfx = (await import('./audio/prototype-sound-style/installSoundStyle')).installSoundStylePrototype(host, flow, input);
+  // PROTOTYPE (adaptive music, throwaway): Tone.js music on the same AudioContext, dev only.
+  await (await import('./audio/prototype-adaptive-music/installMusic')).installMusicPrototype(host, flow, sfx);
+}
 const shell = new AppShell(view, host, input);
 // The page's crawlable text (title, how to play) gives way to the game.
 document.documentElement.classList.add('game-ready');

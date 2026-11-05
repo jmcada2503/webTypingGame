@@ -101,10 +101,10 @@ class ProtoAudio {
 
 const same = (a: string, b: string) => a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
 
-export function installSoundStylePrototype(host: ScreenHost, flow: ScreenFlow, input: TypingInput) {
+export function installSoundStylePrototype(host: ScreenHost, flow: ScreenFlow, input: TypingInput): { ctx: AudioContext; master: GainNode } {
   const audio = new ProtoAudio();
   const params = new URLSearchParams(location.search);
-  let styleIndex = Math.max(0, STYLES.findIndex((s) => s.key === (params.get('variant') ?? 'A').toUpperCase()));
+  let styleIndex = Math.max(0, STYLES.findIndex((s) => s.key === (params.get('variant') ?? 'A').toUpperCase())); // Arcade won: the music prototype keeps it
   audio.setStyle(STYLES[styleIndex]);
 
   const ui = mountUi(audio, () => STYLES[styleIndex], (dir) => {
@@ -269,6 +269,7 @@ export function installSoundStylePrototype(host: ScreenHost, flow: ScreenFlow, i
     prev = s;
     return events;
   };
+  return audio;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -303,7 +304,8 @@ function mountUi(audio: ProtoAudio, current: () => SoundStyle, cycle: (dir: numb
   document.body.append(bar);
 
   const board = document.createElement('div');
-  board.className = 'sp-board';
+  board.className = 'sp-board closed';
+  bar.style.display = 'none'; // the sound style is decided (Arcade); the music prototype has its own bar
   const groups = [...new Set(SOUNDS.map((s) => s.group))];
   board.innerHTML = `<div class="sp-head"><span>SOUND STYLE PROTOTYPE</span><span class="sp-toggle">▾</span></div>
   <div class="sp-body">
