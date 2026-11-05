@@ -4,7 +4,8 @@ import type { PracticeResult } from '../practice/PracticeSession';
 import { blink, centered, formatClock, twoTone } from './draw';
 import { GAME_NAME } from './content';
 import { onlineEndScreen, type OnlineStats } from './endScreens';
-import { practiceEndScreen } from './practiceEndScreen';
+import { practiceEndScreen, type PracticeEndSound } from './practiceEndScreen';
+import { act, silent } from './screenSound';
 import type { Screen, ScreenSet } from './Screen';
 
 /**
@@ -14,7 +15,8 @@ import type { Screen, ScreenSet } from './Screen';
  */
 const lines = (text: TextGrid, start: number, rows: string[], color: 'fg' | 'dim' = 'fg') => rows.forEach((r, i) => centered(text, start + i, r, color));
 
-export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeResult | null = () => null, onlineStats: () => OnlineStats | null = () => null): ScreenSet {
+export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeResult | null = () => null, onlineStats: () => OnlineStats | null = () => null, sound: PracticeEndSound = {}): ScreenSet {
+  const play = sound.play ?? silent;
   const menu: Screen = {
     draw(text, t, s) {
       if (s.screen !== 'menu') return;
@@ -71,8 +73,8 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
 
   const match: Screen = { draw() {} }; // the Match is the game scene itself
 
-  const onlineEnd = onlineEndScreen(flow, onlineStats);
-  const practiceEnd = practiceEndScreen(flow, practiceResult);
+  const onlineEnd = onlineEndScreen(flow, onlineStats, play);
+  const practiceEnd = practiceEndScreen(flow, practiceResult, undefined, sound);
   const end: Screen = {
     enter(s) {
       if (s.screen === 'end') practiceEnd.enter(s);
@@ -113,8 +115,8 @@ export function simpleScreens(flow: ScreenFlow, practiceResult: () => PracticeRe
     },
     onKey(e) {
       const k = e.key.toLowerCase();
-      if (k === 's') flow.searchAgain();
-      if (k === 'q') flow.backToMenu();
+      if (k === 's') act(flow, play, 'menuConfirm', () => flow.searchAgain());
+      if (k === 'q') act(flow, play, 'menuBack', () => flow.backToMenu());
     },
   };
 

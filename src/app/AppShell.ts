@@ -1,5 +1,6 @@
 import type { TypingInput } from '../input/TypingInput';
 import type { GameView } from '../view/GameView';
+import type { ViewEvent } from '../view/GameViewState';
 import { onFullscreenChange, toggleFullscreen } from './fullscreen';
 import type { GameSession } from './GameSession';
 
@@ -19,6 +20,7 @@ export class AppShell {
   private resizeTimer = 0;
   private readonly cleanups: (() => void)[] = [];
   private readonly toast = document.createElement('div');
+  private readonly frameListeners: ((events: ViewEvent[], dt: number) => void)[] = [];
 
   constructor(
     private readonly view: GameView,
@@ -49,6 +51,11 @@ export class AppShell {
     this.frame = requestAnimationFrame(this.tick);
   }
 
+  /** Call `cb` every frame, after the session's update, with that frame's events (the sounds listen here). */
+  onFrame(cb: (events: ViewEvent[], dt: number) => void) {
+    this.frameListeners.push(cb);
+  }
+
   async toggleFullscreen() {
     const error = await toggleFullscreen();
     if (error) this.say(error);
@@ -59,6 +66,7 @@ export class AppShell {
     this.last = now;
     const events = this.session.update(dt);
     events.forEach((e) => this.view.trigger(e));
+    this.frameListeners.forEach((cb) => cb(events, dt));
     this.view.render(this.session.state(), dt);
     this.frame = requestAnimationFrame(this.tick);
   };

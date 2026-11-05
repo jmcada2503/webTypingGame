@@ -7,6 +7,7 @@ import { ApiError } from "./service";
  * - `p2p`: one connection attempt to an opponent, success or failure.
  * - `mm`: I gave up on Matchmaking (left the waiting screen before an opponent was found).
  * - `rematch`: how the Rematch offer after a Match was settled.
+ * `match` and `practice` also carry the sound settings (mute, volumes, key clicks).
  *
  * Every record becomes one JSON log line (queried with Logs Insights). `match` and `practice` also become a
  * `match_details` item: the player's history, kept until accounts exist. No IP or full user agent is stored:
@@ -110,10 +111,20 @@ const TYPING = {
   missed: list(MAX_MISSED, WORD),
 };
 
+/** Sound settings when a Match or Practice record was sent (null from tabs on a build before sound). */
+const SOUND = {
+  mute: nullable(bool),
+  vol: nullable(num(0, 1)),
+  fx: nullable(num(0, 1)),
+  mus: nullable(num(0, 1)),
+  kc: nullable(bool),
+};
+
 const RECORDS = {
   match: shape({
     ...CLIENT,
     ...TYPING,
+    ...SOUND,
     mid: ID,
     /** Which Match on this connection: 0 the first, then each Rematch. */
     n: int(0, 999),
@@ -137,6 +148,7 @@ const RECORDS = {
   practice: shape({
     ...CLIENT,
     ...TYPING,
+    ...SOUND,
     rid: ID,
     active: SECONDS,
     calib: nullable(PACE),

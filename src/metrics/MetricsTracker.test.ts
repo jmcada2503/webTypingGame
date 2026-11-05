@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FlowState, RematchState } from '../flow/types';
 import type { MatchDetails, MatchStats } from '../match/MatchEngine';
 import type { ConnectionRecord } from '../net/errors';
+import type { SoundSettings } from '../audio/soundSettings';
 import type { PracticeResult } from '../practice/PracticeSession';
 import { MetricsTracker } from './MetricsTracker';
 import type { MetricRecord } from './records';
@@ -24,6 +25,7 @@ const end = (result: 'won' | 'lost' | 'peace', rematch: RematchState = { status:
 
 function setup() {
   let now = 1_790_000_000_000;
+  let sound: SoundSettings = { master: 0.8, effects: 1, music: 0.4, keyClicks: true, muted: false };
   const reports: MetricRecord[] = [];
   const tracker = new MetricsTracker({
     report: (r) => reports.push(r),
@@ -33,10 +35,12 @@ function setup() {
     practice: () => ({ result: PRACTICE, missed: ['casa'] }),
     online: () => ({ matchId: 'abc123', lang: 'es', rttMs: 41.6 }),
     randomId: () => 'run123',
+    sound: () => sound,
   });
   const go = (...states: FlowState[]) => states.forEach((s) => tracker.observe(s));
   const wait = (ms: number) => (now += ms);
-  return { tracker, reports, go, wait };
+  const setSound = (s: SoundSettings) => (sound = s);
+  return { tracker, reports, go, wait, setSound };
 }
 
 describe('a Match', () => {
@@ -129,6 +133,29 @@ describe('Practice', () => {
     const { reports, go } = setup();
     go(menu, { screen: 'starting', mode: 'practice' }, practice, { screen: 'end', mode: 'practice', result: 'practiceOver' });
     expect(reports).toEqual([expect.objectContaining({ t: 'practice', rid: 'run123', lang: 'es', dur: 80, active: 70, wpm: 34.3, missed: ['casa'], calib: 3 })]);
+  });
+});
+
+describe('the sound snapshot', () => {
+  it('a Match and a Practice run carry the sound settings: mute, master, Effects, Music, Key clicks', () => {
+    const { reports, go } = setup();
+    go(menu, howto(5), searching, countdown, versus, end('won'), menu, { screen: 'starting', mode: 'practice' }, practice, { screen: 'end', mode: 'practice', result: 'practiceOver' });
+    const snapshot = { mute: false, vol: 0.8, fx: 1, mus: 0.4, kc: true };
+    expect(reports.filter((r) => r.t === 'match' || r.t === 'practice')).toEqual([expect.objectContaining({ t: 'match', ...snapshot }), expect.objectContaining({ t: 'practice', ...snapshot })]);
+  });
+
+  it('is read when the record is sent: a change during the run shows', () => {
+    const { reports, go, setSound } = setup();
+    go(menu, { screen: 'starting', mode: 'practice' }, practice);
+    setSound({ master: 0.55, effects: 0.3, music: 0, keyClicks: false, muted: true });
+    go({ screen: 'end', mode: 'practice', result: 'practiceOver' });
+    expect(reports[0]).toMatchObject({ mute: true, vol: 0.55, fx: 0.3, mus: 0, kc: false });
+  });
+
+  it('the other records stay without it', () => {
+    const { reports, go } = setup();
+    go(menu, howto(5), searching, menu);
+    expect(reports[0]).not.toHaveProperty('mute');
   });
 });
 

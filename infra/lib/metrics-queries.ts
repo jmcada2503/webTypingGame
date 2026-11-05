@@ -55,6 +55,10 @@ export const METRICS_QUERIES: Record<string, string> = {
 | stats sum(invalid) as rejected, sum(near) as nearMisses, count(*) as reports by bin(1d) as day
 | sort day desc`,
 
+  "Sound settings": `filter (t = "match" or t = "practice") and vol >= 0
+| stats count(*) as runs, 100 * sum(mute) / count(*) as mutedPct, 100 * (count(*) - sum(kc)) / count(*) as keyClicksOffPct, avg(vol) as master, avg(fx) as effects, avg(mus) as music by t, bin(1w) as week
+| sort week desc`,
+
   "Online peak per hour": `filter event = "online_count"
 | stats max(total) as peak, max(en) as en, max(es) as es by bin(1h) as hour
 | sort hour desc`,

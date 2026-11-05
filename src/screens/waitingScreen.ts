@@ -1,8 +1,10 @@
+import type { PlaySound } from '../audio/sounds';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { COLS, blink, box, centered, formatClock, put, twoTone } from './draw';
 import { typedTip, waitingLogLine, placeholderOnline, type OnlineCounts } from './content';
 import type { Screen } from './Screen';
+import { act, moved, silent } from './screenSound';
 
 const COPIED_SECONDS = 1.6;
 const hash = (n: number) => {
@@ -11,7 +13,7 @@ const hash = (n: number) => {
 };
 
 /** The approved waiting screen (terminal style C3): Public gets a long log, Private the Invite link panel. */
-export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void, online: (t: number) => OnlineCounts = placeholderOnline): Screen {
+export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void, online: (t: number) => OnlineCounts = placeholderOnline, play: PlaySound = silent): Screen {
   let copiedAt = -99;
   let now = 0;
   const langName = () => (flow.language() === 'en' ? 'ENGLISH' : 'SPANISH');
@@ -74,10 +76,11 @@ export function waitingScreen(flow: ScreenFlow, copyText: (s: string) => void, o
     },
     onKey(e, s) {
       if (s.screen !== 'waiting') return;
-      if (e.key === 'q' || e.key === 'Q') flow.cancel();
+      if (e.key === 'q' || e.key === 'Q') act(flow, play, 'menuBack', () => flow.cancel());
       else if ((e.key === 'c' || e.key === 'C') && s.kind === 'private' && s.inviteLink) {
         copiedAt = now;
         copyText(s.inviteLink);
+        play('copyLink');
       }
     },
   };

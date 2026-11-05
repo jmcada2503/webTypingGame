@@ -32,6 +32,14 @@ export interface FlightRamp {
   rampSeconds: number;
 }
 
+/** What one key press did to the Typed word, for the key sounds. */
+export type KeyPress =
+  /** A letter that keeps the Typed word on a Word bullet or the Attack word; `index` is its place in the word (0 = first). */
+  | { kind: 'match'; index: number }
+  /** A letter after which the Typed word fits nothing. */
+  | { kind: 'noMatch' }
+  | { kind: 'backspace' };
+
 export interface MatchConfig {
   mode: MatchMode;
   attackWords: AttackWordSource;
@@ -51,6 +59,11 @@ export interface MatchConfig {
    * Checks an incoming Shot against the opponent's seed (`ShotVerifier`); `arrivedAt` is the Match time in
    * seconds. Return false to ignore it: it never becomes a Word bullet. No check when omitted.
    */
+  /**
+   * Called on the key press itself (not a frame later) with what the press did, so key sounds are instant.
+   * Clearing the Typed word after a submit is not a key press.
+   */
+  onKey?: (key: KeyPress) => void;
   verifyShot?: (shot: { i: number; t: number; word: string }, arrivedAt: number) => boolean;
 }
 

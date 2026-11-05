@@ -63,6 +63,29 @@ describe("a Match report", () => {
   });
 });
 
+describe("the sound snapshot", () => {
+  const SOUND = { mute: true, vol: 0.55, fx: 0.3, mus: 0, kc: false };
+
+  it("is logged on Match and Practice lines, its on/off fields as 1/0 so queries can count them", async () => {
+    const { metrics, lines } = setup();
+    await metrics.report(PID, { ...MATCH, ...SOUND });
+    await metrics.report(PID, { ...PRACTICE, ...SOUND });
+    for (const line of lines) expect(line).toMatchObject({ mute: 1, vol: 0.55, fx: 0.3, mus: 0, kc: 0 });
+  });
+
+  it("a record from a tab on the old build (no snapshot) is still taken, the fields null", async () => {
+    const { metrics, lines } = setup();
+    await metrics.report(PID, MATCH);
+    expect(lines[0]).toMatchObject({ mute: null, vol: null, fx: null, mus: null, kc: null });
+  });
+
+  it("a volume outside 0..1 or a non-boolean switch is refused", async () => {
+    const { metrics } = setup();
+    await expect(metrics.report(PID, { ...PRACTICE, ...SOUND, vol: 1.5 })).rejects.toBeInstanceOf(ApiError);
+    await expect(metrics.report(PID, { ...PRACTICE, ...SOUND, kc: "yes" })).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
 describe("the other records", () => {
   it("Practice goes to the log and the history", async () => {
     const { metrics, lines, store } = setup();
