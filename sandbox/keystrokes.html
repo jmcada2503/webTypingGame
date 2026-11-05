@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PROTOTYPE · Keystroke sounds</title>
+    <style>
+      body { background: #0b0d0b; color: #cfd; font: 15px/1.5 ui-monospace, Menlo, monospace; margin: 0; padding: 24px; }
+      h1 { font-size: 16px; margin: 0 0 4px; color: #ff0; }
+      .dim { color: #6a7; }
+      #variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; max-width: 980px; }
+      #variants button { text-align: left; background: #111; color: #cfd; border: 1px solid #364; padding: 8px 10px; cursor: pointer; font: inherit; }
+      #variants button.on { border-color: #ff0; color: #ff0; }
+      #variants small { display: block; color: #6a7; }
+      #word { font-size: 56px; letter-spacing: 6px; margin: 24px 0 0; }
+      #typed { font-size: 56px; letter-spacing: 6px; height: 70px; }
+      #typed .bad { color: #f55; }
+      #typed .ok { color: #5f5; }
+      #last { height: 24px; color: #ff0; }
+      .row { margin: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .row button { background: #111; color: #cfd; border: 1px solid #364; padding: 4px 10px; cursor: pointer; font: inherit; }
+      .row button.on { border-color: #ff0; color: #ff0; }
+    </style>
+  </head>
+  <body>
+    <h1>PROTOTYPE (throwaway) · keystroke sounds generated in code (#157)</h1>
+    <div class="dim">Type the word. Letters that still match, letters that don't, Backspace, Enter on a wrong word. A correct Enter plays the Word bullet destroyed sound (no key sound under it). Keys 1-6 switch the sound; click first to unlock audio.</div>
+    <div id="variants"></div>
+    <div id="word"></div>
+    <div id="typed"></div>
+    <div id="last"></div>
+    <div class="row">
+      <span class="dim">audition:</span>
+      <button id="a-match">match</button><button id="a-no">no match</button><button id="a-back">backspace</button><button id="a-wrong">wrong submit</button><button id="a-right">right submit</button>
+      <span class="dim">burst test:</span><button id="auto">auto-type 10 keys/s</button><button id="auto2">auto-type 14 keys/s</button>
+      <span class="dim">volume</span><input id="vol" type="range" min="0" max="100" value="70" tabindex="-1" />
+    </div>
+    <div class="dim" id="stats"></div>
+    <script type="module" src="/src/sandbox/keystrokes.ts"></script>
+  </body>
+</html>

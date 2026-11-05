@@ -134,6 +134,8 @@ const createMatch = (mode: 'versus' | 'practice') => {
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
+// PROTOTYPE (keystroke sounds, throwaway): ideas 1, 5, 6 in the real game, dev only (#157).
+if (import.meta.env.DEV) (await import('./audio/prototype-keystrokes/installKeystrokes')).installKeystrokePrototype(host, input);
 const shell = new AppShell(view, host, input);
 // The page's crawlable text (title, how to play) gives way to the game.
 document.documentElement.classList.add('game-ready');
