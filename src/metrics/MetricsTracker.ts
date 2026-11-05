@@ -1,8 +1,9 @@
+import type { SoundSettings } from '../audio/soundSettings';
 import type { FlowState, Language, MatchKind } from '../flow/types';
 import type { MatchDetails, MatchStats } from '../match/MatchEngine';
 import type { ConnectionRecord } from '../net/errors';
 import type { PracticeResult } from '../practice/PracticeSession';
-import type { MatchEnding, MetricRecord, RematchRecord } from './records';
+import type { MatchEnding, MetricRecord, RematchRecord, SoundSnapshot } from './records';
 
 export interface TrackerDeps {
   report: (record: MetricRecord) => void;
@@ -17,6 +18,8 @@ export interface TrackerDeps {
   /** The opponent connection the Match runs on. */
   online: () => { matchId: string; lang: Language; rttMs: number | null } | null;
   randomId?: () => string;
+  /** The sound settings right now (Match and Practice records carry them). */
+  sound: () => SoundSettings;
 }
 
 const LETTERS_PER_WORD = 5;
@@ -48,6 +51,11 @@ export class MetricsTracker {
   private rematch: { mid: string; n: number; sawDeclined: boolean; sawExpired: boolean; sawLeft: boolean } | null = null;
 
   constructor(private readonly deps: TrackerDeps) {}
+
+  private soundSnapshot(): SoundSnapshot {
+    const s = this.deps.sound();
+    return { mute: s.muted, vol: s.master, fx: s.effects, mus: s.music, kc: s.keyClicks };
+  }
 
   /** The flow's state right now. Compares with the last one seen and reports what ended. */
   observe(next: FlowState) {
@@ -157,6 +165,7 @@ export class MetricsTracker {
     // At the end if the connection is still there (more pings measured), else what it was at the start.
     const rtt = this.deps.online()?.rttMs ?? c.rtt;
     this.deps.report({
+      ...this.soundSnapshot(),
       t: 'match',
       mid: c.mid,
       n: c.n,
@@ -194,6 +203,7 @@ export class MetricsTracker {
     if (!run) return;
     const r = run.result;
     this.deps.report({
+      ...this.soundSnapshot(),
       t: 'practice',
       rid: (this.deps.randomId ?? randomId)(),
       lang: this.deps.language(),
