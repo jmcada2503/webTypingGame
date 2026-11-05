@@ -5,6 +5,9 @@ import { runSoundPrompt } from './app/runSoundPrompt';
 import { AudioEngine } from './audio/AudioEngine';
 import { toggleMute } from './audio/soundEditing';
 import { loadSoundSettings, saveSoundSettings, type SoundSettings } from './audio/soundSettings';
+import { musicInputsOf } from './audio/music/intensity';
+import type { MusicPlayer } from './audio/music/MusicPlayer';
+import { endMoodOf, musicStateOf } from './audio/music/musicState';
 import { screenCues, type CueMoment } from './audio/screenCues';
 import { SOUNDS, type PlaySound } from './audio/sounds';
 import { SCREEN_TRANSITION } from './render/ScreenFilters';
@@ -195,6 +198,23 @@ shell.onFrame(() => {
   sound.setLoop('reconnecting', cues.reconnecting ? 1 : 0);
   lastCue = now;
 });
+// Adaptive music: Tone.js (big, its own chunk) loads once the audio runs, then follows the game every frame.
+let music: MusicPlayer | null = null;
+let musicLoading = false;
+shell.onFrame((_events, dt) => {
+  const ctx = sound.context;
+  const out = sound.musicInput;
+  if (!music && !musicLoading && ctx?.state === 'running' && out) {
+    musicLoading = true;
+    void import('./audio/music/MusicPlayer')
+      .then((m) => (music = m.startMusic(ctx, out)))
+      .catch((error) => logMetric({ event: 'music_load_failed', error: String(error) }));
+  }
+  if (!music) return;
+  const s = flow.state();
+  const mode = s.screen === 'match' ? s.mode : 'practice';
+  music.update(dt, musicStateOf(s, host.screenShown), (matchTime) => musicInputsOf(host.state(), mode, matchTime), endMoodOf(s));
+});
 // The page's crawlable text (title, how to play) gives way to the game.
 document.documentElement.classList.add('game-ready');
 shell.start();
@@ -250,5 +270,6 @@ if (online) {
 if (import.meta.env.DEV) {
   // For end-to-end checks and the console: drive the real flow without key presses.
   Object.assign(window, { flow, online, host, sound });
+  Object.defineProperty(window, 'music', { get: () => music });
   if (backend) installDevKeys(flow, backend, host);
 }
