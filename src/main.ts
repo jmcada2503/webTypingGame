@@ -5,6 +5,7 @@ import { runSoundPrompt } from './app/runSoundPrompt';
 import { AudioEngine } from './audio/AudioEngine';
 import { toggleMute } from './audio/soundEditing';
 import { loadSoundSettings, saveSoundSettings, type SoundSettings } from './audio/soundSettings';
+import { MatchSounds } from './audio/matchSounds';
 import { musicInputsOf } from './audio/music/intensity';
 import type { MusicPlayer } from './audio/music/MusicPlayer';
 import { endMoodOf, musicStateOf } from './audio/music/musicState';
@@ -142,6 +143,8 @@ const soundPanel = new SoundPanel(
 );
 const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null), { play, pictureOn }), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen, { panel: soundPanel, settings: () => soundSettings }, play), howto: howtoScreen(flow, play), waiting: waitingScreen(flow, copyText, onlineCounts, play), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow, play) };
 
+/** The Match and Practice sounds: key presses (from the sessions), game events and PEACE IN ticks (from the host). */
+const matchSounds = new MatchSounds(play as (id: string) => void);
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
 /** How many Matches each connection has started (the first, then Rematches): picks the Attack-word indices. */
@@ -155,11 +158,11 @@ let lastMatch: MatchSession | null = null;
  * is no opponent channel: a local seed and no transport.
  */
 const createMatch = (mode: 'versus' | 'practice') => {
-  if (mode === 'practice') return (practice = new PracticeSession({ list: wordLists[flow.language()] }));
+  if (mode === 'practice') return (practice = new PracticeSession({ list: wordLists[flow.language()], onKey: matchSounds.key.bind(matchSounds) }));
   const opponent = online?.currentMatch();
   if (!opponent) {
     const attackWords = createAttackWordSource(Math.floor(Math.random() * 2 ** 32), wordLists[flow.language()]);
-    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8, flightRamp: MATCH_FLIGHT })));
+    return (lastMatch = new MatchSession(new MatchEngine({ mode, attackWords, bulletFlightSeconds: 8, shotFlightSeconds: 8, flightRamp: MATCH_FLIGHT, onKey: matchSounds.key.bind(matchSounds) })));
   }
   const list = wordLists[opponent.lang];
   const played = matchesPlayed.get(opponent.matchId) ?? 0;
@@ -183,10 +186,11 @@ const createMatch = (mode: 'versus' | 'practice') => {
     bulletFlightSeconds: 8,
     shotFlightSeconds: 8,
     flightRamp: MATCH_FLIGHT,
+    onKey: matchSounds.key.bind(matchSounds),
   });
   return (lastMatch = new MatchSession(engine, opponent.transport));
 };
-const host = new ScreenHost(view, flow, screens, createMatch);
+const host = new ScreenHost(view, flow, screens, createMatch, matchSounds);
 const shell = new AppShell(view, host, input);
 // Screen sounds: screen changes, endings, Countdown, Rematch, link effects (the screens play their own key sounds).
 const cueMoment = (): CueMoment => ({ flow: flow.state(), effect: { mode: SCREEN_TRANSITION.mode, level: SCREEN_TRANSITION.level } });

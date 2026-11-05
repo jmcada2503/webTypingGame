@@ -93,7 +93,13 @@ class FakeInput implements TypingInput {
 const blankScreen: Screen = { draw() {} };
 const screens = (): ScreenSet => ({ menu: blankScreen, howto: blankScreen, waiting: blankScreen, countdown: blankScreen, match: blankScreen, end: blankScreen, opponentLeft: blankScreen, error: blankScreen });
 
-const setup = () => {
+/** Stands in for the match sounds: writes down what the host hands it. */
+const fakeSounds = () => {
+  const log: { events: ViewEvent[]; frames: number } = { events: [], frames: 0 };
+  return { log, sink: { events: (e: readonly ViewEvent[]) => log.events.push(...e), frame: () => void log.frames++ } };
+};
+
+const setup = (sounds?: ReturnType<typeof fakeSounds>['sink']) => {
   const backend = new FakeBackend();
   const endpoint = backend.connect();
   const flow = new ScreenFlow(endpoint);
@@ -103,7 +109,7 @@ const setup = () => {
     const m = new FakeMatch(mode);
     made.push(m);
     return m;
-  });
+  }, sounds);
   const input = new FakeInput();
   host.attachInput(input);
   /** Advance the app in small frames. */
@@ -482,5 +488,34 @@ describe("While the opponent's signal is lost", () => {
     intoPracticeMatch(ctx);
     ctx.run(1);
     expect(ctx.made[0].held).toBe(false);
+  });
+});
+
+describe('Match sounds', () => {
+  test('the Match events and a frame of its state go to the sounds while the Match runs', () => {
+    const { log, sink } = fakeSounds();
+    const ctx = setup(sink);
+    intoPracticeMatch(ctx);
+    const frames = log.frames;
+    ctx.made[0].next = [{ type: 'lifeLost' }, { type: 'lastLife' }];
+
+    ctx.run(0.05);
+
+    expect(log.events.map((e) => e.type)).toEqual(['lifeLost', 'lastLife']);
+    expect(log.frames).toBe(frames + 1);
+  });
+
+  test('nothing goes to the sounds outside a Match (menu, waiting)', () => {
+    const { log, sink } = fakeSounds();
+    const ctx = setup(sink);
+    ctx.run(1);
+    expect(log).toEqual({ events: [], frames: 0 });
+  });
+
+  test('a host with no sounds runs as before', () => {
+    const ctx = setup();
+    intoPracticeMatch(ctx);
+    ctx.made[0].next = [{ type: 'lifeLost' }];
+    expect(() => ctx.run(0.05)).not.toThrow();
   });
 });

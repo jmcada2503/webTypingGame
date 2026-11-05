@@ -372,3 +372,21 @@ describe('dispose', () => {
     expect(session.state().typedWord).toBe(before);
   });
 });
+
+describe('key hook', () => {
+  test('a Practice run reports each key press to the hook it was given', () => {
+    const keys: string[] = [];
+    const input = new FakeTypingInput();
+    const session = new PracticeSession({ list, random: () => 0.5, onKey: (k) => keys.push(k.kind) });
+    session.attachInput(input);
+    session.start();
+    for (let i = 0; i < 40; i++) session.update(STEP);
+    const word = session.state().wordBullets[0].word;
+
+    input.type(word[0]);
+    input.type(word[0] + '#');
+    input.type(word[0]);
+
+    expect(keys).toEqual(['match', 'noMatch', 'backspace']);
+  });
+});
