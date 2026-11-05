@@ -1,11 +1,13 @@
 // The game's sounds, Arcade style (chosen in the Sound style prototype): ZzFX chiptune, made in code.
-// The sound builds add the rest of the Sound event catalog here.
+// Each sound build keeps its area's sounds in its own bank file and spreads it in below (the Match and Practice sounds: matchBank.ts).
 import type { SoundDef } from './AudioEngine';
+import { MATCH_SOUNDS } from './matchBank';
 import { arp, zzfx } from './zzfx';
 
 const sq = (f: number, rel = 0.05, vol = 0.3) => zzfx({ f, rel, vol, shape: 5 });
 
 export const SOUNDS = {
+  ...MATCH_SOUNDS,
   /** A choice confirmed (menus, the sound prompt). */
   menuConfirm: { bus: 'effects', render: () => arp(0.05, [sq(660, 0.04, 0.2), sq(990, 0.06, 0.2)]) },
   /** The test blip when a sound setting changes: through the effects, so the volume sliders are audible. */

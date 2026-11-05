@@ -56,12 +56,18 @@ export type ViewEvent =
   | { type: 'wordBulletDestroyed'; id: string }
   | { type: 'wordBulletArrived'; id: string }
   | { type: 'lifeLost' }
+  /** Only one Life is left (and the Match goes on): the alarm. Right after the `lifeLost` that caused it. */
+  | { type: 'lastLife' }
   | { type: 'attackFired'; id: string; word: string }
   /** A Shot reached the Enemy ship. */
   | { type: 'shotHit'; id: string }
   /** The opponent typed a Shot's word and destroyed it. */
   | { type: 'shotDefended'; id: string }
   | { type: 'enemyFired'; id: string }
+  /** The player submitted a word that matches no Word bullet and not the Attack word (for the sound; the view ignores it). */
+  | { type: 'wrongSubmit' }
+  /** A Word bullet passed Flight 0.8 (almost at the Cockpit): once per bullet, for the warning sound. */
+  | { type: 'closeWarning'; id: string }
   /** The Enemy ship is destroyed (the Match is won): a bigger explosion and a shake. */
   | { type: 'enemyDestroyed' }
   /** The player has been Idle (no typing) for a while: draw attention to the Attack word. */
