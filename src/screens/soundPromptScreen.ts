@@ -18,8 +18,7 @@ export function soundPrompt() {
     draw(text: TextGrid, t: number) {
       twoTone(text, 7, 'SOUND ', 'ON?', 3);
       box(text, 26, 17, 76, 21, 'dim');
-      centered(text, 20, 'TYPEWING HAS SOUND EFFECTS AND MUSIC', 'fg');
-      centered(text, 22, 'YOUR BROWSER KEEPS THEM QUIET UNTIL YOU PRESS A KEY', 'dim');
+      centered(text, 21, 'TYPEWING HAS SOUND EFFECTS AND MUSIC', 'fg');
       OPTIONS.forEach((o, i) => {
         const c0 = 32 + i * 34;
         const on = i === sel;
@@ -27,7 +26,7 @@ export function soundPrompt() {
         put(text, c0 + (30 - o.label.length) / 2, 27, o.label, on ? 'fg' : 'dim');
       });
       centered(text, 32, '[Y] YES   [N] NO   [<- ->] MOVE   [ENTER] CHOOSE', 'fg');
-      centered(text, 35, 'CHANGE IT ANY TIME IN THE SOUND SETTINGS', 'dim');
+      centered(text, 35, 'CHANGE IT ANY TIME: PRESS [O] FOR THE SOUND SETTINGS', 'dim');
     },
     /** The answer this key gives, if any. */
     onKey(e: KeyboardEvent): SoundChoice | null {
