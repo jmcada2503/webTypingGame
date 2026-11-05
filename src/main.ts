@@ -1,6 +1,10 @@
 // The game: the screen flow, the screens, and the game scene, mounted by the app shell.
 import './app/app.css';
 import { AppShell } from './app/AppShell';
+import { runSoundPrompt } from './app/runSoundPrompt';
+import { AudioEngine } from './audio/AudioEngine';
+import { loadSoundSettings, saveSoundSettings } from './audio/soundSettings';
+import { SOUNDS } from './audio/sounds';
 import { isFullscreen, isFullscreenKey } from './app/fullscreen';
 import { isTouchOnly } from './app/keyboardGate';
 import { runKeyboardGate } from './app/runKeyboardGate';
@@ -37,15 +41,6 @@ import { loadWordList } from './words/wordLists';
 /** Diagnostics that are not metrics records (errors, version checks, each Shot-check detail): console only. */
 const logMetric = (entry: Record<string, unknown>) => console.info(JSON.stringify(entry));
 
-const view = await AsciiGameView.create();
-// Phones and tablets without a mouse or trackpad get a "needs a physical keyboard" screen until a real key is pressed.
-if (isTouchOnly(window)) await runKeyboardGate(view);
-
-// Word lists are small (about 50 KB each, compressed): load both before the first screen.
-const wordLists = { en: await loadWordList('en'), es: await loadWordList('es') };
-const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
-
-const pid = playerId();
 const safeStorage = (() => {
   try {
     return localStorage;
@@ -53,6 +48,42 @@ const safeStorage = (() => {
     return null;
   }
 })();
+
+// The sound: made now (so we know whether the browser holds it), unlocked by the first key press or click.
+let soundSettings = loadSoundSettings(safeStorage);
+const sound = new AudioEngine({
+  createContext: () => {
+    // iPhone / iPad: respect the silent switch and mix with the player's own music.
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = 'ambient';
+    return new AudioContext({ latencyHint: 'interactive' });
+  },
+  sounds: SOUNDS,
+  settings: soundSettings,
+});
+sound.listen(window);
+
+const view = await AsciiGameView.create();
+// Phones and tablets without a mouse or trackpad get a "needs a physical keyboard" screen until a real key is pressed.
+// That key press unlocks the sound too: let it start before checking whether the browser still holds it.
+if (isTouchOnly(window)) {
+  await runKeyboardGate(view);
+  await sound.unlock();
+}
+
+// Word lists are small (about 50 KB each, compressed): load both before the first screen (meanwhile, the sound prompt).
+const wordListsLoading = Promise.all([loadWordList('en'), loadWordList('es')]);
+// The browser holds the audio until a key press: ask "play with sound?", the answer being that key press.
+if (sound.blocked && !soundSettings.muted && (await runSoundPrompt(view, sound)) === 'silent') {
+  soundSettings = { ...soundSettings, muted: true };
+  saveSoundSettings(safeStorage, soundSettings);
+  sound.applySettings(soundSettings);
+}
+const [en, es] = await wordListsLoading;
+const wordLists = { en, es };
+const versions = { en: listVersion(wordLists.en), es: listVersion(wordLists.es) };
+
+const pid = playerId();
 /** Metrics (`POST /api/report`): Matches, Practice runs, connection attempts, Matchmaking give-ups, Rematches. */
 const report = createReporter(pid, clientInfo(navigator.userAgent, safeStorage, new Date().toISOString().slice(0, 10)));
 // Assigned below, once the flow exists; connection records can only arrive after that.
@@ -183,6 +214,6 @@ if (online) {
 
 if (import.meta.env.DEV) {
   // For end-to-end checks and the console: drive the real flow without key presses.
-  Object.assign(window, { flow, online, host });
+  Object.assign(window, { flow, online, host, sound });
   if (backend) installDevKeys(flow, backend, host);
 }
