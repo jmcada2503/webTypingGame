@@ -1,3 +1,4 @@
+import type { PlaySound } from '../audio/sounds';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { FlowState } from '../flow/types';
 import type { MatchStats } from '../match/MatchEngine';
@@ -5,6 +6,7 @@ import type { TextGrid } from '../render/AsciiRenderer';
 import { matchStatsLines } from './content';
 import { blink, centered, put, twoTone, wrap, COLS } from './draw';
 import { rematchMenu } from './rematchMenu';
+import { act, moved, silent } from './screenSound';
 
 /** How the Match went, for the stats block. `enemyDamage` is 0..1. */
 export interface OnlineStats {
@@ -81,7 +83,7 @@ const clampSel = (sel: number, n: number) => Math.max(0, Math.min(sel, n - 1));
  * status line, a row of choices (arrows or hjkl, Enter), and a thin bar along the bottom for the window or the
  * answer time. Used by Win, Lose and Peace alike.
  */
-export function onlineEndScreen(flow: ScreenFlow, onlineStats: () => OnlineStats | null) {
+export function onlineEndScreen(flow: ScreenFlow, onlineStats: () => OnlineStats | null, play: PlaySound = silent) {
   let sel = 0;
   let lastIds = '';
   const current = (s: Extract<FlowState, { screen: 'end'; mode: 'versus' }>) => rematchMenu(s.rematch, s.kind);
@@ -126,16 +128,17 @@ export function onlineEndScreen(flow: ScreenFlow, onlineStats: () => OnlineStats
       if (s.mode !== 'versus') return;
       const options = current(s).options;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = (sel + 1) % options.length;
-      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = (sel + options.length - 1) % options.length;
+      if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = moved(play, sel, (sel + 1) % options.length);
+      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = moved(play, sel, (sel + options.length - 1) % options.length);
       else if (k === 'Enter') {
+        // Proposing, accepting and denying a Rematch are heard through their own sounds (the screen cues).
         const choice = options[clampSel(sel, options.length)]?.id;
         if (choice === 'rematch') flow.proposeRematch();
         else if (choice === 'accept') flow.acceptRematch();
         else if (choice === 'deny') flow.declineRematch();
-        else if (choice === 'cancel') flow.cancelRematch();
-        else if (choice === 'search') flow.searchAgain();
-        else if (choice === 'menu') flow.backToMenu();
+        else if (choice === 'cancel') act(flow, play, 'menuBack', () => flow.cancelRematch());
+        else if (choice === 'search') act(flow, play, 'menuConfirm', () => flow.searchAgain());
+        else if (choice === 'menu') act(flow, play, 'menuConfirm', () => flow.backToMenu());
       }
     },
   };

@@ -1,8 +1,10 @@
+import type { PlaySound } from '../audio/sounds';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { COLS, blink, box, centered, put, twoTone, wrap } from './draw';
 import { GAME_NAME, MENU_ITEMS, SPONSOR_LINK, moveSelection, placeholderOnline, type OnlineCounts, usableSelection } from './content';
 import type { Screen } from './Screen';
+import { act, moved, silent } from './screenSound';
 import type { SoundSettings } from '../audio/soundSettings';
 import type { SoundPanel } from './soundPanel';
 import { drawSoundHints, drawSoundPanel } from './soundPanelDraw';
@@ -27,7 +29,7 @@ const FULLSCREEN_HINT_RIGHT = COLS - 16;
  * The approved main menu (layout B): three cards, language, online counts, a sponsor note or the resting panel.
  * The fullscreen key is shown big at the top right, in yellow and pulsing until the page is fullscreen.
  */
-export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline, fullscreen: () => boolean = () => false, sound: MenuSound | null = null): Screen {
+export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline, fullscreen: () => boolean = () => false, sound: MenuSound | null = null, play: PlaySound = silent): Screen {
   let sel = 0;
   let copiedAt = -99;
   /** Read from the flow, not from the drawn state: that one can lag a frame behind. */
@@ -106,15 +108,18 @@ export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onli
       if (sound?.panel.onKey(e)) return; // the panel owns every key while it is open
       const k = e.key;
       const resting = restingNow();
-      if (k === 'Tab') flow.setLanguage(flow.language() === 'en' ? 'es' : 'en');
-      else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = moveSelection(sel, 1, resting);
-      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = moveSelection(sel, -1, resting);
-      else if (k === 'Enter') flow.choose(MENU_ITEMS[sel].key);
+      if (k === 'Tab') act(flow, play, 'language', () => flow.setLanguage(flow.language() === 'en' ? 'es' : 'en'));
+      else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = moved(play, sel, moveSelection(sel, 1, resting));
+      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = moved(play, sel, moveSelection(sel, -1, resting));
+      else if (k === 'Enter') act(flow, play, 'menuConfirm', () => flow.choose(MENU_ITEMS[sel].key));
       else if (k === '1' || k === '2' || k === '3') {
         const i = Number(k) - 1;
         if (!(resting && MENU_ITEMS[i].online)) sel = i;
-        flow.choose(MENU_ITEMS[i].key);
-      } else if (k === 's' || k === 'S') copySponsor(now);
+        act(flow, play, 'menuConfirm', () => flow.choose(MENU_ITEMS[i].key));
+      } else if (k === 's' || k === 'S') {
+        copySponsor(now);
+        play('sponsor');
+      }
     },
   };
 }

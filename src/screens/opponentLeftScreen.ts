@@ -1,8 +1,10 @@
+import type { PlaySound } from '../audio/sounds';
 import type { ScreenFlow } from '../flow/ScreenFlow';
 import type { FlowState } from '../flow/types';
 import type { TextGrid } from '../render/AsciiRenderer';
 import { COLS, ROWS, blink, box, put, wrap } from './draw';
 import type { Screen } from './Screen';
+import { act, moved, silent } from './screenSound';
 
 type Left = Extract<FlowState, { screen: 'opponentLeft' }>;
 
@@ -34,7 +36,7 @@ export function opponentLeftContent(s: Left): OpponentLeftContent {
 const W = 76;
 
 /** The approved layout 1: a framed terminal message, with the choices under it (arrows or hjkl, Enter). */
-export function opponentLeftScreen(flow: ScreenFlow): Screen {
+export function opponentLeftScreen(flow: ScreenFlow, play: PlaySound = silent): Screen {
   let sel = 0;
   return {
     enter() {
@@ -73,12 +75,11 @@ export function opponentLeftScreen(flow: ScreenFlow): Screen {
       if (s.screen !== 'opponentLeft') return;
       const options = opponentLeftContent(s).options;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = (sel + 1) % options.length;
-      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = (sel + options.length - 1) % options.length;
+      if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'l' || k === 'j') sel = moved(play, sel, (sel + 1) % options.length);
+      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'h' || k === 'k') sel = moved(play, sel, (sel + options.length - 1) % options.length);
       else if (k === 'Enter') {
         const choice = options[Math.min(sel, options.length - 1)].id;
-        if (choice === 'search') flow.searchAgain();
-        else flow.backToMenu();
+        act(flow, play, 'menuConfirm', () => (choice === 'search' ? flow.searchAgain() : flow.backToMenu()));
       }
     },
   };
