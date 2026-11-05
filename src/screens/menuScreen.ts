@@ -5,6 +5,15 @@ import { COLS, blink, box, centered, put, twoTone, wrap } from './draw';
 import { GAME_NAME, MENU_ITEMS, SPONSOR_LINK, moveSelection, placeholderOnline, type OnlineCounts, usableSelection } from './content';
 import type { Screen } from './Screen';
 import { act, moved, silent } from './screenSound';
+import type { SoundSettings } from '../audio/soundSettings';
+import type { SoundPanel } from './soundPanel';
+import { drawSoundHints, drawSoundPanel } from './soundPanelDraw';
+
+/** The menu's way into the sound settings: the panel (its keys, its state) and the settings it edits. */
+export interface MenuSound {
+  panel: SoundPanel;
+  settings: () => SoundSettings;
+}
 
 const ICONS: Record<(typeof MENU_ITEMS)[number]['key'], string[]> = {
   practice: ['  .---.  ', ' ( (+) ) ', "  '---'  "],
@@ -20,7 +29,7 @@ const FULLSCREEN_HINT_RIGHT = COLS - 16;
  * The approved main menu (layout B): three cards, language, online counts, a sponsor note or the resting panel.
  * The fullscreen key is shown big at the top right, in yellow and pulsing until the page is fullscreen.
  */
-export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline, fullscreen: () => boolean = () => false, play: PlaySound = silent): Screen {
+export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onlineCounts: (t: number) => OnlineCounts = placeholderOnline, fullscreen: () => boolean = () => false, sound: MenuSound | null = null, play: PlaySound = silent): Screen {
   let sel = 0;
   let copiedAt = -99;
   /** Read from the flow, not from the drawn state: that one can lag a frame behind. */
@@ -89,9 +98,14 @@ export function menuScreen(flow: ScreenFlow, copyText: (s: string) => void, onli
       // The fullscreen key stands out (top right, by the title) until it is used; once fullscreen it says how to leave.
       const fs = fullscreen() ? '[F] EXIT FULLSCREEN' : '[F] FULLSCREEN';
       text.writeScaled(FULLSCREEN_HINT_RIGHT - fs.length * 1.2, 2.2, fs, 1.2, fullscreen() ? 'dim' : blink(t, 1) ? 'yellow' : 'fg');
+      if (sound) {
+        drawSoundHints(text, t, sound.settings(), sound.panel.isOpen);
+        if (sound.panel.isOpen) drawSoundPanel(text, t, sound.settings(), sound.panel.row);
+      }
     },
     onKey(e, s) {
       if (s.screen !== 'menu') return;
+      if (sound?.panel.onKey(e)) return; // the panel owns every key while it is open
       const k = e.key;
       const resting = restingNow();
       if (k === 'Tab') act(flow, play, 'language', () => flow.setLanguage(flow.language() === 'en' ? 'es' : 'en'));

@@ -3,7 +3,8 @@ import './app/app.css';
 import { AppShell } from './app/AppShell';
 import { runSoundPrompt } from './app/runSoundPrompt';
 import { AudioEngine } from './audio/AudioEngine';
-import { loadSoundSettings, saveSoundSettings } from './audio/soundSettings';
+import { toggleMute } from './audio/soundEditing';
+import { loadSoundSettings, saveSoundSettings, type SoundSettings } from './audio/soundSettings';
 import { screenCues, type CueMoment } from './audio/screenCues';
 import { SOUNDS, type PlaySound } from './audio/sounds';
 import { SCREEN_TRANSITION } from './render/ScreenFilters';
@@ -31,6 +32,7 @@ import { ScreenHost } from './screens/ScreenHost';
 import { howtoScreen } from './screens/howtoScreen';
 import { countdownScreen } from './screens/countdownScreen';
 import { menuScreen } from './screens/menuScreen';
+import { SoundPanel } from './screens/soundPanel';
 import { placeholderOnline } from './screens/content';
 import { inviteCodeFromHash } from './app/inviteLink';
 import { syncLanguageWithAddress } from './app/languageAddress';
@@ -64,6 +66,12 @@ const sound = new AudioEngine({
   settings: soundSettings,
 });
 sound.listen(window);
+/** Every change to the sound settings: kept, saved for the next visit and heard at once. */
+const changeSound = (next: SoundSettings) => {
+  soundSettings = next;
+  saveSoundSettings(safeStorage, next);
+  sound.applySettings(next);
+};
 
 const view = await AsciiGameView.create();
 // Phones and tablets without a mouse or trackpad get a "needs a physical keyboard" screen until a real key is pressed.
@@ -77,9 +85,7 @@ if (isTouchOnly(window)) {
 const wordListsLoading = Promise.all([loadWordList('en'), loadWordList('es')]);
 // The browser holds the audio until a key press: ask "play with sound?", the answer being that key press.
 if (sound.blocked && !soundSettings.muted && (await runSoundPrompt(view, sound)) === 'silent') {
-  soundSettings = { ...soundSettings, muted: true };
-  saveSoundSettings(safeStorage, soundSettings);
-  sound.applySettings(soundSettings);
+  changeSound({ ...soundSettings, muted: true });
 }
 const [en, es] = await wordListsLoading;
 const wordLists = { en, es };
@@ -123,7 +129,15 @@ const play: PlaySound = (id) => sound.play(id);
 /** The picture is on: no screen-change effect is hiding it. */
 const pictureOn = () => SCREEN_TRANSITION.level === 0;
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null), { play, pictureOn }), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen, play), howto: howtoScreen(flow, play), waiting: waitingScreen(flow, copyText, onlineCounts, play), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow, play) };
+// The sound settings panel on the menu: each change is saved and answered with a blip (key clicks row: through the key-click bus).
+const soundPanel = new SoundPanel(
+  () => soundSettings,
+  (next, row) => {
+    changeSound(next);
+    sound.play(row === 'keyClicks' ? 'settingsKeyBlip' : 'settingsBlip');
+  },
+);
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null), { play, pictureOn }), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen, { panel: soundPanel, settings: () => soundSettings }, play), howto: howtoScreen(flow, play), waiting: waitingScreen(flow, copyText, onlineCounts, play), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow, play) };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
@@ -187,6 +201,12 @@ shell.start();
 // F toggles fullscreen on every screen but the Match, where it is a letter being typed (Esc also leaves fullscreen).
 window.addEventListener('keydown', (e) => {
   if (isFullscreenKey(e) && host.screenShown !== 'match') void shell.toggleFullscreen();
+});
+// M mutes on every screen but the Match (where it is a letter being typed), the sound settings panel included.
+window.addEventListener('keydown', (e) => {
+  if ((e.key !== 'm' && e.key !== 'M') || e.ctrlKey || e.metaKey || e.altKey || e.repeat || host.screenShown === 'match') return;
+  changeSound(toggleMute(soundSettings));
+  if (!soundSettings.muted) sound.play('settingsBlip');
 });
 
 // Online only: `?fake` plays against a stand-in, nothing worth counting.

@@ -48,7 +48,7 @@ function inMatch() {
 }
 
 describe('menu', () => {
-  const menu = (flow = newFlow()) => keys(flow, (play) => menuScreen(flow, () => {}, undefined, undefined, play));
+  const menu = (flow = newFlow()) => keys(flow, (play) => menuScreen(flow, () => {}, undefined, undefined, null, play));
 
   test('moving plays the move blip; Enter confirms', () => {
     expect(menu().press('l', 'ArrowRight', 'h', 'Enter')).toEqual(['menuMove', 'menuMove', 'menuMove', 'menuConfirm']);

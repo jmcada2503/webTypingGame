@@ -46,6 +46,10 @@ export const SOUNDS = {
   reconnecting: fx(() => loopable(z({ f: 300, sus: 1.95, rel: 0.05, vol: 0.12, shape: 4, crush: 0.8, trem: 0.8, repeat: 0.25 }))),
   enemyBack: fx(() => arp(0.06, [sq(E6, 0.05, 0.22), sq(G6, 0.05, 0.22), sq(C7, 0.12, 0.22)])),
   resumeTick: fx(() => sq(440, 0.09, 0.28)),
+  /** The test blip when a sound setting changes: through the effects, so the volume sliders are audible. */
+  settingsBlip: { bus: 'effects', voices: 2, render: () => sq(660, 0.07, 0.25) },
+  /** The same for the key clicks row: through the key-click bus, so turning them off is heard as silence. */
+  settingsKeyBlip: { bus: 'keyClicks', voices: 2, render: () => sq(880, 0.05, 0.25) },
 } satisfies Record<string, SoundDef>;
 
 export type SoundId = keyof typeof SOUNDS;
