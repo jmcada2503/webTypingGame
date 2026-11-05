@@ -4,7 +4,9 @@ import { AppShell } from './app/AppShell';
 import { runSoundPrompt } from './app/runSoundPrompt';
 import { AudioEngine } from './audio/AudioEngine';
 import { loadSoundSettings, saveSoundSettings } from './audio/soundSettings';
-import { SOUNDS } from './audio/sounds';
+import { screenCues, type CueMoment } from './audio/screenCues';
+import { SOUNDS, type PlaySound } from './audio/sounds';
+import { SCREEN_TRANSITION } from './render/ScreenFilters';
 import { isFullscreen, isFullscreenKey } from './app/fullscreen';
 import { isTouchOnly } from './app/keyboardGate';
 import { runKeyboardGate } from './app/runKeyboardGate';
@@ -117,8 +119,11 @@ const presence = presenceApi ? startPresence({ language: () => flow.language(), 
 const onlineCounts = (t: number) => (presence ? (presence.counts() ?? { en: 0, es: 0, total: 0 }) : placeholderOnline(t));
 const input = new KeyboardTypingInput();
 const copyText = (s: string) => void navigator.clipboard?.writeText(s).catch(() => {});
+const play: PlaySound = (id) => sound.play(id);
+/** The picture is on: no screen-change effect is hiding it. */
+const pictureOn = () => SCREEN_TRANSITION.level === 0;
 // The approved designs replace the plain screens one by one; the rest stay plain until their prototypes are done.
-const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null)), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen), howto: howtoScreen(flow), waiting: waitingScreen(flow, copyText, onlineCounts), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow) };
+const screens = { ...simpleScreens(flow, () => practice?.result() ?? null, () => (lastMatch ? { stats: lastMatch.stats(), enemyDamage: lastMatch.state().enemyDamage } : null), { play, pictureOn }), menu: menuScreen(flow, copyText, onlineCounts, isFullscreen, play), howto: howtoScreen(flow, play), waiting: waitingScreen(flow, copyText, onlineCounts, play), countdown: countdownScreen(), opponentLeft: opponentLeftScreen(flow, play) };
 
 /** The Practice run being played (or the last one), so its end screen can show the results. */
 let practice: PracticeSession | null = null;
@@ -166,6 +171,16 @@ const createMatch = (mode: 'versus' | 'practice') => {
 };
 const host = new ScreenHost(view, flow, screens, createMatch);
 const shell = new AppShell(view, host, input);
+// Screen sounds: screen changes, endings, Countdown, Rematch, link effects (the screens play their own key sounds).
+const cueMoment = (): CueMoment => ({ flow: flow.state(), effect: { mode: SCREEN_TRANSITION.mode, level: SCREEN_TRANSITION.level } });
+let lastCue = cueMoment();
+shell.onFrame(() => {
+  const now = cueMoment();
+  const cues = screenCues(lastCue, now);
+  cues.play.forEach(play);
+  sound.setLoop('reconnecting', cues.reconnecting ? 1 : 0);
+  lastCue = now;
+});
 // The page's crawlable text (title, how to play) gives way to the game.
 document.documentElement.classList.add('game-ready');
 shell.start();
