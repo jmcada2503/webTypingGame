@@ -86,7 +86,11 @@ describe("the opponent's link", () => {
     expect(screenCues(away(10), back(5.8)).reconnecting).toBe(false);
   });
 
-  test('ENEMY BACK, then the resume ticks 5 to 1', () => {
-    expect(played(away(4), back(5.8), back(5.3), back(5), back(4.2), back(3.9), back(2.5), back(1.2), back(0.4), at(match()))).toEqual(['enemyBack', 'resumeTick', 'resumeTick', 'resumeTick', 'resumeTick', 'resumeTick']);
+  test('ENEMY BACK, the resume ticks 5 to 1, then GO as the Match resumes', () => {
+    expect(played(away(4), back(5.8), back(5.3), back(5), back(4.2), back(3.9), back(2.5), back(1.2), back(0.4), at(match()))).toEqual(['enemyBack', 'resumeTick', 'resumeTick', 'resumeTick', 'resumeTick', 'resumeTick', 'go']);
+  });
+
+  test('a Match that ends during the resume countdown gets its ending, not GO', () => {
+    expect(played(back(0.4), at(end('won')))).toEqual(['winEnding']);
   });
 });

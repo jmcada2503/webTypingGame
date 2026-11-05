@@ -56,6 +56,7 @@ const linkOf = (s: FlowState): MatchLink => (s.screen === 'match' ? s.link : { s
 function linkCues(a: MatchLink, b: MatchLink): SoundId[] {
   if (b.status === 'away' && (a.status !== 'away' || a.losses !== b.losses)) return ['signalLost'];
   if (b.status === 'back' && a.status !== 'back') return ['enemyBack'];
+  if (a.status === 'back' && b.status === 'ok') return ['go']; // the resume countdown is over: the Match is on again
   if (b.status === 'back' && a.status === 'back') {
     const n = Math.ceil(b.secondsLeft);
     if (n > 0 && n <= RESUME_COUNT_SECONDS && n !== Math.ceil(a.secondsLeft)) return ['resumeTick'];
