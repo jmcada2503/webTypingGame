@@ -8,9 +8,9 @@ export const SOUND_ROWS: readonly SoundRow[] = ['master', 'effects', 'music', 'k
 /** One press of left / right moves a volume by this much. */
 export const VOLUME_STEP = 0.05;
 
-/** Left (-1) / right (+1) on a row. */
+/** Left (-1) / right (+1) on a row. On the key clicks switch both directions flip it. */
 export function adjustSound(s: SoundSettings, row: SoundRow, dir: 1 | -1): SoundSettings {
-  if (row === 'keyClicks') return { ...s, keyClicks: dir > 0 };
+  if (row === 'keyClicks') return { ...s, keyClicks: !s.keyClicks };
   // Whole percents: repeated 0.05 steps would otherwise drift (0.8 + 0.05 = 0.8500000000000001).
   return { ...s, muted: dir > 0 ? false : s.muted, [row]: Math.min(1, Math.max(0, Math.round((s[row] + dir * VOLUME_STEP) * 100) / 100)) };
 }

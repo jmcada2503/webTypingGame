@@ -41,10 +41,11 @@ describe('muted and a volume is raised', () => {
 });
 
 describe('the key clicks row', () => {
-  test('right turns the key clicks on and left turns them off, whatever they were', () => {
+  test('left and right both flip the key clicks, whichever they were', () => {
     expect(adjustSound(settings({ keyClicks: false }), 'keyClicks', 1)).toEqual(settings({ keyClicks: true }));
-    expect(adjustSound(settings({ keyClicks: true }), 'keyClicks', 1).keyClicks).toBe(true);
+    expect(adjustSound(settings({ keyClicks: true }), 'keyClicks', 1).keyClicks).toBe(false);
     expect(adjustSound(settings({ keyClicks: true }), 'keyClicks', -1).keyClicks).toBe(false);
+    expect(adjustSound(settings({ keyClicks: false }), 'keyClicks', -1).keyClicks).toBe(true);
   });
 
   test('changing the key clicks does not touch the mute', () => {

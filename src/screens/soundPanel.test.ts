@@ -87,11 +87,15 @@ describe('changing a row', () => {
     expect(now().master).toBe(0.75);
   });
 
-  test('the key clicks row switches with right (on) and left (off)', () => {
+  test('the key clicks row flips with either left or right, every press', () => {
     const { press, now } = setup();
     press('o', 'k', 'h'); // up from master = key clicks
     expect(now().keyClicks).toBe(false);
     press('l');
+    expect(now().keyClicks).toBe(true);
+    press('l');
+    expect(now().keyClicks).toBe(false);
+    press('h');
     expect(now().keyClicks).toBe(true);
   });
 
