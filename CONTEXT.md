@@ -96,3 +96,33 @@ _Avoid_: Draw, tie, stalemate
 **Resting**:
 Online play switched off because this month's budget is used up; Practice still works and Matches already running finish normally.
 _Avoid_: Offline, down, maintenance
+
+### Sound
+
+**Effects**:
+The one-off sounds of game moments: typing, Word bullets, Shots, Lives, endings, screens. Have their own volume.
+_Avoid_: SFX, sound effects
+
+**Music**:
+The piece that plays under everything, on every screen; in a Match it follows the Intensity. Has its own volume.
+_Avoid_: Soundtrack, BGM
+
+**Key clicks**:
+The Effects for typing a letter that still matches and for Backspace; they can be switched off. A letter that matches nothing and a wrong submit have their own Effects, which always play.
+_Avoid_: Keystrokes, typing sounds
+
+**Intensity**:
+How heated the Match Music is right now: mostly how close Word bullets are and Lives lost, plus both players' Pace and how long the Match has run. Rises fast, calms slowly.
+_Avoid_: Energy, heat, level
+
+**Mute**:
+Silencing all sound at once without changing the volumes (M on any screen but the Match).
+_Avoid_: Sound off, silence
+
+**Sound settings**:
+The panel on the menu (O) to set the master, Effects and Music volumes and switch Key clicks.
+_Avoid_: Audio options, volume menu
+
+**Sound prompt**:
+The "Sound on?" question before the menu when the browser holds the sound until a key press; answering no turns Mute on.
+_Avoid_: Autoplay screen, audio gate
